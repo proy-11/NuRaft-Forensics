@@ -315,7 +315,7 @@ public:
                   (const ERROR_CODE& err, size_t) -> void
         {
             if (err) {
-                p_er( "session %lu failed to read rpc header from socket %s:%u "
+                p_er( "session %zu failed to read rpc header from socket %s:%u "
                       "due to error %d, %s, ref count %u",
                       session_id_,
                       cached_address_.c_str(),
@@ -602,7 +602,7 @@ private:
         }
 
        } catch (std::exception& ex) {
-        p_er( "session %lu failed to process request message "
+        p_er( "session %zu failed to process request message "
               "due to error: %s",
               this->session_id_,
               ex.what() );
