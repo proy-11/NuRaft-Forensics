@@ -30,3 +30,13 @@ target_link_libraries(quick_start
                       ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
                       ${LIBRARIES})
 
+add_executable(raft_client
+               raft_client/raft_client.cxx
+               logger.cc
+               in_memory_log_store.cxx)
+add_dependencies(raft_client
+                 static_lib)
+target_link_libraries(raft_client
+                      ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+                      ${LIBRARIES})
+
