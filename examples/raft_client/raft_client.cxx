@@ -29,8 +29,8 @@ using namespace nuraft;
 class raft_client {
     public:
     raft_client() : logger_(nullptr),
-        state_machine_(),
-        state_manager_(),
+        state_machine_(cs_new<echo_state_machine>()),
+        state_manager_(cs_new<inmem_state_mgr>(1, "localhost:12345")),
         asio_opt_(),
         params_(),
         launcher_(),
@@ -39,11 +39,33 @@ class raft_client {
 
     ~raft_client() {}
 
-    bool initialise_raft_server();
+    bool initialise_raft_server() {
+        int port_number = 12345;
+        server_ = launcher_.init(state_machine_,
+                                                state_manager_,
+                                                logger_,
+                                                port_number,
+                                                asio_opt_,
+                                                params_);
 
-    void append_log_entries();
+        while (!server_->is_initialized()) {
+            std::this_thread::sleep_for( std::chrono::milliseconds(100) );
+        }
 
-    void shutdown();
+        return true;
+    }
+
+    void append_log_entries() {
+        std::string msg = "hello world";
+        ptr<buffer> log = buffer::alloc(sizeof(int) + msg.size());
+        buffer_serializer bs_log(log);
+        bs_log.put_str(msg);
+        server_->append_entries({log});
+    }
+
+    void shutdown() {
+        launcher_.shutdown();
+    }
 
     private:
         ptr<logger> logger_;
@@ -62,34 +84,11 @@ class raft_client {
 };
 
 int main(int argc, char** argv) {
-    ptr<logger>         logger = nullptr;
-    ptr<state_machine>  state_machine = cs_new<echo_state_machine>();
-    ptr<state_mgr>      state_manager =
-        cs_new<inmem_state_mgr>(1, "localhost:12345");
-
-    asio_service::options   asio_opt;  
-    raft_params             params;
-
-
-    raft_launcher       launcher;
-    int                 port_number = 12345;
-    ptr<raft_server>    server = launcher.init(state_machine,
-                                               state_manager,
-                                               logger,
-                                               port_number,
-                                               asio_opt,
-                                               params);
-    while (!server->is_initialized()) {
-        std::this_thread::sleep_for( std::chrono::milliseconds(100) );
+    raft_client client;
+    if(client.initialise_raft_server()) {
+        client.append_log_entries();
     }
-
-    std::string msg = "hello world";
-    ptr<buffer> log = buffer::alloc(sizeof(int) + msg.size());
-    buffer_serializer bs_log(log);
-    bs_log.put_str(msg);
-    server->append_entries({log});
-
-    launcher.shutdown();
+    client.shutdown();
     return 0;
 }
 
