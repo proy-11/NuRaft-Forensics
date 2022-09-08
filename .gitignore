@@ -5,6 +5,7 @@ Debug/
 .vs/
 *.user
 asio/
+json/
 nbproject/
 *.obj
 *.o
