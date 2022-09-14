@@ -66,6 +66,7 @@ include_directories(BEFORE ${PROJECT_SOURCE_DIR}/include/libnuraft)
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/examples)
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/examples/calculator)
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/examples/echo)
+include_directories(BEFORE ${PROJECT_SOURCE_DIR}/client)
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/src)
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/tests)
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/tests/unit)
@@ -188,6 +189,7 @@ set(LIBRARIES
 # === Paths ===
 set(ROOT_SRC ${PROJECT_SOURCE_DIR}/src)
 set(EXAMPLES_SRC ${PROJECT_SOURCE_DIR}/examples)
+set(CLIENT_SRC ${PROJECT_SOURCE_DIR}/client)
 
 # === Copy script files ===
 file(COPY ${PROJECT_SOURCE_DIR}/scripts/test/runtests.sh
@@ -266,6 +268,8 @@ message(STATUS "Output library file name: ${LIBRARY_OUTPUT_NAME}")
 
 # === Examples ===
 add_subdirectory("${PROJECT_SOURCE_DIR}/examples")
+# === Client ===
+add_subdirectory("${PROJECT_SOURCE_DIR}/client")
 
 
 # === Tests ===
