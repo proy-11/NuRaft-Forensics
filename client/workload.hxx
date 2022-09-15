@@ -8,7 +8,9 @@ enum WORKLOAD_TYPE {
 
 struct request {
 public:
+    request();
     request(int index);
+    request(int ind_, ptr<buffer> payload_);
     ~request();
 
     int index;

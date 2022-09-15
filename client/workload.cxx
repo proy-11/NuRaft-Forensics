@@ -8,10 +8,17 @@ using json = nlohmann::json;
 namespace po = boost::program_options;
 
 namespace nuraft {
+request::request() { request(-1); }
+
 request::request(int ind_) {
     index = ind_;
     payload = buffer::alloc(sizeof(byte));
     payload->put(byte(10));
+}
+
+request::request(int ind_, ptr<buffer> payload_) {
+    index = ind_;
+    payload = buffer::clone(*payload_);
 }
 
 request::~request() {}
