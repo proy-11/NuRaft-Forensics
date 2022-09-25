@@ -1,0 +1,15 @@
+ { "server": [
+    {
+      "id": 1,
+      "byzantine":  "None",
+      "ip": "localhost",
+      "port": 10001
+    },
+    {
+      "id": 2,
+      "byzantine":  "None",
+      "ip": "localhost",
+      "port": 10002
+    }
+ ]
+}
