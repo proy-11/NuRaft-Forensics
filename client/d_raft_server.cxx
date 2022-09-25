@@ -18,6 +18,7 @@ limitations under the License.
 #include "d_raft_state_machine.hxx"
 #include "in_memory_state_mgr.hxx"
 #include "logger_wrapper.hxx"
+#include "libnuraft/json.hpp"
 
 #include "nuraft.hxx"
 
@@ -25,10 +26,11 @@ limitations under the License.
 
 #include <iostream>
 #include <sstream>
-
+#include <sys/wait.h>
 #include <stdio.h>
 
 using namespace nuraft;
+using json = nlohmann::json;
 
 namespace d_raft_server {
 
@@ -201,6 +203,16 @@ bool do_cmd(const std::vector<std::string>& tokens) {
 using namespace d_raft_server;
 
 int main(int argc, char** argv) {
+    // TODO - Read config file path from cmd line
+    std::ifstream f("config.json");
+    json data = json::parse(f);
+    for(size_t i = 0; i < data["server"].size(); i++) {
+        std::cout << data["server"][i]["id"] <<"\n";
+        std::cout << data["server"][i]["byzantine"] << "\n";
+        std::cout << data["server"][i]["ip"] << "\n";
+        std::cout << data["server"][i]["port"] << "\n\n";
+    }
+
     if (argc < 3) usage(argc, argv);
 
     set_server_info(argc, argv);
