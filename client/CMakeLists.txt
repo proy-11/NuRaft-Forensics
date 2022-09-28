@@ -8,15 +8,6 @@ target_link_libraries(raft_client
                       ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
                       ${LIBRARIES})
 
-add_executable(d_raft
-               d_raft_server.cxx
-               logger.cc
-               in_memory_log_store.cxx)
-add_dependencies(d_raft
-                 static_lib)
-target_link_libraries(d_raft
-                      ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
-                      ${LIBRARIES})
 
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
@@ -30,6 +21,18 @@ if(Boost_FOUND)
     add_dependencies(workload
                      static_lib)
     target_link_libraries(workload
+                          ${Boost_LIBRARIES}
+                          ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+                          ${LIBRARIES})
+    
+    add_executable(d_raft
+                    d_raft_server.cxx
+                    logger.cc
+                    in_memory_log_store.cxx)
+    include_directories(${Boost_INCLUDE_DIRS})
+    add_dependencies(d_raft
+                     static_lib)
+    target_link_libraries(d_raft
                           ${Boost_LIBRARIES}
                           ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
                           ${LIBRARIES})
