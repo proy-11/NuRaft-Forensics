@@ -151,7 +151,7 @@ void server_list() {
 void handle_request(tcp::socket& sock, std::string& request);
 
 void loop() {
-    char cmd[1000];
+    // char cmd[1000];
     // std::string prompt = "calc " + std::to_string(stuff.server_id_) + "> ";
 
     asio::io_service io_service;
@@ -165,11 +165,12 @@ void loop() {
     while (true) {
         asio::streambuf buf;
         asio::read_until(socket_, buf, "\n");
-        std::string message = asio::buffer_cast<const char*>(buf.data());
+        std::string message = "";
+        message = asio::buffer_cast<const char*>(buf.data());
         std::cout << message;
         // write operation
         // std::vector<std::string> tokens = tokenize(cmd);
-        std::thread thr(handle_request, socket_, message);
+        std::thread thr(handle_request, std::ref(socket_), std::ref(message));
         thr.detach();
         // std::cout << "Servent sent Hello message to Client!" << std::endl;
     }
@@ -291,8 +292,8 @@ void handle_request(tcp::socket& sock, std::string& request) {
         return;
     } else if (request.find("addpeer") != std::string::npos) {
         const char *ID_PREFIX = "id=", *EP_PREFIX = "ep=";
-        int idpos = request.find(ID_PREFIX);
-        int eppos = request.find(EP_PREFIX);
+        size_t idpos = request.find(ID_PREFIX);
+        size_t eppos = request.find(EP_PREFIX);
 
         if (idpos == std::string::npos || eppos == std::string::npos) {
             std::cerr << "cannot find keywords" << std::endl;
@@ -302,7 +303,7 @@ void handle_request(tcp::socket& sock, std::string& request) {
         idpos += std::strlen(ID_PREFIX);
         eppos += std::strlen(EP_PREFIX);
 
-        int delim;
+        size_t delim;
         for (delim = idpos;
              delim < request.length() && request[delim] != ' ' && request[delim] != '\n';
              delim++) {
@@ -371,7 +372,7 @@ cmargs parse_args(int argc, char** argv) {
         std::cout << "Port was not set.\n";
         exit(1);
     }
-    if (vm.count("pcort")) {
+    if (vm.count("cport")) {
         cport = vm["cport"].as<int>();
     } else {
         std::cout << "Client port was not set.\n";
