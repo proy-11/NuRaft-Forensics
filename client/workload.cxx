@@ -10,8 +10,7 @@ namespace po = boost::program_options;
 namespace nuraft {
 request::request(int ind_) {
     index = ind_;
-    payload = buffer::alloc(sizeof(byte));
-    payload->put(byte(10));
+    payload = std::string("plain");
 }
 
 request::~request() {}
@@ -33,14 +32,19 @@ workload::workload(std::string path) {
 
 workload::~workload() {}
 
-std::tuple<request, float> workload::get_next_req_ms() {
+std::tuple<request, int> workload::get_next_req_us() {
+    if (current >= size) {
+        request req(-1);
+        return std::make_tuple(req, 0);
+    }
+
     request req(current);
-    float next_arrival;
+    int next_arrival;
 
     switch (type) {
     case UNIF:
     default:
-        next_arrival = 1000 / freq;
+        next_arrival = int(1000000 / freq);
         break;
     }
 
@@ -74,8 +78,8 @@ int main(int argc, const char** argv) {
     nuraft::workload w(input);
     for (int i = 0; i < 10; i++) {
         nuraft::request req(0);
-        float time;
-        std::tie(req, time) = w.get_next_req_ms();
-        std::printf("%5d  %5d %f\n", i, req.index, time);
+        int time;
+        std::tie(req, time) = w.get_next_req_us();
+        std::printf("%5d  %5d %d\n", i, req.index, time);
     }
 }

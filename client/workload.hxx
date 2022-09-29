@@ -1,5 +1,6 @@
 #include "libnuraft/json.hpp"
 #include "libnuraft/nuraft.hxx"
+#include <string>
 
 namespace nuraft {
 enum WORKLOAD_TYPE {
@@ -12,14 +13,14 @@ public:
     ~request();
 
     int index;
-    ptr<buffer> payload;
+    std::string payload;
 };
 
 class workload {
 public:
     workload(std::string path);
     ~workload();
-    std::tuple<request, float> get_next_req_ms();
+    std::tuple<request, int> get_next_req_us();
 
 private:
     WORKLOAD_TYPE type;

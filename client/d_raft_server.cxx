@@ -148,31 +148,19 @@ void server_list() {
 }
 
 // bool do_cmd(const std::vector<std::string>& tokens);
-void handle_request(tcp::socket& sock, std::string& request);
+void handle_message(tcp::socket* psock, std::string& request);
 
 void loop() {
     // char cmd[1000];
     // std::string prompt = "calc " + std::to_string(stuff.server_id_) + "> ";
 
     asio::io_service io_service;
-    // listen for new connection
     tcp::acceptor acceptor_(io_service, tcp::endpoint(tcp::v4(), stuff.cport_));
-    // socket creation
-    tcp::socket socket_(io_service);
-    // waiting for connection
-    acceptor_.accept(socket_);
-    // read operation
     while (true) {
-        asio::streambuf buf;
-        asio::read_until(socket_, buf, "\n");
-        std::string message = "";
-        message = asio::buffer_cast<const char*>(buf.data());
-        std::cout << message;
-        // write operation
-        // std::vector<std::string> tokens = tokenize(cmd);
-        std::thread thr(handle_request, std::ref(socket_), std::ref(message));
+        tcp::socket* psocket_ = new tcp::socket(io_service);
+        acceptor_.accept(*psocket_);
+        std::thread thr(handle_session, psocket_);
         thr.detach();
-        // std::cout << "Servent sent Hello message to Client!" << std::endl;
     }
 }
 
@@ -286,55 +274,103 @@ void handle_result(ptr<TestSuite::Timer> timer,
               << ", state machine value: " << get_sm()->get_current_value() << std::endl;
 }
 
-void handle_request(tcp::socket& sock, std::string& request) {
+void reply_check_init(tcp::socket* psock, std::string& request) {
+    asio::write(*psock, asio::buffer("init\n"));
+}
+
+void add_peer(tcp::socket* psock, std::string& request) {
+    const char *ID_PREFIX = "id=", *EP_PREFIX = "ep=";
+    size_t idpos = request.find(ID_PREFIX);
+    size_t eppos = request.find(EP_PREFIX);
+
+    if (idpos == std::string::npos || eppos == std::string::npos) {
+        std::cerr << "cannot find keywords" << std::endl;
+        exit(1);
+    }
+
+    idpos += std::strlen(ID_PREFIX);
+    eppos += std::strlen(EP_PREFIX);
+
+    size_t delim;
+    for (delim = idpos;
+         delim < request.length() && request[delim] != ' ' && request[delim] != '\n';
+         delim++) {
+    }
+    if (delim >= request.length()) {
+        std::cerr << "request format wrong: " << request << std::endl;
+        exit(1);
+    }
+    int id = std::stoi(request.substr(idpos, delim));
+
+    for (delim = eppos;
+         delim < request.length() && request[delim] != ' ' && request[delim] != '\n';
+         delim++) {
+    }
+    if (delim >= request.length()) {
+        std::cerr << "request format wrong: " << request << std::endl;
+        exit(1);
+    }
+    std::string endpoint = request.substr(eppos, delim);
+    add_server(id, endpoint);
+    asio::write(*psock, asio::buffer("added\n"));
+}
+
+void handle_message(tcp::socket* psock, std::string& request) {
+    asio::streambuf buf;
+    asio::read_until(*psock, buf, "\n");
+    std::string message = "";
+    message = asio::buffer_cast<const char*>(buf.data());
+    std::cout << message;
+
     if (request.find("check") != std::string::npos) {
-        asio::write(sock, asio::buffer("init\n"));
-        return;
+        reply_check_init(psock, request);
     } else if (request.find("addpeer") != std::string::npos) {
-        const char *ID_PREFIX = "id=", *EP_PREFIX = "ep=";
-        size_t idpos = request.find(ID_PREFIX);
-        size_t eppos = request.find(EP_PREFIX);
-
-        if (idpos == std::string::npos || eppos == std::string::npos) {
-            std::cerr << "cannot find keywords" << std::endl;
-            exit(1);
-        }
-
-        idpos += std::strlen(ID_PREFIX);
-        eppos += std::strlen(EP_PREFIX);
-
-        size_t delim;
-        for (delim = idpos;
-             delim < request.length() && request[delim] != ' ' && request[delim] != '\n';
-             delim++) {
-        }
-        if (delim >= request.length()) {
-            std::cerr << "request format wrong: " << request << std::endl;
-            exit(1);
-        }
-        int id = std::stoi(request.substr(idpos, delim));
-
-        for (delim = eppos;
-             delim < request.length() && request[delim] != ' ' && request[delim] != '\n';
-             delim++) {
-        }
-        if (delim >= request.length()) {
-            std::cerr << "request format wrong: " << request << std::endl;
-            exit(1);
-        }
-        std::string endpoint = request.substr(eppos, delim);
-        add_server(id, endpoint);
-        asio::write(sock, asio::buffer("added\n"));
-        return;
+        add_peer(psock, request);
     } else {
         service_mutex.lock();
+        ptr<TestSuite::Timer> timer = cs_new<TestSuite::Timer>();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        ptr<buffer> new_log = buffer::alloc(sizeof(int));
+        int payload = 24;
+        buffer_serializer bs(new_log);
+        bs.put_raw(&payload, sizeof(int));
+
+        ptr<raft_result> ret = stuff.raft_instance_->append_entries({new_log});
+
+        if (!ret->get_accepted()) {
+            // Log append rejected, usually because this node is not a leader.
+            std::cout << "failed to replicate: " << ret->get_result_code() << ", "
+                      << TestSuite::usToString(timer->getTimeUs()) << std::endl;
+            service_mutex.unlock();
+            return;
+        }
+        ptr<std::exception> err(nullptr);
+        handle_result(timer, *ret, err);
         service_mutex.unlock();
 
         char reply_buf[100];
         std::sprintf(reply_buf, "Success From Server %d!\n", stuff.server_id_);
-        asio::write(sock, asio::buffer(reply_buf));
+        asio::write(*psock, asio::buffer(reply_buf));
 
+        return;
+    }
+}
+
+void handle_session(tcp::socket* psock) {
+    try {
+        for (;;) {
+            asio::streambuf buf;
+            asio::read_until(*psock, buf, "\n");
+            std::string message = "";
+            message = asio::buffer_cast<const char*>(buf.data());
+            std::cout << message;
+
+            std::thread thr(handle_message, psock, std::string(message));
+            thr.detach();
+        }
+    } catch (boost::wrapexcept<boost::system::system_error>) {
+        std::cerr << "client disconnected!" << std::endl;
+        delete psock;
         return;
     }
 }
