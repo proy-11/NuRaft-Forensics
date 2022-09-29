@@ -3,13 +3,19 @@
       "id": 1,
       "byzantine":  "None",
       "ip": "localhost",
-      "port": 10001
+      "port": 23334
     },
     {
       "id": 2,
       "byzantine":  "None",
       "ip": "localhost",
-      "port": 10002
+      "port": 23335
     }
- ]
+ ],
+  "client": [
+    {
+      "cport": 23336,
+      "path": "client/workload.json"
+    }
+]
 }
