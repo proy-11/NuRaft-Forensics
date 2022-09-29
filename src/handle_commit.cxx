@@ -40,7 +40,7 @@ void raft_server::commit(ulong target_idx) {
     if (target_idx > quick_commit_index_) {
         quick_commit_index_ = target_idx;
         lagging_sm_target_index_ = target_idx;
-        p_db( "trigger commit upto %lu", quick_commit_index_.load() );
+        p_tr("trigger commit upto %lu", quick_commit_index_.load());
 
         // if this is a leader notify peers to commit as well
         // for peers that are free, send the request, otherwise,
@@ -55,10 +55,10 @@ void raft_server::commit(ulong target_idx) {
         }
     }
 
-    p_tr( "local log idx %lu, target_commit_idx %lu, "
+    p_tr("Commit initiated, local log idx %lu, target_commit_idx %lu, "
           "quick_commit_index_ %lu, state_->get_commit_idx() %lu",
           log_store_->next_slot() - 1, target_idx,
-          quick_commit_index_.load(), sm_commit_index_.load() );
+          quick_commit_index_.load(), sm_commit_index_.load());
 
     if ( log_store_->next_slot() - 1 > sm_commit_index_ &&
          quick_commit_index_ > sm_commit_index_ ) {
@@ -161,8 +161,8 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
         return true;
     }
 
-    p_db( "commit upto %ld, curruent idx %ld\n",
-          quick_commit_index_.load(), sm_commit_index_.load() );
+    p_tr("commit upto %ld, curruent idx %ld\n",
+          quick_commit_index_.load(), sm_commit_index_.load());
 
     ulong log_start_idx = log_store_->start_index();
     if ( log_start_idx &&
@@ -195,8 +195,8 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
 
         ulong index_to_commit = sm_commit_index_ + 1;
         ptr<log_entry> le = log_store_->entry_at(index_to_commit);
-        p_tr( "commit upto %llu, curruent idx %llu\n",
-              quick_commit_index_.load(), index_to_commit );
+        p_tr("commit upto %llu, curruent idx %llu\n",
+              quick_commit_index_.load(), index_to_commit);
 
         if (le->get_term() == 0) {
             // LCOV_EXCL_START
@@ -233,8 +233,8 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
                  index_to_commit);
         }
     }
-    p_db( "DONE: commit upto %ld, curruent idx %ld\n",
-          quick_commit_index_.load(), sm_commit_index_.load() );
+    p_tr("DONE: commit upto %ld, curruent idx %ld\n",
+          quick_commit_index_.load(), sm_commit_index_.load());
     if (role_ == srv_role::follower) {
         ulong leader_idx = leader_commit_index_.load();
         ulong local_idx = sm_commit_index_.load();

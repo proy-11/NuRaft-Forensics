@@ -72,6 +72,8 @@ ptr<resp_msg> raft_server::handle_cli_req_prelock(req_msg& req) {
 }
 
 ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
+    p_tr("received client request, last log idx : %llu, last log term: %llu, commit idx: %llu", \
+            req.get_last_log_idx(), req.get_last_log_term(), req.get_commit_idx());
     ptr<resp_msg> resp = nullptr;
     ulong last_idx = 0;
     ptr<buffer> ret_value = nullptr;

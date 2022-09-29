@@ -920,6 +920,7 @@ bool raft_server::reconnect_client(peer& p) {
 
 void raft_server::become_leader() {
     stop_election_timer();
+    p_tr("leader elected");
 
     {   auto_lock(commit_ret_elems_lock_);
         p_in("number of pending commit elements: %zu",

@@ -327,6 +327,7 @@ void raft_server::handle_election_timeout() {
 }
 
 void raft_server::cancel_schedulers() {
+    p_tr("cancel schedulers");
     if (!scheduler_) {
         // Already cancelled.
         return;
@@ -351,6 +352,7 @@ void raft_server::cancel_schedulers() {
 }
 
 void raft_server::schedule_task(ptr<delayed_task>& task, int32 milliseconds) {
+    p_tr("scheduling task, task type: %d",task->get_type());
     if (stopping_) return;
 
     if (!scheduler_) {

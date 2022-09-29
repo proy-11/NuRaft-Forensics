@@ -71,6 +71,7 @@ void raft_server::request_append_entries() {
     // We should call it here.
     if ( peers_.size() == 0 ||
          get_quorum_for_commit() == 0 ) {
+        p_tr("append entries requested for one node cluster or quorum size 1 (including leader)");
         commit(precommit_index_.load());
         return;
     }
@@ -81,6 +82,7 @@ void raft_server::request_append_entries() {
 }
 
 bool raft_server::request_append_entries(ptr<peer> p) {
+    p_tr("append entries requested for peer id: %d, next log idx: %llu", p->get_id(), p->get_next_log_idx());
     static timer_helper chk_timer(1000*1000);
 
     // Checking the validity of role first.
