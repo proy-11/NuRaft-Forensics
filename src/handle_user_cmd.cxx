@@ -55,6 +55,7 @@ struct raft_server::auto_fwd_pkg {
 
 ptr< cmd_result< ptr<buffer> > > raft_server::add_srv(const srv_config& srv)
 {
+    p_tr("adding server, srv id: %d, endpoint %s", srv.get_id(), srv.get_endpoint());
     ptr<buffer> buf(srv.serialize());
     ptr<log_entry> log( cs_new<log_entry>
                         ( 0, buf, log_val_type::cluster_server ) );
@@ -67,6 +68,7 @@ ptr< cmd_result< ptr<buffer> > > raft_server::add_srv(const srv_config& srv)
 
 ptr< cmd_result< ptr<buffer> > > raft_server::remove_srv(const int srv_id)
 {
+    p_tr("removing server, srv id: %d",srv_id);
     ptr<buffer> buf(buffer::alloc(sz_int));
     buf->put(srv_id);
     buf->pos(0);

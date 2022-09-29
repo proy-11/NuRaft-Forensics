@@ -219,6 +219,9 @@ ptr<resp_msg> raft_server::handle_leadership_takeover
     }
     p_in("[LEADERSHIP TAKEOVER] got request");
 
+    p_tr("Leadership takeover initiated: last log idx : %llu, last log term: %llu, commit idx: %llu", \
+            req.get_last_log_idx(), req.get_last_log_term(), req.get_commit_idx());
+
     // Initiate force vote (ignoring priority).
     initiate_vote(true);
     return resp;

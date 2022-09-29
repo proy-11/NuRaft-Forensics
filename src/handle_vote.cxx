@@ -162,6 +162,7 @@ void raft_server::request_prevote() {
 }
 
 void raft_server::initiate_vote(bool force_vote) {
+    p_tr("Voting initiated");
     int grace_period = ctx_->get_params()->grace_period_of_lagging_state_machine_;
     ulong cur_term = state_->get_term();
     if ( !force_vote &&
