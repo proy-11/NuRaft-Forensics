@@ -52,22 +52,32 @@ int main(int argc, const char **argv)
     std::string config_file = "";
     if( argc == 2 ) {
         config_file = argv[1];
-        std::cout << "config file " << config_file;
     }
     else {
       std::cout << "Usage: ./d_raft_launcher config_file\n";
       return 1;
     }
-    json data = json::parse(config_file);
+    std::ifstream f(config_file);
+    json data = json::parse(f);
 
-    // std::cout << data["server"][1]["id"] ;
+    int number_of_servers = data["server"].size();
+    int number_of_clients = data["client"].size();
 
-    // std::thread s(create_server,data["server"][1]["id"], data["server"][1]["ip"], data["server"][1]["port"], data["client"][1]["cport"],data["server"][1]["byzantine"] );
+    std::vector<std::thread> servers(number_of_servers);
+    std::vector<std::thread> clients(number_of_clients);
+
+    for(int i = 0; i < number_of_servers; i++) {
+        servers.emplace_back(create_server,data["server"][i]["id"], data["server"][i]["ip"], data["server"][i]["port"], data["client"][i]["cport"],data["server"][i]["byzantine"]);
+    }
     
-    // std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::this_thread::sleep_for(std::chrono::seconds(10));
     
-    // std::thread c(create_client, data["client"][1]["cport"], data["client"][1]["num"]); 
+    for(int i = 0; i < number_of_clients; i++) {
+        clients.emplace_back(create_client, data["client"][i]["cport"], data["client"][i]["num"]); 
+    }
 
-    // c.join();
+    for(int i = 0; i < number_of_clients; i++) {
+        clients[i].join();
+    }
     return 0;
 }
