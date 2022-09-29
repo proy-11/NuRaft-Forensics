@@ -6,6 +6,7 @@
 #include <thread>
 #include <tuple>
 #include <vector>
+#include <thread>
 
 using namespace boost::asio;
 using ip::tcp;
@@ -64,7 +65,7 @@ cmargs parse_args(int argc, const char** argv) {
     return cmargs(port, path);
 }
 
-void communicate(tcp::socket* psocket, nuraft::request req) {
+void communicate(tcp::socket* psocket, nuraft::request& req) {
     boost::system::error_code error;
 
     boost::asio::write(*psocket, boost::asio::buffer(req.payload), error);
@@ -112,7 +113,7 @@ int main(int argc, const char** argv) {
             break;
         }
 
-        std::thread thread_(communicate, &sock);
+        std::thread thread_(communicate, &sock, std::ref(req));
         thread_.detach();
         boost::this_thread::sleep(boost::posix_time::microseconds(delay));
     }

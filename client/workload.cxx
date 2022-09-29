@@ -53,33 +53,33 @@ std::tuple<request, int> workload::get_next_req_us() {
 }
 } // namespace nuraft
 
-int main(int argc, const char** argv) {
+// int main(int argc, const char** argv) {
 
-    std::string input;
-    // std::string output;
+//     std::string input;
+//     // std::string output;
 
-    po::options_description desc("Allowed options");
-    desc.add_options()("help,h",
-                       "print usage message")("input,i", po::value(&input), "Input file");
+//     po::options_description desc("Allowed options");
+//     desc.add_options()("help,h",
+//                        "print usage message")("input,i", po::value(&input), "Input file");
 
-    po::variables_map vm;
-    po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
-    po::notify(vm);
+//     po::variables_map vm;
+//     po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
+//     po::notify(vm);
 
-    if (vm.count("help")) {
-        std::cout << desc << "\n";
-        return 0;
-    }
-    if (!vm.count("input")) {
-        std::cerr << desc << "\n";
-        return 1;
-    }
+//     if (vm.count("help")) {
+//         std::cout << desc << "\n";
+//         return 0;
+//     }
+//     if (!vm.count("input")) {
+//         std::cerr << desc << "\n";
+//         return 1;
+//     }
 
-    nuraft::workload w(input);
-    for (int i = 0; i < 10; i++) {
-        nuraft::request req(0);
-        int time;
-        std::tie(req, time) = w.get_next_req_us();
-        std::printf("%5d  %5d %d\n", i, req.index, time);
-    }
-}
+//     nuraft::workload w(input);
+//     for (int i = 0; i < 10; i++) {
+//         nuraft::request req(0);
+//         int time;
+//         std::tie(req, time) = w.get_next_req_us();
+//         std::printf("%5d  %5d %d\n", i, req.index, time);
+//     }
+// }

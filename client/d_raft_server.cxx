@@ -149,6 +149,7 @@ void server_list() {
 
 // bool do_cmd(const std::vector<std::string>& tokens);
 void handle_message(tcp::socket* psock, std::string& request);
+void handle_session(tcp::socket* psock);
 
 void loop() {
     // char cmd[1000];
@@ -365,7 +366,7 @@ void handle_session(tcp::socket* psock) {
             message = asio::buffer_cast<const char*>(buf.data());
             std::cout << message;
 
-            std::thread thr(handle_message, psock, std::string(message));
+            std::thread thr(handle_message, psock, std::ref(message));
             thr.detach();
         }
     } catch (boost::wrapexcept<boost::system::system_error>) {
