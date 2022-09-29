@@ -1,21 +1,22 @@
-{
-  "server": [
-    {
-      "id": 1,
-      "byzantine": "None",
-      "ip": "localhost",
-      "port": 23334,
-      "cport": 33334
-    },
-    {
-      "id": 2,
-      "byzantine": "None",
-      "ip": "localhost",
-      "port": 23335,
-      "cport": 33335
-    }
-  ],
-  "client": {
-    "path": "client/workload.json"
+{ "server": [
+  {
+    "id": 1,
+    "byzantine":  "None",
+    "ip": "127.0.0.1",
+    "port": 23338
+  },
+  {
+    "id": 2,
+    "byzantine": "None",
+    "ip": "127.0.0.1",
+    "port": 23335
   }
+],
+"client": [
+  {
+    "port": 33334,
+    "path": "client/naive.json",
+    "ip": "127.0.0.1"
+  }
+]
 }

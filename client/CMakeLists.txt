@@ -16,18 +16,19 @@ find_package(Boost 1.74.0 COMPONENTS program_options thread)
 if(Boost_FOUND)
     message(STATUS "Boost found")
     include_directories(${Boost_INCLUDE_DIRS})
-    add_executable(workload
-                    workload.cxx)
-    add_dependencies(workload
-                     static_lib)
-    target_link_libraries(workload
-                          ${Boost_LIBRARIES}
-                          ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
-                          ${LIBRARIES})
+    # add_executable(workload
+    #                 workload.cxx)
+    # add_dependencies(workload
+    #                  static_lib)
+    # target_link_libraries(workload
+    #                       ${Boost_LIBRARIES}
+    #                       ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+    #                       ${LIBRARIES})
     
     add_executable(d_raft
                     d_raft_server.cxx
                     logger.cc
+                    workload.cxx
                     in_memory_log_store.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
     add_dependencies(d_raft
@@ -39,6 +40,7 @@ if(Boost_FOUND)
 
     add_executable(d_raft_client
                     d_raft_client.cxx
+                    workload.cxx
                     in_memory_log_store.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
     add_dependencies(d_raft
@@ -49,6 +51,7 @@ if(Boost_FOUND)
                           ${LIBRARIES})
 
     add_executable(d_raft_launcher
+                    workload.cxx
                     d_raft_launcher.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
     add_dependencies(d_raft_launcher

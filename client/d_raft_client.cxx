@@ -55,10 +55,9 @@ cmargs parse_args(int argc, const char** argv) {
         cout << "Port was not set.\n";
         exit(1);
     }
-
     if (vm.count("ip")) {
         ip = vm["ip"].as<std::string>();
-        cout << "IP address was set to " << path << ".\n";
+        cout << "IP address was set to " << ip << ".\n";
     } else {
         cout << "IP address was not set.\n";
         exit(1);
@@ -70,7 +69,6 @@ cmargs parse_args(int argc, const char** argv) {
         cout << "Config file was not set.\n";
         exit(1);
     }
-
     return cmargs(port, ip, path);
 }
 
@@ -107,11 +105,18 @@ int main(int argc, const char** argv) {
 
     boost::asio::io_service io_service;
     tcp::socket sock(io_service);
-    sock.connect(
-        tcp::endpoint(boost::asio::ip::address::from_string(args.ip), args.port));
+    
+    std::cout << args.ip << " " << args.port << std::endl;
 
+    try {
+        sock.connect(
+            tcp::endpoint(boost::asio::ip::address::from_string(std::ref(args.ip)), args.port));
+    }
+    catch (boost::system::system_error const& se) {
+        std::cout << "Error : " << se.code().message() << "\n";
+    }
+    
     nuraft::workload load(args.config_path);
-
     while (true) {
         int delay;
         nuraft::request req(0);
