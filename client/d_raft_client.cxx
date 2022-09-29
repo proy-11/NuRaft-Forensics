@@ -6,7 +6,6 @@
 #include <thread>
 #include <tuple>
 #include <vector>
-#include <thread>
 
 using namespace boost::asio;
 using ip::tcp;
@@ -19,13 +18,15 @@ const string msg = "Hello from Client!\n";
 
 struct cmargs {
 public:
-    cmargs(int p, std::string path) {
+    cmargs(int p, std::string ip, std::string path) {
         this->port = p;
+        this->ip = ip;
         this->config_path = path;
     }
     ~cmargs() {}
 
     int port;
+    std::string ip;
     std::string config_path;
 };
 
@@ -33,6 +34,7 @@ cmargs parse_args(int argc, const char** argv) {
     po::options_description desc("Allowed options");
     desc.add_options()("help",
                        "produce help message")("port", po::value<int>(), "port number")(
+        "ip", po::value<std::string>(), "IP address of server")(
         "path", po::value<std::string>(), "workload config path");
 
     po::variables_map vm;
@@ -45,7 +47,7 @@ cmargs parse_args(int argc, const char** argv) {
     }
 
     int port;
-    std::string path;
+    std::string ip, path;
     if (vm.count("port")) {
         port = vm["port"].as<int>();
         cout << "Port was set to " << port << ".\n";
@@ -54,6 +56,13 @@ cmargs parse_args(int argc, const char** argv) {
         exit(1);
     }
 
+    if (vm.count("ip")) {
+        ip = vm["ip"].as<std::string>();
+        cout << "IP address was set to " << path << ".\n";
+    } else {
+        cout << "IP address was not set.\n";
+        exit(1);
+    }
     if (vm.count("path")) {
         path = vm["path"].as<std::string>();
         cout << "Config file was set to " << path << ".\n";
@@ -62,13 +71,13 @@ cmargs parse_args(int argc, const char** argv) {
         exit(1);
     }
 
-    return cmargs(port, path);
+    return cmargs(port, ip, path);
 }
 
 void communicate(tcp::socket* psocket, nuraft::request& req) {
     boost::system::error_code error;
 
-    boost::asio::write(*psocket, boost::asio::buffer(req.payload), error);
+    boost::asio::write(*psocket, boost::asio::buffer(req.payload + "\n"), error);
     if (!error) {
         cout << "Client sent hello message to "
              << "!" << endl;
@@ -88,8 +97,7 @@ void communicate(tcp::socket* psocket, nuraft::request& req) {
         // const char *data = boost::asio::buffer_cast<const char
         // *>(receive_buffer.data());
         const char* data = buf_str.c_str();
-        cout << "receive from server "
-             << ": " << data << endl;
+        cout << "receive from server: " << data << endl;
     }
     return;
 }
@@ -100,7 +108,7 @@ int main(int argc, const char** argv) {
     boost::asio::io_service io_service;
     tcp::socket sock(io_service);
     sock.connect(
-        tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), args.port));
+        tcp::endpoint(boost::asio::ip::address::from_string(args.ip), args.port));
 
     nuraft::workload load(args.config_path);
 

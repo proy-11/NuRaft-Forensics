@@ -1,15 +1,21 @@
- { "server": [
+{
+  "server": [
     {
       "id": 1,
-      "byzantine":  "None",
+      "byzantine": "None",
       "ip": "localhost",
-      "port": 10001
+      "port": 23334,
+      "cport": 33334
     },
     {
       "id": 2,
-      "byzantine":  "None",
+      "byzantine": "None",
       "ip": "localhost",
-      "port": 10002
+      "port": 23335,
+      "cport": 33335
     }
- ]
+  ],
+  "client": {
+    "path": "client/workload.json"
+  }
 }

@@ -49,7 +49,7 @@ static const raft_params::return_method_type CALL_TYPE = raft_params::blocking;
 
 using raft_result = cmd_result<ptr<buffer>>;
 
-static std::mutex service_mutex;
+std::mutex service_mutex;
 
 struct cmargs {
     cmargs(int id_, std::string ipaddr_, int port_, int cport_, std::string byzantine_) {
@@ -327,6 +327,9 @@ void handle_message(tcp::socket* psock, std::string& request) {
         reply_check_init(psock, request);
     } else if (request.find("addpeer") != std::string::npos) {
         add_peer(psock, request);
+    } else if (request.find("exit") != std::string::npos) {
+        asio::write(*psock, asio::buffer("killed\n"));
+        exit(0);
     } else {
         service_mutex.lock();
         ptr<TestSuite::Timer> timer = cs_new<TestSuite::Timer>();
@@ -437,7 +440,7 @@ using namespace d_raft_server;
 int main(int argc, char** argv) {
     // TODO - Read config file path from cmd line
     cmargs args = parse_args(argc, argv);
-    service_mutex.unlock();
+    // service_mutex.unlock();
 
     // if (argc < 3) usage(argc, argv);
 
