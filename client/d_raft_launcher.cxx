@@ -6,14 +6,18 @@
 #include <csignal>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <signal.h>
 #include <sstream>
 #include <thread>
 #include <unistd.h>
 
 namespace po = boost::program_options;
+namespace asio = boost::asio;
 using boost::asio::ip::tcp;
 using json = nlohmann::json;
+
+std::mutex print_mutex;
 
 const std::string INIT_ASK = "check\n";
 const std::string NEW_SERVER = "addpeer id=%d ep=%s\n";
@@ -26,6 +30,16 @@ std::vector<std::string> endpoints(0);
 
 std::string endpoint_wrapper(std::string ip, int port) {
     return ip + ":" + std::to_string(port);
+}
+
+std::string readline(tcp::socket* psock) {
+    std::string message = "";
+    char buf[1] = {'k'};
+    for (; buf[0] != '\n';) {
+        psock->read_some(boost::asio::buffer(buf));
+        message += buf[0];
+    }
+    return message;
 }
 
 void create_server(
@@ -76,11 +90,13 @@ void send_(std::string msg, int i, bool recv) {
         return;
     }
 
-    std::vector<char> buf(1024);
-    size_t len = psockets[i]->read_some(boost::asio::buffer(buf), error);
-    std::string buf_str(buf.begin(), buf.end());
-    buf_str.resize(len);
+    std::string buf_str = readline(psockets[i]);
+    // std::vector<char> buf(1024);
+    // size_t len = psockets[i]->read_some(boost::asio::buffer(buf), error);
+    // std::string buf_str(buf.begin(), buf.end());
+    // buf_str.resize(len);
 
+    print_mutex.lock();
     if (error && error != boost::asio::error::eof) {
         std::cerr << "receive from " << ids[i] << " failed: " << error.message()
                   << std::endl;
@@ -88,6 +104,7 @@ void send_(std::string msg, int i, bool recv) {
         const char* data = buf_str.c_str();
         std::cout << "receive from server " << ids[i] << ": " << data << std::endl;
     }
+    print_mutex.unlock();
     return;
 }
 
@@ -199,9 +216,13 @@ int main(int argc, const char** argv) {
         server_creators[i].join();
     }
 
-    std::cout << "Launched! Now connecting..." << std::endl;
+    std::cout << "Launched! Now connecting" << std::endl;
 
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    for (int i = 0; i < 5; i++) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::cout << ".";
+    }
+    std::cout << std::endl;
 
     for (int i = 0; i < number_of_servers; i++) {
         psockets.emplace_back(new tcp::socket(io_service));
@@ -224,19 +245,17 @@ int main(int argc, const char** argv) {
     std::cout << "All servers initialized! Now adding servers..." << std::endl;
 
     for (int i = 1; i < number_of_servers; i++) {
-        server_adds.emplace_back(add_server_as_peer, 0, i);
+        add_server_as_peer(0, i);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        // server_adds.emplace_back(add_server_as_peer, 0, i);
     }
 
-    for (int i = 0; i < number_of_servers - 1; i++) {
-        server_adds[i].join();
-    }
+    // for (int i = 0; i < number_of_servers - 1; i++) {
+    //     server_adds[i].join();
+    // }
 
     std::cout << "Raft cluster initialized! Now launching client..." << std::endl;
-
-    // std::this_thread::sleep_for(std::chrono::seconds(10));
-    //     clients.emplace_back(
-    //         create_client, data["client"][i]["cport"], data["client"][i]["path"]);
-    // }
 
     experiment(data["client"]["path"]);
 

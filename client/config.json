@@ -13,6 +13,27 @@
       "ip": "127.0.0.1",
       "port": 23335,
       "cport": 33335
+    },
+    {
+      "id": 3,
+      "byzantine": "None",
+      "ip": "127.0.0.1",
+      "port": 23336,
+      "cport": 33336
+    },
+    {
+      "id": 4,
+      "byzantine": "None",
+      "ip": "127.0.0.1",
+      "port": 23337,
+      "cport": 33337
+    },
+    {
+      "id": 5,
+      "byzantine": "None",
+      "ip": "127.0.0.1",
+      "port": 23338,
+      "cport": 33338
     }
   ],
   "client": {
