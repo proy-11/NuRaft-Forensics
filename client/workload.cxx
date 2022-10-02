@@ -10,7 +10,7 @@ namespace po = boost::program_options;
 namespace nuraft {
 request::request(int ind_) {
     index = ind_;
-    payload = std::string("plain");
+    payload = std::string("+1");
 }
 
 request::~request() {}
@@ -60,7 +60,8 @@ std::tuple<request, int> workload::get_next_req_us() {
 
 //     po::options_description desc("Allowed options");
 //     desc.add_options()("help,h",
-//                        "print usage message")("input,i", po::value(&input), "Input file");
+//                        "print usage message")("input,i", po::value(&input), "Input
+//                        file");
 
 //     po::variables_map vm;
 //     po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);

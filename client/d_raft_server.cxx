@@ -50,6 +50,7 @@ static const raft_params::return_method_type CALL_TYPE = raft_params::blocking;
 using raft_result = cmd_result<ptr<buffer>>;
 
 std::mutex service_mutex;
+std::mutex addpeer_mutex;
 
 struct cmargs {
     cmargs(int id_, std::string ipaddr_, int port_, int cport_, std::string byzantine_) {
@@ -116,19 +117,34 @@ struct server_stuff {
 };
 static server_stuff stuff;
 
-void add_server(int peer_id, std::string endpoint_to_add) {
+std::string readline(tcp::socket* psock) {
+    std::string message = "";
+    char buf[1] = {'k'};
+    for (; buf[0] != '\n';) {
+        asio::read(*psock, asio::buffer(buf, 1));
+        message += buf[0];
+    }
+    return message;
+}
+
+bool add_server(int peer_id, std::string endpoint_to_add) {
     if (!peer_id || peer_id == stuff.server_id_) {
         std::cout << "wrong server id: " << peer_id << std::endl;
-        return;
+        return false;
     }
 
+    addpeer_mutex.lock();
+    std::cout << "adding server " << peer_id << "...\n";
     srv_config srv_conf_to_add(peer_id, endpoint_to_add);
     ptr<raft_result> ret = stuff.raft_instance_->add_srv(srv_conf_to_add);
+    addpeer_mutex.unlock();
+
     if (!ret->get_accepted()) {
         std::cout << "failed to add server: " << ret->get_result_code() << std::endl;
-        return;
+        return false;
     }
     std::cout << "async request is in progress (check with `list` command)" << std::endl;
+    return true;
 }
 
 void server_list() {
@@ -148,7 +164,7 @@ void server_list() {
 }
 
 // bool do_cmd(const std::vector<std::string>& tokens);
-void handle_message(tcp::socket* psock, std::string& request);
+void handle_message(tcp::socket* psock, std::string request);
 void handle_session(tcp::socket* psock);
 
 void loop() {
@@ -312,23 +328,27 @@ void add_peer(tcp::socket* psock, std::string& request) {
         exit(1);
     }
     std::string endpoint = request.substr(eppos, delim);
-    add_server(id, endpoint);
-    asio::write(*psock, asio::buffer("added\n"));
+
+    // std::cout << "got id = " << id << ", endpoint = " << endpoint << "\n";
+    bool add_result = add_server(id, endpoint);
+    if (add_result) {
+        asio::write(*psock,
+                    asio::buffer(std::string("added ") + std::to_string(id) + "\n"));
+    } else {
+        asio::write(*psock,
+                    asio::buffer(std::string("cannot add ") + std::to_string(id) + "\n"));
+    }
 }
 
-void handle_message(tcp::socket* psock, std::string& request) {
-    asio::streambuf buf;
-    asio::read_until(*psock, buf, "\n");
-    std::string message = "";
-    message = asio::buffer_cast<const char*>(buf.data());
-    std::cout << message;
-
+void handle_message(tcp::socket* psock, std::string request) {
     if (request.find("check") != std::string::npos) {
         reply_check_init(psock, request);
     } else if (request.find("addpeer") != std::string::npos) {
         add_peer(psock, request);
     } else if (request.find("exit") != std::string::npos) {
         asio::write(*psock, asio::buffer("killed\n"));
+        std::cout << "terminating -- last committed index: "
+                  << get_sm()->last_commit_index() << std::endl;
         exit(0);
     } else {
         service_mutex.lock();
@@ -363,13 +383,10 @@ void handle_message(tcp::socket* psock, std::string& request) {
 void handle_session(tcp::socket* psock) {
     try {
         for (;;) {
-            asio::streambuf buf;
-            asio::read_until(*psock, buf, "\n");
-            std::string message = "";
-            message = asio::buffer_cast<const char*>(buf.data());
-            std::cout << message;
+            std::string message = readline(psock);
+            std::cout << "Got message \"" << message << "\"" << std::endl;
 
-            std::thread thr(handle_message, psock, std::ref(message));
+            std::thread thr(handle_message, psock, message);
             thr.detach();
         }
     } catch (boost::wrapexcept<boost::system::system_error>) {
