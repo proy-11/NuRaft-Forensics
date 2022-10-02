@@ -123,7 +123,9 @@ void add_server(int peer_id, std::string endpoint_to_add) {
     }
 
     srv_config srv_conf_to_add(peer_id, endpoint_to_add);
+    std::cout << "adding server...\n";
     ptr<raft_result> ret = stuff.raft_instance_->add_srv(srv_conf_to_add);
+    std::cout << "added!\n";
     if (!ret->get_accepted()) {
         std::cout << "failed to add server: " << ret->get_result_code() << std::endl;
         return;
@@ -148,7 +150,7 @@ void server_list() {
 }
 
 // bool do_cmd(const std::vector<std::string>& tokens);
-void handle_message(tcp::socket* psock, std::string& request);
+void handle_message(tcp::socket* psock, std::string request);
 void handle_session(tcp::socket* psock);
 
 void loop() {
@@ -312,17 +314,13 @@ void add_peer(tcp::socket* psock, std::string& request) {
         exit(1);
     }
     std::string endpoint = request.substr(eppos, delim);
+
+    // std::cout << "got id = " << id << ", endpoint = " << endpoint << "\n";
     add_server(id, endpoint);
     asio::write(*psock, asio::buffer("added\n"));
 }
 
-void handle_message(tcp::socket* psock, std::string& request) {
-    asio::streambuf buf;
-    asio::read_until(*psock, buf, "\n");
-    std::string message = "";
-    message = asio::buffer_cast<const char*>(buf.data());
-    std::cout << message;
-
+void handle_message(tcp::socket* psock, std::string request) {
     if (request.find("check") != std::string::npos) {
         reply_check_init(psock, request);
     } else if (request.find("addpeer") != std::string::npos) {
@@ -367,9 +365,9 @@ void handle_session(tcp::socket* psock) {
             asio::read_until(*psock, buf, "\n");
             std::string message = "";
             message = asio::buffer_cast<const char*>(buf.data());
-            std::cout << message;
+            std::cout << "Got message " << message;
 
-            std::thread thr(handle_message, psock, std::ref(message));
+            std::thread thr(handle_message, psock, message);
             thr.detach();
         }
     } catch (boost::wrapexcept<boost::system::system_error>) {

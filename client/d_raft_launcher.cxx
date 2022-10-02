@@ -95,9 +95,10 @@ void send_(std::string msg, int i) { send_(msg, i, false); }
 
 void ask_init(int i) { send_(INIT_ASK, i, true); }
 
-void add_srv(int i, int ir) {
+void add_server_as_peer(int i, int ir) {
     char c_msg[1024];
-    std::snprintf(c_msg, sizeof(c_msg), NEW_SERVER.c_str(), ir, endpoints[ir].c_str());
+    std::snprintf(
+        c_msg, sizeof(c_msg), NEW_SERVER.c_str(), ids[ir], endpoints[ir].c_str());
     send_(c_msg, i, true);
 }
 
@@ -113,6 +114,8 @@ void experiment(std::string path) {
         nuraft::request req(0);
         std::tie(req, delay) = load.get_next_req_us();
 
+        std::cout << "Got request " << req.index << " and schedule it with delay "
+                  << delay << " us\n";
         if (req.index < 0) {
             break;
         }
@@ -220,22 +223,22 @@ int main(int argc, const char** argv) {
 
     std::cout << "All servers initialized! Now adding servers..." << std::endl;
 
-    // for (int i = 1; i < number_of_servers; i++) {
-    //     server_adds.emplace_back(add_srv, 0, i)
+    for (int i = 1; i < number_of_servers; i++) {
+        server_adds.emplace_back(add_server_as_peer, 0, i);
+    }
+
+    for (int i = 0; i < number_of_servers - 1; i++) {
+        server_adds[i].join();
+    }
+
+    std::cout << "Raft cluster initialized! Now launching client..." << std::endl;
+
+    // std::this_thread::sleep_for(std::chrono::seconds(10));
+    //     clients.emplace_back(
+    //         create_client, data["client"][i]["cport"], data["client"][i]["path"]);
     // }
 
-    // for (int i = 0; i < number_of_servers - 1; i++) {
-    //     server_adds[i].join();
-    // }
-
-    // std::cout << "Raft cluster initialized! Now launching client..." << std::endl;
-
-    // // std::this_thread::sleep_for(std::chrono::seconds(10));
-    // //     clients.emplace_back(
-    // //         create_client, data["client"][i]["cport"], data["client"][i]["path"]);
-    // // }
-
-    // experiment(data["client"]["path"]);
+    experiment(data["client"]["path"]);
 
     std::cout << "Experiment ended! Now closing servers..." << std::endl;
 
