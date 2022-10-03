@@ -34,6 +34,9 @@ limitations under the License.
 #include <sys/wait.h>
 #include <thread>
 
+#define _ISSUBSTR_(s1, s2) ((s1).find(s2) != std::string::npos)
+#define _ISNPOS_(p) ((p) == std::string::npos)
+
 using namespace nuraft;
 using json = nlohmann::json;
 
@@ -220,8 +223,8 @@ void init_raft(ptr<state_machine> sm_instance) {
     params.return_method_ = CALL_TYPE;
 
     // Initialize Raft server.
-    stuff.raft_instance_ = stuff.launcher_.init(
-        stuff.sm_, stuff.smgr_, stuff.raft_logger_, stuff.port_, asio_opt, params);
+    stuff.raft_instance_ =
+        stuff.launcher_.init(stuff.sm_, stuff.smgr_, stuff.raft_logger_, stuff.port_, asio_opt, params);
     if (!stuff.raft_instance_) {
         std::cerr << "Failed to initialize launcher (see the message "
                      "in the log file)."
@@ -251,8 +254,7 @@ void set_server_info(cmargs& args) {
     // Get server ID.
     stuff.server_id_ = args.id;
     if (stuff.server_id_ < 1) {
-        std::cerr << "wrong server id (should be >= 1): " << stuff.server_id_
-                  << std::endl;
+        std::cerr << "wrong server id (should be >= 1): " << stuff.server_id_ << std::endl;
     }
 
     // Get server address and port.
@@ -269,38 +271,31 @@ void set_server_info(cmargs& args) {
     stuff.endpoint_ = stuff.addr_ + ":" + std::to_string(stuff.port_);
 }
 
-d_raft_state_machine* get_sm() {
-    return static_cast<d_raft_state_machine*>(stuff.sm_.get());
-}
+d_raft_state_machine* get_sm() { return static_cast<d_raft_state_machine*>(stuff.sm_.get()); }
 
-void handle_result(ptr<TestSuite::Timer> timer,
-                   raft_result& result,
-                   ptr<std::exception>& err) {
+void handle_result(ptr<TestSuite::Timer> timer, raft_result& result, ptr<std::exception>& err) {
     if (result.get_result_code() != cmd_result_code::OK) {
         // Something went wrong.
         // This means committing this log failed,
         // but the log itself is still in the log store.
-        std::cout << "failed: " << result.get_result_code() << ", "
-                  << TestSuite::usToString(timer->getTimeUs()) << std::endl;
+        std::cout << "failed: " << result.get_result_code() << ", " << TestSuite::usToString(timer->getTimeUs())
+                  << std::endl;
         return;
     }
     ptr<buffer> buf = result.get();
     uint64_t ret_value = buf->get_ulong();
-    std::cout << "succeeded, " << TestSuite::usToString(timer->getTimeUs())
-              << ", return value: " << ret_value
+    std::cout << "succeeded, " << TestSuite::usToString(timer->getTimeUs()) << ", return value: " << ret_value
               << ", state machine value: " << get_sm()->get_current_value() << std::endl;
 }
 
-void reply_check_init(tcp::socket* psock, std::string& request) {
-    asio::write(*psock, asio::buffer("init\n"));
-}
+void reply_check_init(tcp::socket* psock, std::string& request) { asio::write(*psock, asio::buffer("init\n")); }
 
 void add_peer(tcp::socket* psock, std::string& request) {
     const char *ID_PREFIX = "id=", *EP_PREFIX = "ep=";
     size_t idpos = request.find(ID_PREFIX);
     size_t eppos = request.find(EP_PREFIX);
 
-    if (idpos == std::string::npos || eppos == std::string::npos) {
+    if (_ISNPOS_(idpos) || _ISNPOS_(eppos)) {
         std::cerr << "cannot find keywords" << std::endl;
         exit(1);
     }
@@ -309,9 +304,7 @@ void add_peer(tcp::socket* psock, std::string& request) {
     eppos += std::strlen(EP_PREFIX);
 
     size_t delim;
-    for (delim = idpos;
-         delim < request.length() && request[delim] != ' ' && request[delim] != '\n';
-         delim++) {
+    for (delim = idpos; delim < request.length() && request[delim] != ' ' && request[delim] != '\n'; delim++) {
     }
     if (delim >= request.length()) {
         std::cerr << "request format wrong: " << request << std::endl;
@@ -319,9 +312,7 @@ void add_peer(tcp::socket* psock, std::string& request) {
     }
     int id = std::stoi(request.substr(idpos, delim));
 
-    for (delim = eppos;
-         delim < request.length() && request[delim] != ' ' && request[delim] != '\n';
-         delim++) {
+    for (delim = eppos; delim < request.length() && request[delim] != ' ' && request[delim] != '\n'; delim++) {
     }
     if (delim >= request.length()) {
         std::cerr << "request format wrong: " << request << std::endl;
@@ -332,23 +323,20 @@ void add_peer(tcp::socket* psock, std::string& request) {
     // std::cout << "got id = " << id << ", endpoint = " << endpoint << "\n";
     bool add_result = add_server(id, endpoint);
     if (add_result) {
-        asio::write(*psock,
-                    asio::buffer(std::string("added ") + std::to_string(id) + "\n"));
+        asio::write(*psock, asio::buffer(std::string("added ") + std::to_string(id) + "\n"));
     } else {
-        asio::write(*psock,
-                    asio::buffer(std::string("cannot add ") + std::to_string(id) + "\n"));
+        asio::write(*psock, asio::buffer(std::string("cannot add ") + std::to_string(id) + "\n"));
     }
 }
 
 void handle_message(tcp::socket* psock, std::string request) {
-    if (request.find("check") != std::string::npos) {
+    if (_ISSUBSTR_(request, "check")) {
         reply_check_init(psock, request);
-    } else if (request.find("addpeer") != std::string::npos) {
+    } else if (_ISSUBSTR_(request, "addpeer")) {
         add_peer(psock, request);
-    } else if (request.find("exit") != std::string::npos) {
+    } else if (_ISSUBSTR_(request, "exit")) {
         asio::write(*psock, asio::buffer("killed\n"));
-        std::cout << "terminating -- last committed index: "
-                  << get_sm()->last_commit_index() << std::endl;
+        std::cout << "terminating -- last committed index: " << get_sm()->last_commit_index() << std::endl;
         exit(0);
     } else {
         service_mutex.lock();
@@ -370,12 +358,16 @@ void handle_message(tcp::socket* psock, std::string request) {
         }
         ptr<std::exception> err(nullptr);
         handle_result(timer, *ret, err);
+        int top_index = stuff.raft_instance_->get_last_log_idx();
+        int top_term = stuff.raft_instance_->get_last_log_term();
         service_mutex.unlock();
 
-        char reply_buf[100];
-        std::sprintf(reply_buf, "Success From Server %d!\n", stuff.server_id_);
-        asio::write(*psock, asio::buffer(reply_buf));
+        // char reply_buf[100];
+        // std::sprintf(reply_buf, "Success From Server %d!\n", stuff.server_id_);
 
+        std::stringstream reply_buf;
+        reply_buf << "Success (index=" << top_index << ", term=" << top_term << ")\n";
+        asio::write(*psock, asio::buffer(reply_buf.str()));
         return;
     }
 }
@@ -398,12 +390,9 @@ void handle_session(tcp::socket* psock) {
 
 cmargs parse_args(int argc, char** argv) {
     po::options_description desc("Allowed options");
-    desc.add_options()("help",
-                       "produce help message")("id", po::value<int>(), "server id")(
-        "ip", po::value<std::string>(), "IP address")(
-        "port", po::value<int>(), "port number")(
-        "cport", po::value<int>(), "Client port number")(
-        "byz", po::value<std::string>(), "Byzantine status");
+    desc.add_options()("help", "produce help message")("id", po::value<int>(), "server id")(
+        "ip", po::value<std::string>(), "IP address")("port", po::value<int>(), "port number")(
+        "cport", po::value<int>(), "Client port number")("byz", po::value<std::string>(), "Byzantine status");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
