@@ -30,6 +30,7 @@ limitations under the License.
 #include <chrono>
 #include <iostream>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <sstream>
 #include <sys/wait.h>
 #include <thread>
@@ -38,12 +39,12 @@ limitations under the License.
 #define _ISNPOS_(p) ((p) == std::string::npos)
 
 using namespace nuraft;
-using json = nlohmann::json;
-
-namespace asio = boost::asio;
-using boost::asio::ip::tcp;
 
 namespace po = boost::program_options;
+namespace asio = boost::asio;
+
+using json = nlohmann::json;
+using boost::asio::ip::tcp;
 
 namespace d_raft_server {
 
@@ -329,46 +330,71 @@ void add_peer(tcp::socket* psock, std::string& request) {
     }
 }
 
+void replicate_request(tcp::socket* psock, std::string request) {
+    int rid;
+    try {
+        json req_obj = json::parse(request);
+        rid = req_obj["index"];
+    } catch (json::exception ec) {
+        json reply = {{"success", false}, {"error", ec.what()}};
+        asio::write(*psock, asio::buffer(reply.dump() + "\n"));
+        return;
+    }
+
+    service_mutex.lock();
+    ptr<TestSuite::Timer> timer = cs_new<TestSuite::Timer>();
+
+    // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ptr<buffer> new_log = buffer::alloc(sizeof(int));
+    int payload = 24;
+    buffer_serializer bs(new_log);
+    bs.put_raw(&payload, sizeof(int));
+
+    ptr<raft_result> ret = stuff.raft_instance_->append_entries({new_log});
+
+    if (!ret->get_accepted()) {
+        cmd_result_code rc = ret->get_result_code();
+        std::cout << "failed to replicate: " << rc << ", " << TestSuite::usToString(timer->getTimeUs()) << std::endl;
+        service_mutex.unlock();
+        json obj = {{"req", rid}, {"success", false}, {"ec", rc}, {"error", ret->get_result_str()}};
+        if (rc == cmd_result_code::NOT_LEADER) {
+            obj["leader"] = stuff.raft_instance_->get_leader();
+        }
+        asio::write(*psock, asio::buffer(obj.dump() + "\n"));
+        return;
+    }
+
+    ptr<std::exception> err(nullptr);
+    handle_result(timer, *ret, err);
+    int top_index = stuff.raft_instance_->get_last_log_idx();
+    int top_term = stuff.raft_instance_->get_last_log_term();
+    service_mutex.unlock();
+
+    json obj = {{"req", rid}, {"success", true}, {"index", top_index}, {"term", top_term}};
+    asio::write(*psock, asio::buffer(obj.dump() + "\n"));
+    return;
+}
+
 void handle_message(tcp::socket* psock, std::string request) {
     if (_ISSUBSTR_(request, "check")) {
         reply_check_init(psock, request);
     } else if (_ISSUBSTR_(request, "addpeer")) {
         add_peer(psock, request);
     } else if (_ISSUBSTR_(request, "exit")) {
-        asio::write(*psock, asio::buffer("killed\n"));
-        std::cout << "terminating -- last committed index: " << get_sm()->last_commit_index() << std::endl;
+        int log_height = stuff.raft_instance_->get_last_log_idx();
+        int log_term = stuff.raft_instance_->get_last_log_term();
+        int term = stuff.raft_instance_->get_term();
+        int clog_height = stuff.raft_instance_->get_committed_log_idx();
+        json obj = {{"success", true},
+                    {"log_height", log_height},
+                    {"log_height_committed", clog_height},
+                    {"log_term", log_term},
+                    {"term", term}};
+        asio::write(*psock, asio::buffer(obj.dump() + "\n"));
+        std::cout << "terminating -- info:\n" << obj.dump() << std::endl;
         exit(0);
     } else {
-        service_mutex.lock();
-        ptr<TestSuite::Timer> timer = cs_new<TestSuite::Timer>();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        ptr<buffer> new_log = buffer::alloc(sizeof(int));
-        int payload = 24;
-        buffer_serializer bs(new_log);
-        bs.put_raw(&payload, sizeof(int));
-
-        ptr<raft_result> ret = stuff.raft_instance_->append_entries({new_log});
-
-        if (!ret->get_accepted()) {
-            // Log append rejected, usually because this node is not a leader.
-            std::cout << "failed to replicate: " << ret->get_result_code() << ", "
-                      << TestSuite::usToString(timer->getTimeUs()) << std::endl;
-            service_mutex.unlock();
-            return;
-        }
-        ptr<std::exception> err(nullptr);
-        handle_result(timer, *ret, err);
-        int top_index = stuff.raft_instance_->get_last_log_idx();
-        int top_term = stuff.raft_instance_->get_last_log_term();
-        service_mutex.unlock();
-
-        // char reply_buf[100];
-        // std::sprintf(reply_buf, "Success From Server %d!\n", stuff.server_id_);
-
-        std::stringstream reply_buf;
-        reply_buf << "Success (index=" << top_index << ", term=" << top_term << ")\n";
-        asio::write(*psock, asio::buffer(reply_buf.str()));
-        return;
+        replicate_request(psock, request);
     }
 }
 
