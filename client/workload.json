@@ -1,5 +1,5 @@
 {
-    "size": 5,
-    "freq": 2.0,
+    "size": 1000,
+    "freq": 200.0,
     "type": "UNIF"
 }

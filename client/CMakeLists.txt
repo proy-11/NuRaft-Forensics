@@ -52,7 +52,8 @@ if(Boost_FOUND)
 
     add_executable(d_raft_launcher
                     workload.cxx
-                    d_raft_launcher.cxx)
+                    d_raft_launcher.cxx
+                    utils.hxx)
     include_directories(${Boost_INCLUDE_DIRS})
     add_dependencies(d_raft_launcher
                      static_lib)

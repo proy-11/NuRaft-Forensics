@@ -27,6 +27,7 @@ limitations under the License.
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <mutex>
@@ -55,6 +56,11 @@ using raft_result = cmd_result<ptr<buffer>>;
 
 std::mutex service_mutex;
 std::mutex addpeer_mutex;
+std::mutex write_mutex;
+
+// std::atomic_int committed_req_index(-1);
+
+std::unordered_set<int> committed_reqs;
 
 struct cmargs {
     cmargs(int id_, std::string ipaddr_, int port_, int cport_, std::string byzantine_) {
@@ -120,6 +126,18 @@ struct server_stuff {
     ptr<raft_server> raft_instance_;
 };
 static server_stuff stuff;
+
+size_t sync_write(tcp::socket* psock, const asio::const_buffers_1& buf) {
+    size_t res = 0;
+    write_mutex.lock();
+    try {
+        res = asio::write(*psock, buf);
+    } catch (boost::system::system_error error) {
+        std::cerr << error.what();
+    }
+    write_mutex.unlock();
+    return res;
+}
 
 std::string readline(tcp::socket* psock) {
     std::string message = "";
@@ -289,7 +307,7 @@ void handle_result(ptr<TestSuite::Timer> timer, raft_result& result, ptr<std::ex
               << ", state machine value: " << get_sm()->get_current_value() << std::endl;
 }
 
-void reply_check_init(tcp::socket* psock, std::string& request) { asio::write(*psock, asio::buffer("init\n")); }
+void reply_check_init(tcp::socket* psock, std::string& request) { sync_write(psock, asio::buffer("init\n")); }
 
 void add_peer(tcp::socket* psock, std::string& request) {
     const char *ID_PREFIX = "id=", *EP_PREFIX = "ep=";
@@ -324,9 +342,9 @@ void add_peer(tcp::socket* psock, std::string& request) {
     // std::cout << "got id = " << id << ", endpoint = " << endpoint << "\n";
     bool add_result = add_server(id, endpoint);
     if (add_result) {
-        asio::write(*psock, asio::buffer(std::string("added ") + std::to_string(id) + "\n"));
+        sync_write(psock, asio::buffer(std::string("added ") + std::to_string(id) + "\n"));
     } else {
-        asio::write(*psock, asio::buffer(std::string("cannot add ") + std::to_string(id) + "\n"));
+        sync_write(psock, asio::buffer(std::string("cannot add ") + std::to_string(id) + "\n"));
     }
 }
 
@@ -337,11 +355,19 @@ void replicate_request(tcp::socket* psock, std::string request) {
         rid = req_obj["index"];
     } catch (json::exception ec) {
         json reply = {{"success", false}, {"error", ec.what()}};
-        asio::write(*psock, asio::buffer(reply.dump() + "\n"));
+        sync_write(psock, asio::buffer(reply.dump() + "\n"));
         return;
     }
 
     service_mutex.lock();
+
+    if (committed_reqs.find(rid) != committed_reqs.end()) {
+        service_mutex.unlock();
+        json reply = {{"success", false}, {"error", "request already committed"}};
+        sync_write(psock, asio::buffer(reply.dump() + "\n"));
+        return;
+    }
+
     ptr<TestSuite::Timer> timer = cs_new<TestSuite::Timer>();
 
     // std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -360,7 +386,7 @@ void replicate_request(tcp::socket* psock, std::string request) {
         if (rc == cmd_result_code::NOT_LEADER) {
             obj["leader"] = stuff.raft_instance_->get_leader();
         }
-        asio::write(*psock, asio::buffer(obj.dump() + "\n"));
+        sync_write(psock, asio::buffer(obj.dump() + "\n"));
         return;
     }
 
@@ -371,7 +397,8 @@ void replicate_request(tcp::socket* psock, std::string request) {
     service_mutex.unlock();
 
     json obj = {{"req", rid}, {"success", true}, {"index", top_index}, {"term", top_term}};
-    asio::write(*psock, asio::buffer(obj.dump() + "\n"));
+    committed_reqs.insert(rid);
+    sync_write(psock, asio::buffer(obj.dump() + "\n"));
     return;
 }
 
@@ -390,7 +417,7 @@ void handle_message(tcp::socket* psock, std::string request) {
                     {"log_height_committed", clog_height},
                     {"log_term", log_term},
                     {"term", term}};
-        asio::write(*psock, asio::buffer(obj.dump() + "\n"));
+        sync_write(psock, asio::buffer(obj.dump() + "\n"));
         std::cout << "terminating -- info:\n" << obj.dump() << std::endl;
         exit(0);
     } else {

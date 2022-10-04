@@ -38,5 +38,11 @@
   ],
   "client": {
     "path": "client/workload.json"
-  }
+  },
+  "connection_wait_ms": 2500,
+  "add_server_gap_ms": 500,
+  "add_server_retry_ms": 1000,
+  "missing_leader_retry_ms": 1000,
+  "exp_duration_ms": 5500,
+  "working_dir": "benchmark_results/example/"
 }

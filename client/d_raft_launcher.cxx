@@ -1,74 +1,57 @@
 #include "libnuraft/json.hpp"
 #include "nuraft.hxx"
+#include "utils.hxx"
 #include "workload.hxx"
 #include <atomic>
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
 #include <chrono>
 #include <csignal>
-#include <cstdarg>
 #include <cstdio>
-#include <format>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <mutex>
-#include <signal.h>
 #include <sstream>
 #include <thread>
-#include <unistd.h>
-
-#define _ISSUBSTR_(s1, s2) ((s1).find(s2) != std::string::npos)
 
 namespace po = boost::program_options;
 namespace asio = boost::asio;
+namespace fsys = std::__fs::filesystem;
+
 using boost::asio::ip::tcp;
-using json = nlohmann::json;
+using nlohmann::json;
+using std::ofstream;
+using std::string;
 
-std::mutex print_mutex;
-std::mutex ending_mutex;
+std::mutex table_mutex;
+std::mutex timeout_mutex;
+asio::io_service io_service;
 
-const std::string INIT_ASK = "check\n";
-const std::string NEW_SERVER = "addpeer id=%d ep=%s\n";
-const std::string EXIT_COMMAND = "exit\n";
+const string INIT_ASK = "check\n";
+const string NEW_SERVER = "addpeer id=%d ep=%s\n";
+const string EXIT_COMMAND = "exit\n";
+const string ERROR_CONN = "error_conn\n";
 
-std::vector<int> ids(0);
-std::vector<std::thread> server_ends(0);
-std::vector<tcp::socket*> psockets(0);
-std::vector<std::string> endpoints(0);
+vector<int> ids(0);
+vector<std::thread> server_ends(0);
+vector<std::thread*> request_submissions(0);
+vector<tcp::socket*> psockets(0);
+vector<tcp::endpoint> endpoints(0);
+vector<string> endpoints_str(0);
 std::atomic_int current_raft_leader(4);
+std::atomic_bool exp_ended(false);
 json replica_status_dict;
+json meta_setting;
 
-enum _levels_ { _LERROR_ = 0, _LWARNING_ = 1, _LINFO_ = 2, _LDEBUG_ = 3 };
+ofstream depart;
+ofstream arrive;
+
+uint64_t time_start;
 
 int _PROG_LEVEL_ = _LINFO_;
 
 void end_srv(int i, bool recv);
-
-void level_output(_levels_ level, const char* fmt, ...) {
-    if (level > _PROG_LEVEL_) return;
-
-    print_mutex.lock();
-    va_list args;
-    va_start(args, fmt);
-    switch (level) {
-    case _levels_::_LERROR_:
-        std::vfprintf(stderr, (std::string("\033[1m\033[31m[ERROR] ") + fmt + "\033[0m").c_str(), args);
-        break;
-    case _levels_::_LWARNING_:
-        std::vfprintf(stderr, (std::string("\033[1m\033[33m[WARN ] ") + fmt + "\033[0m").c_str(), args);
-        break;
-    case _levels_::_LINFO_:
-        std::vfprintf(stderr, (std::string("\033[32m[INFO ] ") + fmt + "\033[0m").c_str(), args);
-        break;
-    case _levels_::_LDEBUG_:
-        std::vfprintf(stderr, (std::string("[DEBUG] ") + fmt + "\033[0m").c_str(), args);
-        break;
-    default:
-        break;
-    }
-    va_end(args);
-    print_mutex.unlock();
-}
 
 int get_leader_index(int id) {
     for (int i = 0; i < ids.size(); i++) {
@@ -77,28 +60,17 @@ int get_leader_index(int id) {
     return -1;
 }
 
-std::string strip_endl(std::string str) {
-    size_t len = str.length();
-    if (str[len - 1] == '\n') {
-        return str.substr(0, len - 1);
-    } else {
-        return str;
-    }
-}
-
-std::string endpoint_wrapper(std::string ip, int port) { return ip + ":" + std::to_string(port); }
-
-std::string readline(tcp::socket* psock, boost::system::error_code& error) {
-    std::string message = "";
+string readline(tcp::socket* psock, boost::system::error_code& error) {
+    string message = "";
     char buf[1] = {'k'};
     for (; buf[0] != '\n';) {
-        psock->read_some(boost::asio::buffer(buf), error);
+        psock->read_some(asio::buffer(buf), error);
         if (buf[0] != '\0') message += buf[0];
     }
     return message;
 }
 
-void create_server(int id, std::string ip, int server_port, int client_port, std::string byz) {
+void create_server(int id, string ip, int server_port, int client_port, string byz) {
     char cmd[1024];
     std::snprintf(cmd,
                   sizeof(cmd),
@@ -115,16 +87,15 @@ void create_server(int id, std::string ip, int server_port, int client_port, std
 
     if (pid == 0) {
         int status = std::system(cmd);
-        std::stringstream msg;
         if (status < 0) {
             level_output(_LERROR_, "%s\n", strerror(errno));
             exit(errno);
         } else {
             if (WIFEXITED(status)) {
                 level_output(
-                    _LDEBUG_, "<Server %d> Program returned normally, exit code %d\n", id, WEXITSTATUS(status));
+                    _LDEBUG_, "<Server %2d> Program returned normally, exit code %d\n", id, WEXITSTATUS(status));
             } else {
-                level_output(_LERROR_, "<Server %d> Program returned abnormally\n", id);
+                level_output(_LERROR_, "<Server %2d> Program returned abnormally\n", id);
             }
             exit(status);
         }
@@ -133,46 +104,57 @@ void create_server(int id, std::string ip, int server_port, int client_port, std
     }
 }
 
-std::string send_(std::string msg, int i, bool recv) {
+string send_(string msg, int i, bool recv) {
     boost::system::error_code error;
-    boost::asio::streambuf receive_buffer;
+    asio::streambuf receive_buffer;
     std::stringstream ostream;
 
-    boost::asio::write(*psockets[i], boost::asio::buffer(msg), error);
-    if (error) {
-        level_output(_LERROR_, "<Server %d> send failed (%s)", ids[i], error.message().c_str());
-        return std::string("error_send\n");
+    tcp::socket sock(io_service);
+    string buf_str;
+
+    try {
+        sock.connect(endpoints[i]);
+        // asio::write(*psockets[i], asio::buffer(msg), error);
+        asio::write(sock, asio::buffer(msg), error);
+        if (error) {
+            level_output(_LERROR_, "<Server %2d> send failed (%s)", ids[i], error.message().c_str());
+            return ERROR_CONN;
+        }
+
+        if (!recv) {
+            return string("\n");
+        }
+
+        buf_str = readline(&sock, error);
+        sock.close();
+    } catch (boost::system::system_error error) {
+        level_output(_LWARNING_, "<Server %2d> %s\n", ids[i], error.what());
+        return ERROR_CONN;
     }
 
-    if (!recv) {
-        return std::string("\n");
-    }
-
-    std::string buf_str = readline(psockets[i], error);
-
-    if (error && error != boost::asio::error::eof) {
-        level_output(_LERROR_, "<Server %d> receive failed (%s)\n", ids[i], error.message().c_str());
-        buf_str = std::string("error_recv\n");
+    if (error && error != asio::error::eof) {
+        level_output(_LERROR_, "<Server %2d> receive failed (%s)\n", ids[i], error.message().c_str());
+        return ERROR_CONN;
     } else {
-        level_output(_LDEBUG_, "<Server %d> %s\n", ids[i], strip_endl(buf_str).c_str());
+        level_output(_LDEBUG_, "<Server %2d> %s\n", ids[i], strip_endl(buf_str).c_str());
     }
 
     return buf_str;
 }
 
-void send_(std::string msg, int i) { send_(msg, i, false); }
+void send_(string msg, int i) { send_(msg, i, false); }
 
 void ask_init(int i) { send_(INIT_ASK, i, true); }
 
 bool try_add_server(int i, int ir) {
     char c_msg[1024];
-    std::snprintf(c_msg, sizeof(c_msg), NEW_SERVER.c_str(), ids[ir], endpoints[ir].c_str());
-    std::string result = send_(c_msg, i, true);
+    std::snprintf(c_msg, sizeof(c_msg), NEW_SERVER.c_str(), ids[ir], endpoints_str[ir].c_str());
+    string result = send_(c_msg, i, true);
 
-    if (result == "error_send\n" || result == "error_recv\n") {
-        level_output(_LERROR_, "<Server %d> add %d failed (send/recv). Terminating raft...\n", ids[i], ids[ir]);
+    if (result == ERROR_CONN) {
+        level_output(_LERROR_, "<Server %2d> add %d failed (send/recv). Terminating raft...\n", ids[i], ids[ir]);
 
-        for (int i = 0; i < psockets.size(); i++) {
+        for (int i = 0; i < ids.size(); i++) {
             end_srv(i, false);
         }
 
@@ -186,19 +168,19 @@ bool try_add_server(int i, int ir) {
 
 void add_server(int i, int ir) {
     while (!try_add_server(i, ir)) {
-        level_output(_LERROR_, "<Server %d> add %d failed, trying again...\n", ids[i], ids[ir]);
-        std::this_thread::sleep_for(std::chrono::microseconds(1000));
+        level_output(_LERROR_, "<Server %2d> add %d failed, trying again...\n", ids[i], ids[ir]);
+        std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["add_server_retry_ms"]));
     }
 }
 
 void end_srv(int i, bool recv) {
-    std::string status = send_(EXIT_COMMAND, i, recv);
+    string status = send_(EXIT_COMMAND, i, recv);
 
     if (recv) {
-        ending_mutex.lock();
+        table_mutex.lock();
         json obj = json::parse(status);
         if (obj["success"]) replica_status_dict[std::to_string(ids[i])] = obj;
-        ending_mutex.unlock();
+        table_mutex.unlock();
     }
 }
 
@@ -228,16 +210,30 @@ char* status_table() {
     return result;
 }
 
-void submit_request(nuraft::request& req) {
+void submit_request(nuraft::request req) {
     json obj = {{"index", req.index}, {"payload", req.payload}};
-    for (;;) {
+    while (!exp_ended) {
         int lid = current_raft_leader;
-        std::string result = send_(obj.dump() + "\n", lid, true);
-        json result_obj = json::parse(result);
-        if (result_obj["success"]) break;
 
-        level_output(
-            _LERROR_, "<Server %d> request #%d failed (%s)\n", ids[lid], req.index, result_obj["error"].dump().c_str());
+        depart << json({{"index", req.index}, {"time", now_()}}).dump() + "\n";
+
+        string result = send_(obj.dump() + "\n", lid, true);
+        if (result == ERROR_CONN) {
+            level_output(_LERROR_, "<Server %2d> request #%d: Connection error, retrying\n", ids[lid], req.index);
+            std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
+            continue;
+        }
+        json result_obj = json::parse(result);
+        if (result_obj["success"]) {
+            arrive << json({{"index", req.index}, {"time", now_()}}).dump() + "\n";
+            break;
+        }
+
+        level_output(_LERROR_,
+                     "<Server %2d> request #%d failed (%s)\n",
+                     ids[lid],
+                     req.index,
+                     result_obj["error"].dump().c_str());
 
         if (!result_obj.contains("ec")) {
             break;
@@ -248,36 +244,63 @@ void submit_request(nuraft::request& req) {
         if (ec == nuraft::cmd_result_code::NOT_LEADER) {
             if (!result_obj.contains("leader")) {
                 level_output(_LERROR_,
-                             "<Server %d> request #%d: Got a NOT_LEADER error but no leader is reported. Given up.\n",
+                             "<Server %2d> request #%d: Got a NOT_LEADER error but no leader is reported. Given up.\n",
                              ids[lid],
                              req.index);
-                break;
+                return;
             } else {
                 int leader_id = result_obj["leader"];
                 if (leader_id > 0) {
-                    int leader_index = get_leader_index(leader_id);
-                    if (leader_index < 0) {
+                    auto itr = std::find(ids.begin(), ids.end(), leader_id);
+                    if (itr == ids.cend()) {
                         level_output(
                             _LERROR_,
-                            "<Server %d> request #%d: Got a NOT_LEADER error but leader id not found. Given up.\n",
+                            "<Server %2d> request #%d: Got a NOT_LEADER error but leader id not found. Given up.\n",
                             ids[lid],
                             req.index);
-                        break;
+                        return;
+                    } else {
+                        int leader_index = std::distance(ids.begin(), itr);
+                        if (current_raft_leader != leader_index) {
+                            level_output(_LWARNING_, "leader %d -> %d\n", ids[current_raft_leader], ids[leader_index]);
+                            current_raft_leader = leader_index;
+                        }
                     }
-                    current_raft_leader = leader_index;
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
                 }
                 continue;
             }
         } else {
-            break;
+            return;
         }
     }
 }
 
-void experiment(std::string path) {
+void timeout() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["exp_duration_ms"]));
+    if (!exp_ended) {
+        level_output(_LWARNING_, "experiment terminated due to expiration\n");
+        std::raise(SIGUSR1);
+    }
+}
+
+void wait_for_threads(vector<std::thread*> threads) {
+    for (int i = 0; i < threads.size(); i++) {
+        threads[i]->join();
+    }
+    std::raise(SIGUSR1);
+}
+
+void experiment(string path) {
     nuraft::workload load(path);
 
-    while (true) {
+    timeout_mutex.lock();
+
+    std::thread timeout_thread(timeout);
+    timeout_thread.detach();
+
+    while (!exp_ended) {
         int delay;
         nuraft::request req(0);
         std::tie(req, delay) = load.get_next_req_us();
@@ -287,13 +310,45 @@ void experiment(std::string path) {
             break;
         }
 
-        std::thread thread_(submit_request, std::ref(req));
-        thread_.detach();
+        std::thread* pthread = new std::thread(submit_request, req);
+        // thread_.detach();
+        request_submissions.emplace_back(pthread);
         std::this_thread::sleep_for(std::chrono::microseconds(delay));
     }
+
+    for (std::thread* pthread: request_submissions) {
+        if (pthread != nullptr) {
+            pthread->join();
+            delete pthread;
+        }
+    }
+    // for (int i = 0; i < request_submissions.size(); i++) {
+    //     request_submissions[i]->join();
+    // }
+    std::raise(SIGUSR1);
+    // std::thread thread_(wait_for_threads, request_submissions);
+    // thread_.detach();
+
+    // timeout_mutex.lock();
+    // exp_ended = true;
+
+    // for (std::thread* pthread: request_submissions) {
+    //     delete pthread;
+    // }
 }
 
-void create_client(int port, std::string ip, std::string path) {
+void show_exp_duration() {
+    uint64_t duration_total = (now_()) - (time_start);
+    uint64_t duration_min = duration_total / 60000000000;
+    duration_total -= duration_min * (60000000000);
+    uint64_t duration_s = duration_total / 1000000000;
+    duration_total -= duration_s * 1000000000;
+    uint64_t duration_ms = duration_total / 1000000;
+
+    level_output(_LINFO_, "experiment lasted %02llu:%02llu.%03llu\n", duration_min, duration_s, duration_ms);
+}
+
+void create_client(int port, string ip, string path) {
     std::ostringstream cbuf;
     cbuf << "client/d_raft_client --port " << port << " --ip " << ip << " --path " << path;
     int status = std::system(cbuf.str().c_str());
@@ -308,59 +363,99 @@ void create_client(int port, std::string ip, std::string path) {
 }
 
 void signal_handler(int signal) {
-    level_output(_LWARNING_, "Terminating all servers...\n");
+    level_output(_LWARNING_, "got signal %d, terminating all servers...\n", signal);
 
-    for (int i = 0; i < psockets.size(); i++) {
+    for (int i = 0; i < ids.size(); i++) {
         end_srv(i, false);
     }
 
     fflush(stdout);
+    arrive.close();
+    depart.close();
+    exit(signal);
+}
+
+void end_properly(int signal) {
+    exp_ended = true;
+    show_exp_duration();
+
+    level_output(_LINFO_, "Closing servers...\n");
+
+    for (int i = 0; i < ids.size(); i++) {
+        server_ends.emplace_back(end_srv, i, true);
+    }
+
+    for (int i = 0; i < ids.size(); i++) {
+        server_ends[i].join();
+    }
+
+    char* table = status_table();
+
+    if (table != NULL) {
+        level_output(_LINFO_, "Status report:\n%s", table);
+        delete[] table;
+    }
+
+    arrive.close();
+    depart.close();
     exit(0);
 }
 
 int main(int argc, const char** argv) {
     std::signal(SIGINT, signal_handler);
     std::signal(SIGABRT, signal_handler);
+    std::signal(SIGUSR1, end_properly);
 
-    std::string config_file = "";
+    string config_file = "";
     if (argc == 2) {
         config_file = argv[1];
     } else if (argc == 3) {
         config_file = argv[1];
         _PROG_LEVEL_ = std::atoi(argv[2]);
     } else {
-        std::cout << "Usage: ./d_raft_launcher config_file <PRINT_LEVEL>\n";
+        std::cout << _C_BOLDYELLOW_ << "Usage: ./d_raft_launcher config_file <PRINT_LEVEL>\n";
         return 1;
     }
 
     std::ifstream f(config_file);
-    json data = json::parse(f);
+    meta_setting = json::parse(f);
 
-    int number_of_servers = data["server"].size();
+    int number_of_servers = meta_setting["server"].size();
     // int number_of_clients = data["client"].size();
 
     if (number_of_servers < 1) {
-        std::cerr << "Number of servers must be at least 1!" << std::endl;
+        std::cerr << _C_BOLDRED_ << "Error: number of servers must be at least 1!" << std::endl;
         exit(1);
     }
 
-    std::vector<std::thread> server_creators(0);
-    std::vector<std::thread> server_inits(0);
-    std::vector<std::thread> server_adds(0);
-    boost::asio::io_service io_service;
+    fsys::path working_dir = meta_setting["working_dir"];
+    if (!fsys::exists(working_dir)) {
+        fsys::create_directories(fsys::absolute(working_dir));
+    } else if (!fsys::is_directory(working_dir)) {
+        level_output(_LERROR_, "Cannot create directory %s\n", fsys::absolute(working_dir).c_str());
+        exit(1);
+    }
+
+    depart.open(working_dir / "depart.jsonl", ofstream::out);
+    arrive.open(working_dir / "arrive.jsonl", ofstream::out);
+
+    vector<std::thread> server_creators(0);
+    vector<std::thread> server_inits(0);
+    vector<std::thread> server_adds(0);
     // std::vector<std::thread> clients(number_of_clients);
 
     level_output(_LINFO_, "Launching servers...\n");
 
     for (int i = 0; i < number_of_servers; i++) {
         server_creators.emplace_back(create_server,
-                                     data["server"][i]["id"],
-                                     data["server"][i]["ip"],
-                                     data["server"][i]["port"],
-                                     data["server"][i]["cport"],
-                                     data["server"][i]["byzantine"]);
-        ids.emplace_back(data["server"][i]["id"]);
-        endpoints.emplace_back(endpoint_wrapper(data["server"][i]["ip"], data["server"][i]["port"]));
+                                     meta_setting["server"][i]["id"],
+                                     meta_setting["server"][i]["ip"],
+                                     meta_setting["server"][i]["port"],
+                                     meta_setting["server"][i]["cport"],
+                                     meta_setting["server"][i]["byzantine"]);
+        ids.emplace_back(meta_setting["server"][i]["id"]);
+        endpoints_str.emplace_back(
+            endpoint_wrapper(meta_setting["server"][i]["ip"], meta_setting["server"][i]["port"]));
     }
 
     for (int i = 0; i < number_of_servers; i++) {
@@ -369,13 +464,14 @@ int main(int argc, const char** argv) {
 
     level_output(_LINFO_, "Connecting...\n");
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["connection_wait_ms"]));
 
     for (int i = 0; i < number_of_servers; i++) {
-        psockets.emplace_back(new tcp::socket(io_service));
-        // psockets[i] = new tcp::socket(io_service);
-        psockets[i]->connect(
-            tcp::endpoint(boost::asio::ip::address::from_string(data["server"][i]["ip"]), data["server"][i]["cport"]));
+        endpoints.emplace_back(tcp::endpoint(asio::ip::address::from_string(meta_setting["server"][i]["ip"]),
+                                             meta_setting["server"][i]["cport"]));
+        // psockets.emplace_back(new tcp::socket(io_service));
+        // // psockets[i] = new tcp::socket(io_service);
+        // psockets[i]->connect();
     }
 
     level_output(_LINFO_, "Checking initialization...\n");
@@ -392,7 +488,7 @@ int main(int argc, const char** argv) {
 
     for (int i = 1; i < number_of_servers; i++) {
         add_server(0, i);
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["add_server_gap_ms"]));
 
         // server_adds.emplace_back(add_server_as_peer, 0, i);
     }
@@ -403,24 +499,8 @@ int main(int argc, const char** argv) {
 
     level_output(_LINFO_, "Launching client...\n");
 
-    experiment(data["client"]["path"]);
-
-    level_output(_LINFO_, "Closing servers...\n");
-
-    for (int i = 0; i < number_of_servers; i++) {
-        server_ends.emplace_back(end_srv, i, true);
-    }
-
-    for (int i = 0; i < number_of_servers; i++) {
-        server_ends[i].join();
-    }
-
-    char* table = status_table();
-
-    if (table != NULL) {
-        level_output(_LINFO_, "Status report:\n%s", table);
-        delete[] table;
-    }
+    time_start = now_();
+    experiment(meta_setting["client"]["path"]);
 
     return 0;
 }
