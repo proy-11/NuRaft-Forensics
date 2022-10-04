@@ -376,6 +376,9 @@ void signal_handler(int signal) {
 }
 
 void end_properly(int signal) {
+    if (exp_ended) {
+        return;
+    }
     exp_ended = true;
     show_exp_duration();
 
