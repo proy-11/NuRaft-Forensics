@@ -40,10 +40,11 @@ if(Boost_FOUND)
 
     add_executable(d_raft_client
                     d_raft_client.cxx
+                    d_raft_scheduler.cxx
                     workload.cxx
                     in_memory_log_store.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
-    add_dependencies(d_raft
+    add_dependencies(d_raft_client
                      static_lib)
     target_link_libraries(d_raft_client
                           ${Boost_LIBRARIES}
@@ -52,6 +53,7 @@ if(Boost_FOUND)
 
     add_executable(d_raft_launcher
                     workload.cxx
+                    d_raft_scheduler.cxx
                     d_raft_launcher.cxx
                     utils.hxx)
     include_directories(${Boost_INCLUDE_DIRS})
