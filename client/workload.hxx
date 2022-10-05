@@ -2,6 +2,9 @@
 #include "libnuraft/nuraft.hxx"
 #include <string>
 
+#ifndef D_RAFT_WORKLOAD
+#define D_RAFT_WORKLOAD
+
 namespace nuraft {
 enum WORKLOAD_TYPE {
     UNIF,
@@ -29,3 +32,5 @@ private:
     float freq;
 };
 } // namespace nuraft
+
+#endif  // D_RAFT_WORKLOAD

@@ -2,6 +2,7 @@
 #include "nuraft.hxx"
 #include "utils.hxx"
 #include "workload.hxx"
+#include "d_raft_scheduler.hxx"
 #include <atomic>
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
@@ -32,6 +33,7 @@ const string INIT_ASK = "check\n";
 const string NEW_SERVER = "addpeer id=%d ep=%s\n";
 const string EXIT_COMMAND = "exit\n";
 const string ERROR_CONN = "error_conn\n";
+const int MAX_NUMBER_OF_JOBS = 1000;
 
 vector<int> ids(0);
 vector<std::thread> server_ends(0);
@@ -300,6 +302,10 @@ void experiment(string path) {
     std::thread timeout_thread(timeout);
     timeout_thread.detach();
 
+    d_raft_scheduler::Scheduler scheduler(MAX_NUMBER_OF_JOBS, [](const std::exception &e) {
+       level_output(_LERROR_, "Error: %s", e.what());
+    });
+
     while (!exp_ended) {
         int delay;
         nuraft::request req(0);
@@ -309,19 +315,21 @@ void experiment(string path) {
         if (req.index < 0) {
             break;
         }
+        scheduler.schedule(submit_request, delay, req);
 
-        std::thread* pthread = new std::thread(submit_request, req);
+        // std::thread* pthread = new std::thread(submit_request, req);
         // thread_.detach();
-        request_submissions.emplace_back(pthread);
-        std::this_thread::sleep_for(std::chrono::microseconds(delay));
+        // request_submissions.emplace_back(pthread);
+        // std::this_thread::sleep_for(std::chrono::microseconds(delay));
     }
+    scheduler.wait();
+    // for (std::thread* pthread: request_submissions) {
+    //     if (pthread != nullptr) {
+    //         pthread->join();
+    //         delete pthread;
+    //     }
+    // }
 
-    for (std::thread* pthread: request_submissions) {
-        if (pthread != nullptr) {
-            pthread->join();
-            delete pthread;
-        }
-    }
     // for (int i = 0; i < request_submissions.size(); i++) {
     //     request_submissions[i]->join();
     // }
