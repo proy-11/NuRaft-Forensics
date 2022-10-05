@@ -17,7 +17,7 @@
 
 namespace po = boost::program_options;
 namespace asio = boost::asio;
-namespace fsys = std::__fs::filesystem;
+namespace fsys = std::filesystem;
 
 using boost::asio::ip::tcp;
 using nlohmann::json;
@@ -54,7 +54,7 @@ int _PROG_LEVEL_ = _LINFO_;
 void end_srv(int i, bool recv);
 
 int get_leader_index(int id) {
-    for (int i = 0; i < ids.size(); i++) {
+    for (size_t i = 0; i < ids.size(); i++) {
         if (ids[i] == id) return i;
     }
     return -1;
@@ -127,7 +127,7 @@ string send_(string msg, int i, bool recv) {
 
         buf_str = readline(&sock, error);
         sock.close();
-    } catch (boost::system::system_error error) {
+    } catch (boost::system::system_error &error) {
         level_output(_LWARNING_, "<Server %2d> %s\n", ids[i], error.what());
         return ERROR_CONN;
     }
@@ -154,7 +154,7 @@ bool try_add_server(int i, int ir) {
     if (result == ERROR_CONN) {
         level_output(_LERROR_, "<Server %2d> add %d failed (send/recv). Terminating raft...\n", ids[i], ids[ir]);
 
-        for (int i = 0; i < ids.size(); i++) {
+        for (size_t i = 0; i < ids.size(); i++) {
             end_srv(i, false);
         }
 
@@ -286,7 +286,7 @@ void timeout() {
 }
 
 void wait_for_threads(vector<std::thread*> threads) {
-    for (int i = 0; i < threads.size(); i++) {
+    for (size_t i = 0; i < threads.size(); i++) {
         threads[i]->join();
     }
     std::raise(SIGUSR1);
@@ -365,7 +365,7 @@ void create_client(int port, string ip, string path) {
 void signal_handler(int signal) {
     level_output(_LWARNING_, "got signal %d, terminating all servers...\n", signal);
 
-    for (int i = 0; i < ids.size(); i++) {
+    for (size_t i = 0; i < ids.size(); i++) {
         end_srv(i, false);
     }
 
@@ -384,11 +384,11 @@ void end_properly(int signal) {
 
     level_output(_LINFO_, "Closing servers...\n");
 
-    for (int i = 0; i < ids.size(); i++) {
+    for (size_t i = 0; i < ids.size(); i++) {
         server_ends.emplace_back(end_srv, i, true);
     }
 
-    for (int i = 0; i < ids.size(); i++) {
+    for (size_t i = 0; i < ids.size(); i++) {
         server_ends[i].join();
     }
 

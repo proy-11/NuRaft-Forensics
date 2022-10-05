@@ -31,7 +31,6 @@ limitations under the License.
 #include <chrono>
 #include <iostream>
 #include <mutex>
-#include <nlohmann/json.hpp>
 #include <sstream>
 #include <sys/wait.h>
 #include <thread>
@@ -132,7 +131,7 @@ size_t sync_write(tcp::socket* psock, const asio::const_buffers_1& buf) {
     write_mutex.lock();
     try {
         res = asio::write(*psock, buf);
-    } catch (boost::system::system_error error) {
+    } catch (boost::system::system_error &error) {
         std::cerr << error.what();
     }
     write_mutex.unlock();
@@ -353,7 +352,7 @@ void replicate_request(tcp::socket* psock, std::string request) {
     try {
         json req_obj = json::parse(request);
         rid = req_obj["index"];
-    } catch (json::exception ec) {
+    } catch (json::exception &ec) {
         json reply = {{"success", false}, {"error", ec.what()}};
         sync_write(psock, asio::buffer(reply.dump() + "\n"));
         return;
@@ -434,7 +433,7 @@ void handle_session(tcp::socket* psock) {
             std::thread thr(handle_message, psock, message);
             thr.detach();
         }
-    } catch (boost::wrapexcept<boost::system::system_error>) {
+    } catch (boost::wrapexcept<boost::system::system_error>&) {
         std::cerr << "client disconnected!" << std::endl;
         delete psock;
         return;
