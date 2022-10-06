@@ -32,6 +32,8 @@ workload::workload(std::string path) {
 
 workload::~workload() {}
 
+// static  std::chrono::time_point execution_time = std::chrono::system_clock::now();
+
 std::tuple<request, int> workload::get_next_req_us() {
     if (current >= size) {
         request req(-1);
@@ -47,6 +49,7 @@ std::tuple<request, int> workload::get_next_req_us() {
         next_arrival = int(1000000 / freq);
         break;
     }
+    // execution_time += std::chrono::microseconds(next_arrival);
 
     current++;
     return std::make_tuple(req, next_arrival);

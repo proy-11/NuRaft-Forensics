@@ -211,8 +211,10 @@ char* status_table() {
 
     return result;
 }
-
+std::mutex submit_req_mutex;
 void submit_request(nuraft::request req) {
+    submit_req_mutex.lock();
+    level_output(_LDEBUG_, "Submitting request for req index: %d at time: %llu\n", req.index, std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count()); 
     json obj = {{"index", req.index}, {"payload", req.payload}};
     while (!exp_ended) {
         int lid = current_raft_leader;
@@ -277,6 +279,7 @@ void submit_request(nuraft::request req) {
             return;
         }
     }
+    submit_req_mutex.unlock();
 }
 
 void timeout() {
@@ -311,7 +314,7 @@ void experiment(string path) {
         nuraft::request req(0);
         std::tie(req, delay) = load.get_next_req_us();
 
-        level_output(_LDEBUG_, "Sending req #%d, next delay = %d us\n", req.index, delay);
+        // level_output(_LDEBUG_, "Sending req #%d, next delay = %d us\n", req.index, delay);
         if (req.index < 0) {
             break;
         }
