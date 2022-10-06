@@ -31,13 +31,7 @@ $ brew install openssl
 
 #### 2. Install `boost` library: ####
 
-* Linux & OSX
-Download boost from 
-
-```sh
-$ tar --bzip2 -xf /path/to/boost_1_80_0.tar.bz2 -C /usr/local/
-```
-
+See the [official documentation](https://www.boost.org/doc/libs/1_80_0/more/getting_started/index.html) for reference. 
 
 #### 3. Fetch [Asio](https://github.com/chriskohlhoff/asio) library: ####
 
