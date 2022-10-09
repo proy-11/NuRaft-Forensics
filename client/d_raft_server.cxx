@@ -21,8 +21,8 @@ limitations under the License.
 #include "logger_wrapper.hxx"
 
 #include "nuraft.hxx"
-
 #include "test_common.h"
+#include "utils.hxx"
 
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
@@ -45,6 +45,8 @@ namespace asio = boost::asio;
 
 using json = nlohmann::json;
 using boost::asio::ip::tcp;
+
+int _PROG_LEVEL_ = _LINFO_;
 
 namespace d_raft_server {
 
@@ -131,7 +133,7 @@ size_t sync_write(tcp::socket* psock, const asio::const_buffers_1& buf) {
     write_mutex.lock();
     try {
         res = asio::write(*psock, buf);
-    } catch (boost::system::system_error &error) {
+    } catch (boost::system::system_error& error) {
         std::cerr << error.what();
     }
     write_mutex.unlock();
@@ -352,7 +354,7 @@ void replicate_request(tcp::socket* psock, std::string request) {
     try {
         json req_obj = json::parse(request);
         rid = req_obj["index"];
-    } catch (json::exception &ec) {
+    } catch (json::exception& ec) {
         json reply = {{"success", false}, {"error", ec.what()}};
         sync_write(psock, asio::buffer(reply.dump() + "\n"));
         return;
@@ -428,7 +430,7 @@ void handle_session(tcp::socket* psock) {
     try {
         for (;;) {
             std::string message = readline(psock);
-            std::cout << "Got message \"" << message << "\"" << std::endl;
+            std::printf("Got message %s\n", strip_endl(message).c_str());
 
             std::thread thr(handle_message, psock, message);
             thr.detach();
