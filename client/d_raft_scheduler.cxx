@@ -11,17 +11,15 @@ Scheduler::Scheduler(size_t size, const Error error) :
     }
 }
                                     
-
- 
-void Scheduler::schedule(const Tasks t, long n, nuraft::request req) {
+void Scheduler::schedule(const Tasks t, std::chrono::time_point<std::chrono::system_clock>  n, nuraft::request req) {
     std::unique_lock<std::mutex> lock(this->mutex);
     condition.wait(lock, [this]{ return this->count < this->size; });
     count++;
- 
+    
     auto task = std::make_shared<Tasks>(t);
     std::thread thread{
         [n, task, req, this] {
-            std::this_thread::sleep_for(std::chrono::microseconds(n));
+            std::this_thread::sleep_until(n);
 
             try {
                 (*task)(req);

@@ -21,7 +21,7 @@ class Scheduler {
     
         Scheduler(const Scheduler &) = delete;
     
-        void schedule(Tasks f, long n, nuraft::request req);
+        void schedule(Tasks f, std::chrono::time_point<std::chrono::system_clock>  n, nuraft::request req);
     
         void wait();
     

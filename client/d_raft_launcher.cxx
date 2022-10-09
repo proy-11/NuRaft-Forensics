@@ -212,7 +212,10 @@ char* status_table() {
     return result;
 }
 
+std::mutex submit_req_mutex;
 void submit_request(nuraft::request req) {
+    submit_req_mutex.lock();
+    level_output(_LDEBUG_, "Sending req #%d, = %llu us\n", req.index, now_());
     json obj = {{"index", req.index}, {"payload", req.payload}};
     while (!exp_ended) {
         int lid = current_raft_leader;
@@ -277,6 +280,7 @@ void submit_request(nuraft::request req) {
             return;
         }
     }
+    submit_req_mutex.unlock();
 }
 
 void timeout() {
@@ -293,6 +297,8 @@ void wait_for_threads(vector<std::thread*> threads) {
     }
     std::raise(SIGUSR1);
 }
+
+static std::chrono::time_point<std::chrono::system_clock>  current_time =  std::chrono::system_clock::now();
 
 void experiment(string path) {
     nuraft::workload load(path);
@@ -311,11 +317,16 @@ void experiment(string path) {
         nuraft::request req(0);
         std::tie(req, delay) = load.get_next_req_us();
 
-        level_output(_LDEBUG_, "Sending req #%d, next delay = %d us\n", req.index, delay);
+        // level_output(_LDEBUG_, "Sending req #%d, next delay = %d us\n", req.index, delay);
         if (req.index < 0) {
             break;
         }
-        scheduler.schedule(submit_request, delay, req);
+        
+        // level_output(_LERROR_, "Before Current time: %llu\n", current_time);
+        current_time += std::chrono::microseconds(delay);
+        // level_output(_LERROR_, "After delay: %llu Current time: %llu\n", delay, current_time);
+        
+        scheduler.schedule(submit_request, current_time, req);
 
         // std::thread* pthread = new std::thread(submit_request, req);
         // thread_.detach();
