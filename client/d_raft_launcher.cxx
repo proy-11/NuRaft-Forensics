@@ -1,8 +1,10 @@
+#define CONSOLE
+
+#include "d_raft_scheduler.hxx"
 #include "libnuraft/json.hpp"
 #include "nuraft.hxx"
 #include "utils.hxx"
 #include "workload.hxx"
-#include "d_raft_scheduler.hxx"
 #include <atomic>
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
@@ -22,11 +24,11 @@ namespace fsys = std::filesystem;
 
 using boost::asio::ip::tcp;
 using nlohmann::json;
-using std::ofstream;
 using std::string;
 
 std::mutex table_mutex;
 std::mutex timeout_mutex;
+std::mutex log_mutex;
 asio::io_service io_service;
 
 const string INIT_ASK = "check\n";
@@ -36,9 +38,9 @@ const string ERROR_CONN = "error_conn\n";
 const int MAX_NUMBER_OF_JOBS = 1000;
 
 vector<int> ids(0);
-vector<std::thread> server_ends(0);
 vector<std::thread*> request_submissions(0);
-vector<tcp::socket*> psockets(0);
+vector<tcp::socket*> sockets_ctrl(0);
+vector<std::mutex> mutex_ctrl(0);
 vector<tcp::endpoint> endpoints(0);
 vector<string> endpoints_str(0);
 std::atomic_int current_raft_leader(4);
@@ -46,8 +48,8 @@ std::atomic_bool exp_ended(false);
 json replica_status_dict;
 json meta_setting;
 
-ofstream depart;
-ofstream arrive;
+FILE* depart = nullptr;
+FILE* arrive = nullptr;
 
 uint64_t time_start;
 
@@ -62,6 +64,12 @@ int get_leader_index(int id) {
     return -1;
 }
 
+void sync_writeline(FILE* fp, string line) {
+    log_mutex.lock();
+    std::fprintf(fp, "%s\n", line.c_str());
+    log_mutex.unlock();
+}
+
 string readline(tcp::socket* psock, boost::system::error_code& error) {
     string message = "";
     char buf[1] = {'k'};
@@ -70,6 +78,32 @@ string readline(tcp::socket* psock, boost::system::error_code& error) {
         if (buf[0] != '\0') message += buf[0];
     }
     return message;
+}
+
+char* status_table() {
+    if (replica_status_dict.empty()) {
+        return NULL;
+    }
+    char* result = new char[1000];
+    const char* fmt = "%6d %8d %8d %8d %14d\n";
+    const char* fmt_header = "%6s %8s %8s %8s %14s\n";
+
+    size_t pos = 0;
+    pos += std::sprintf(result, fmt_header, "id", "term", "T", "J", "J(committed)");
+    for (auto& pair: replica_status_dict.items()) {
+        int id = std::stoi(pair.key());
+        json obj = pair.value();
+
+        pos += std::sprintf(result + pos,
+                            fmt,
+                            id,
+                            int(obj["term"]),
+                            int(obj["log_term"]),
+                            int(obj["log_height"]),
+                            int(obj["log_height_committed"]));
+    }
+
+    return result;
 }
 
 void create_server(int id, string ip, int server_port, int client_port, string byz) {
@@ -95,7 +129,7 @@ void create_server(int id, string ip, int server_port, int client_port, string b
         } else {
             if (WIFEXITED(status)) {
                 level_output(
-                    _LDEBUG_, "<Server %2d> Program returned normally, exit code %d\n", id, WEXITSTATUS(status));
+                    _LINFO_, "<Server %2d> Program returned normally, exit code %d\n", id, WEXITSTATUS(status));
             } else {
                 level_output(_LERROR_, "<Server %2d> Program returned abnormally\n", id);
             }
@@ -106,7 +140,7 @@ void create_server(int id, string ip, int server_port, int client_port, string b
     }
 }
 
-string send_(string msg, int i, bool recv) {
+string send_(string msg, int i, bool recv, bool timeout) {
     boost::system::error_code error;
     asio::streambuf receive_buffer;
     std::stringstream ostream;
@@ -124,13 +158,15 @@ string send_(string msg, int i, bool recv) {
         }
 
         if (!recv) {
+            // sock.close();
             return string("\n");
         }
 
         buf_str = readline(&sock, error);
         sock.close();
-    } catch (boost::system::system_error &error) {
+    } catch (boost::system::system_error& error) {
         level_output(_LWARNING_, "<Server %2d> %s\n", ids[i], error.what());
+        sock.close();
         return ERROR_CONN;
     }
 
@@ -139,10 +175,11 @@ string send_(string msg, int i, bool recv) {
         return ERROR_CONN;
     } else {
         level_output(_LDEBUG_, "<Server %2d> %s\n", ids[i], strip_endl(buf_str).c_str());
+        return buf_str;
     }
-
-    return buf_str;
 }
+
+string send_(string msg, int i, bool recv) { return send_(msg, i, recv, false); }
 
 void send_(string msg, int i) { send_(msg, i, false); }
 
@@ -180,58 +217,48 @@ void end_srv(int i, bool recv) {
 
     if (recv) {
         table_mutex.lock();
-        json obj = json::parse(status);
-        if (obj["success"]) replica_status_dict[std::to_string(ids[i])] = obj;
+        try {
+            json obj = json::parse(status);
+            if (obj["success"]) replica_status_dict[std::to_string(ids[i])] = obj;
+        } catch (json::parse_error pe) {
+            level_output(_LERROR_, "<Server %2d> got invalid response \"%s\"\n", ids[i], status.c_str());
+        }
         table_mutex.unlock();
     }
 }
 
-char* status_table() {
-    if (replica_status_dict.empty()) {
-        return NULL;
-    }
-    char* result = new char[1000];
-    const char* fmt = "%6d %8d %8d %8d %14d\n";
-    const char* fmt_header = "%6s %8s %8s %8s %14s\n";
-
-    size_t pos = 0;
-    pos += std::sprintf(result, fmt_header, "id", "term", "T", "J", "J(committed)");
-    for (auto& pair: replica_status_dict.items()) {
-        int id = std::stoi(pair.key());
-        json obj = pair.value();
-
-        pos += std::sprintf(result + pos,
-                            fmt,
-                            id,
-                            int(obj["term"]),
-                            int(obj["log_term"]),
-                            int(obj["log_height"]),
-                            int(obj["log_height_committed"]));
-    }
-
-    return result;
-}
-
-std::mutex submit_req_mutex;
 void submit_request(nuraft::request req) {
-    submit_req_mutex.lock();
-    level_output(_LDEBUG_, "Sending req #%d, = %llu ns\n", req.index, now_());
     json obj = {{"index", req.index}, {"payload", req.payload}};
     while (!exp_ended) {
+        uint64_t now_ns = now_();
         int lid = current_raft_leader;
 
-        depart << json({{"index", req.index}, {"time", now_()}}).dump() + "\n";
+        sync_writeline(depart, json({{"index", req.index}, {"time", now_ns}}).dump());
 
         string result = send_(obj.dump() + "\n", lid, true);
         if (result == ERROR_CONN) {
             level_output(_LERROR_, "<Server %2d> request #%d: Connection error, retrying\n", ids[lid], req.index);
             std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
             continue;
+        } else if (exp_ended) {
+            return;
         }
-        json result_obj = json::parse(result);
+
+        json result_obj;
+        try {
+            result_obj = json::parse(result);
+        } catch (json::parse_error error) {
+            level_output(_LERROR_,
+                         "<Server %2d> request #%d: got invalid response \"%s\", retrying\n",
+                         ids[lid],
+                         req.index,
+                         result.c_str());
+            continue;
+        }
+
         if (result_obj["success"]) {
-            arrive << json({{"index", req.index}, {"time", now_()}}).dump() + "\n";
-            break;
+            sync_writeline(arrive, json({{"index", req.index}, {"time", now_()}}).dump());
+            return;
         }
 
         level_output(_LERROR_,
@@ -241,7 +268,96 @@ void submit_request(nuraft::request req) {
                      result_obj["error"].dump().c_str());
 
         if (!result_obj.contains("ec")) {
-            break;
+            return;
+        }
+
+        // Handle error
+        nuraft::cmd_result_code ec = static_cast<nuraft::cmd_result_code>(result_obj["ec"]);
+        if (ec == nuraft::cmd_result_code::NOT_LEADER) {
+            if (!result_obj.contains("leader")) {
+                level_output(_LERROR_,
+                             "<Server %2d> request #%d: Got a NOT_LEADER error but no leader is reported. Given up.\n",
+                             ids[lid],
+                             req.index);
+                return;
+            } else {
+                int leader_id = result_obj["leader"];
+                if (leader_id > 0) {
+                    auto itr = std::find(ids.begin(), ids.end(), leader_id);
+                    if (itr == ids.cend()) {
+                        level_output(
+                            _LERROR_,
+                            "<Server %2d> request #%d: Got a NOT_LEADER error but leader id not found. Given up.\n",
+                            ids[lid],
+                            req.index);
+                        return;
+                    } else {
+                        int leader_index = std::distance(ids.begin(), itr);
+                        if (current_raft_leader != leader_index) {
+                            level_output(_LWARNING_, "leader %d -> %d\n", ids[current_raft_leader], ids[leader_index]);
+                            current_raft_leader = leader_index;
+                        }
+                    }
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
+                }
+                continue;
+            }
+        } else {
+            return;
+        }
+    }
+}
+
+std::mutex submit_req_mutex;
+void submit_batched_request(vector<nuraft::request> reqs) {
+    submit_req_mutex.lock();
+    level_output(_LDEBUG_, "Sending req #%d, = %llu ns\n", req.index, now_());
+    uint64_t now_ns = now_();
+    string serialized_reqs = nuraft::to_jsonl(reqs);
+    bool first = true;
+
+    while (!exp_ended) {
+        int lid = current_raft_leader;
+
+        if (!first) now_ns = now_();
+        sync_writeline(
+            depart, json({{"index_start", reqs[0].index}, {"index_end", reqs.back().index}, {"time", now_ns}}).dump());
+
+        string result = send_(serialized_reqs, lid, true);
+        if (result == ERROR_CONN) {
+            level_output(_LERROR_, "<Server %2d> request #%d: Connection error, retrying\n", ids[lid], req.index);
+            std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
+            continue;
+        } else if (exp_ended) {
+            return;
+        }
+
+        json result_obj;
+        try {
+            result_obj = json::parse(result);
+        } catch (json::parse_error error) {
+            level_output(_LERROR_,
+                         "<Server %2d> request #%d: got invalid response \"%s\", retrying\n",
+                         ids[lid],
+                         req.index,
+                         result.c_str());
+            continue;
+        }
+
+        if (result_obj["success"]) {
+            sync_writeline(arrive, json({{"index", req.index}, {"time", now_()}}).dump());
+            return;
+        }
+
+        level_output(_LERROR_,
+                     "<Server %2d> request #%d failed (%s)\n",
+                     ids[lid],
+                     req.index,
+                     result_obj["error"].dump().c_str());
+
+        if (!result_obj.contains("ec")) {
+            return;
         }
 
         // Handle error
@@ -282,12 +398,18 @@ void submit_request(nuraft::request req) {
     }
     submit_req_mutex.unlock();
 }
-
-void timeout() {
+void experiment_timeout() {
     std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["exp_duration_ms"]));
     if (!exp_ended) {
         level_output(_LWARNING_, "experiment terminated due to expiration\n");
         std::raise(SIGUSR1);
+    }
+}
+
+void send_timeout(int i, std::string message) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["send_timeout"]));
+    if (!exp_ended) {
+        level_output(_LWARNING_, "<Server %2d> message send timeout: %s\n", ids[i], strip_endl(message).c_str());
     }
 }
 
@@ -303,49 +425,43 @@ void experiment(string path) {
 
     timeout_mutex.lock();
 
-    std::thread timeout_thread(timeout);
+    std::thread timeout_thread(experiment_timeout);
     timeout_thread.detach();
 
-    d_raft_scheduler::Scheduler scheduler(MAX_NUMBER_OF_JOBS, [](const std::exception &e) {
-       level_output(_LERROR_, "Error: %s", e.what());
-    });
+    // d_raft_scheduler::Scheduler scheduler(
+    //     MAX_NUMBER_OF_JOBS, [](const std::exception& e) { level_output(_LERROR_, "Error: %s", e.what()); });
 
     while (!exp_ended) {
-        int delay;
-        nuraft::request req(0);
-        std::tie(req, delay) = load.get_next_req_us();
+        vector<nuraft::request> batch = load.get_next_batch();
+        int delay = load.get_next_batch_delay_us();
 
-        if (req.index < 0) {
+        if (batch.size() == 0) {
+            level_output(_LINFO_, "All requests sent\n");
             break;
+        } else {
+            level_output(
+                _LDEBUG_, "Sending req #%d - #%d, next delay = %d us\n", batch[0].index, batch.back().index, delay);
         }
-        scheduler.add_task_to_queue(req);
-        scheduler.schedule(submit_request);
-        auto interval = std::chrono::system_clock::now() + std::chrono::microseconds(delay);
-        std::this_thread::sleep_until(interval);
+        std::thread* pthread = new std::thread(submit_batched_request, batch);
+        request_submissions.emplace_back(pthread);
+        std::this_thread::sleep_for(std::chrono::microseconds(delay));
+        
+        // scheduler.add_task_to_queue(req);
+        // scheduler.schedule(submit_request);
+        // auto interval = std::chrono::system_clock::now() + std::chrono::microseconds(delay);
+        // std::this_thread::sleep_until(interval);
 
 
-        // std::thread* pthread = new std::thread(submit_request, req);
-        // thread_.detach();
-        // request_submissions.emplace_back(pthread);
-        // std::this_thread::sleep_for(std::chrono::microseconds(delay));
+    for (std::thread* pthread: request_submissions) {
+        if (pthread != nullptr) {
+            pthread->join();
+            delete pthread;
+        }
     }
-    scheduler.wait();
-    // for (std::thread* pthread: request_submissions) {
-    //     if (pthread != nullptr) {
-    //         pthread->join();
-    //         delete pthread;
-    //     }
-    // }
 
-    // for (int i = 0; i < request_submissions.size(); i++) {
-    //     request_submissions[i]->join();
-    // }
     std::raise(SIGUSR1);
     // std::thread thread_(wait_for_threads, request_submissions);
     // thread_.detach();
-
-    // timeout_mutex.lock();
-    // exp_ended = true;
 
     // for (std::thread* pthread: request_submissions) {
     //     delete pthread;
@@ -385,8 +501,8 @@ void signal_handler(int signal) {
     }
 
     fflush(stdout);
-    arrive.close();
-    depart.close();
+    std::fclose(arrive);
+    std::fclose(depart);
     exit(signal);
 }
 
@@ -399,6 +515,7 @@ void end_properly(int signal) {
 
     level_output(_LINFO_, "Closing servers...\n");
 
+    vector<std::thread> server_ends(0);
     for (size_t i = 0; i < ids.size(); i++) {
         server_ends.emplace_back(end_srv, i, true);
     }
@@ -414,8 +531,8 @@ void end_properly(int signal) {
         delete[] table;
     }
 
-    arrive.close();
-    depart.close();
+    std::fclose(arrive);
+    std::fclose(depart);
     exit(0);
 }
 
@@ -454,8 +571,8 @@ int main(int argc, const char** argv) {
         exit(1);
     }
 
-    depart.open(working_dir / "depart.jsonl", ofstream::out);
-    arrive.open(working_dir / "arrive.jsonl", ofstream::out);
+    depart = std::fopen((working_dir / "depart.jsonl").c_str(), "w");
+    arrive = std::fopen((working_dir / "arrive.jsonl").c_str(), "w");
 
     vector<std::thread> server_creators(0);
     vector<std::thread> server_inits(0);
@@ -480,16 +597,15 @@ int main(int argc, const char** argv) {
         server_creators[i].join();
     }
 
-    level_output(_LINFO_, "Connecting...\n");
+    level_output(_LINFO_, "Waiting %d ms for connection...\n", int(meta_setting["connection_wait_ms"]));
 
     std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["connection_wait_ms"]));
 
     for (int i = 0; i < number_of_servers; i++) {
         endpoints.emplace_back(tcp::endpoint(asio::ip::address::from_string(meta_setting["server"][i]["ip"]),
                                              meta_setting["server"][i]["cport"]));
-        // psockets.emplace_back(new tcp::socket(io_service));
-        // // psockets[i] = new tcp::socket(io_service);
-        // psockets[i]->connect();
+        sockets_ctrl.emplace_back(new tcp::socket(io_service));
+        sockets_ctrl[i]->connect(endpoints[i]);
     }
 
     level_output(_LINFO_, "Checking initialization...\n");
@@ -514,7 +630,8 @@ int main(int argc, const char** argv) {
     // for (int i = 0; i < number_of_servers - 1; i++) {
     //     server_adds[i].join();
     // }
-
+    level_output(_LINFO_, "Waiting %d ms for launching client...\n", int(meta_setting["request_wait_ms"]));
+    std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["request_wait_ms"]));
     level_output(_LINFO_, "Launching client...\n");
 
     time_start = now_();

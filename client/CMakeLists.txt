@@ -28,6 +28,7 @@ if(Boost_FOUND)
     add_executable(d_raft
                     d_raft_server.cxx
                     logger.cc
+                    utils.hxx
                     workload.cxx
                     in_memory_log_store.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
