@@ -10,27 +10,26 @@ Scheduler::Scheduler(size_t size, const Error error) :
         throw std::runtime_error("Invalid callback specified");
     }
 }
-                                    
 
+void Scheduler::add_task_to_queue(nuraft::request req) {
+    task_queue.emplace(req); 
+}
  
-void Scheduler::schedule(const Tasks t, long n, nuraft::request req) {
+void Scheduler::schedule(const Tasks t) {
     std::unique_lock<std::mutex> lock(this->mutex);
     condition.wait(lock, [this]{ return this->count < this->size; });
     count++;
- 
     auto task = std::make_shared<Tasks>(t);
     std::thread thread{
-        [n, task, req, this] {
-            std::this_thread::sleep_for(std::chrono::microseconds(n));
-
+        [task, this] {
             try {
-                (*task)(req);
+                (*task)(task_queue.top());
+                task_queue.pop();
             } catch (const std::exception &e) {
                 this->error(e);
             } catch (...) {
                 this->error(std::runtime_error("Unknown error"));
             }
-
             condition.notify_one();
             count--;
         }

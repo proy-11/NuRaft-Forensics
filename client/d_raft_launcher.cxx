@@ -212,7 +212,10 @@ char* status_table() {
     return result;
 }
 
+std::mutex submit_req_mutex;
 void submit_request(nuraft::request req) {
+    submit_req_mutex.lock();
+    level_output(_LDEBUG_, "Sending req #%d, = %llu ns\n", req.index, now_());
     json obj = {{"index", req.index}, {"payload", req.payload}};
     while (!exp_ended) {
         int lid = current_raft_leader;
@@ -277,6 +280,7 @@ void submit_request(nuraft::request req) {
             return;
         }
     }
+    submit_req_mutex.unlock();
 }
 
 void timeout() {
@@ -311,11 +315,14 @@ void experiment(string path) {
         nuraft::request req(0);
         std::tie(req, delay) = load.get_next_req_us();
 
-        level_output(_LDEBUG_, "Sending req #%d, next delay = %d us\n", req.index, delay);
         if (req.index < 0) {
             break;
         }
-        scheduler.schedule(submit_request, delay, req);
+        scheduler.add_task_to_queue(req);
+        scheduler.schedule(submit_request);
+        auto interval = std::chrono::system_clock::now() + std::chrono::microseconds(delay);
+        std::this_thread::sleep_until(interval);
+
 
         // std::thread* pthread = new std::thread(submit_request, req);
         // thread_.detach();

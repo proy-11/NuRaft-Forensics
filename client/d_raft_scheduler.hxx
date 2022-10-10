@@ -4,6 +4,7 @@
 #include <chrono>
 #include <thread>
 #include <condition_variable>
+#include <queue>
 
 #ifndef D_RAFT_SCHEDULER
 #define D_RAFT_SCHEDULER
@@ -20,9 +21,11 @@ class Scheduler {
         Scheduler(size_t size, nullptr_t) = delete;
     
         Scheduler(const Scheduler &) = delete;
-    
-        void schedule(Tasks f, long n, nuraft::request req);
-    
+
+        void add_task_to_queue(nuraft::request req);
+
+        void schedule(Tasks f);
+
         void wait();
     
         virtual ~Scheduler() = default;
@@ -33,6 +36,15 @@ class Scheduler {
         size_t size;
         const Error error;
         size_t count{};
+
+        struct Lesser_Index {
+            bool operator()(const nuraft::request& lhs, const nuraft::request& rhs) const
+            {
+                return lhs.index < rhs.index;
+            }
+        };
+
+        std::priority_queue<nuraft::request , std::vector<nuraft::request >, Lesser_Index> task_queue;
 };
 }; // namespace d_raft_scheduler
 
