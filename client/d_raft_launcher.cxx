@@ -46,8 +46,8 @@ std::atomic_bool exp_ended(false);
 json replica_status_dict;
 json meta_setting;
 
-ofstream depart;
-ofstream arrive;
+fstream depart;
+fstream arrive;
 
 uint64_t time_start;
 
@@ -212,36 +212,145 @@ char* status_table() {
     return result;
 }
 
+// std::mutex submit_req_mutex;
+// void submit_request(nuraft::request req) {
+//     submit_req_mutex.lock();
+//     level_output(_LDEBUG_, "Sending req #%d, = %llu ns\n", req.index, now_());
+//     json obj = {{"index", req.index}, {"payload", req.payload}};
+//     while (!exp_ended) {
+//         int lid = current_raft_leader;
+
+//         depart << json({{"index", req.index}, {"time", now_()}}).dump() + "\n";
+
+//         string result = send_(obj.dump() + "\n", lid, true);
+//         if (result == ERROR_CONN) {
+//             level_output(_LERROR_, "<Server %2d> request #%d: Connection error, retrying\n", ids[lid], req.index);
+//             std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
+//             continue;
+//         }
+//         json result_obj = json::parse(result);
+//         if (result_obj["success"]) {
+//             arrive << json({{"index", req.index}, {"time", now_()}}).dump() + "\n";
+//             break;
+//         }
+
+//         level_output(_LERROR_,
+//                      "<Server %2d> request #%d failed (%s)\n",
+//                      ids[lid],
+//                      req.index,
+//                      result_obj["error"].dump().c_str());
+
+//         if (!result_obj.contains("ec")) {
+//             break;
+//         }
+
+//         // Handle error
+//         nuraft::cmd_result_code ec = static_cast<nuraft::cmd_result_code>(result_obj["ec"]);
+//         if (ec == nuraft::cmd_result_code::NOT_LEADER) {
+//             if (!result_obj.contains("leader")) {
+//                 level_output(_LERROR_,
+//                              "<Server %2d> request #%d: Got a NOT_LEADER error but no leader is reported. Given up.\n",
+//                              ids[lid],
+//                              req.index);
+//                 return;
+//             } else {
+//                 int leader_id = result_obj["leader"];
+//                 if (leader_id > 0) {
+//                     auto itr = std::find(ids.begin(), ids.end(), leader_id);
+//                     if (itr == ids.cend()) {
+//                         level_output(
+//                             _LERROR_,
+//                             "<Server %2d> request #%d: Got a NOT_LEADER error but leader id not found. Given up.\n",
+//                             ids[lid],
+//                             req.index);
+//                         return;
+//                     } else {
+//                         int leader_index = std::distance(ids.begin(), itr);
+//                         if (current_raft_leader != leader_index) {
+//                             level_output(_LWARNING_, "leader %d -> %d\n", ids[current_raft_leader], ids[leader_index]);
+//                             current_raft_leader = leader_index;
+//                         }
+//                     }
+//                 } else {
+//                     std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
+//                 }
+//                 continue;
+//             }
+//         } else {
+//             return;
+//         }
+//     }
+//     submit_req_mutex.unlock();
+// }
+
+// void wait_for_threads(vector<std::thread*> threads) {
+//     for (size_t i = 0; i < threads.size(); i++) {
+//         threads[i]->join();
+//     }
+//     std::raise(SIGUSR1);
+// }
+
+std::mutex log_mutex;
+void sync_writeline(fstream& file, string line) {
+    log_mutex.lock();
+    // std::fprintf(fp, "%s\n", line.c_str());
+    file << line << "\n";
+    log_mutex.unlock();
+}
+
 std::mutex submit_req_mutex;
-void submit_request(nuraft::request req) {
+void submit_batched_request(vector<nuraft::request> reqs, nuraft::workload workload_obj) {
     submit_req_mutex.lock();
-    level_output(_LDEBUG_, "Sending req #%d, = %llu ns\n", req.index, now_());
-    json obj = {{"index", req.index}, {"payload", req.payload}};
+    uint64_t now_ns = now_();
+    string serialized_reqs = workload_obj.to_jsonl(reqs);
+    // cout << serialized_reqs << endl;
+    
+    bool first = true;
+
     while (!exp_ended) {
         int lid = current_raft_leader;
 
-        depart << json({{"index", req.index}, {"time", now_()}}).dump() + "\n";
+        if (!first) now_ns = now_();
+        sync_writeline(
+            depart, json({{"index_start", reqs.front().index}, {"index_end", reqs.back().index}, {"time", now_ns}}).dump());
 
-        string result = send_(obj.dump() + "\n", lid, true);
+        string result = send_(serialized_reqs, lid, true);
         if (result == ERROR_CONN) {
-            level_output(_LERROR_, "<Server %2d> request #%d: Connection error, retrying\n", ids[lid], req.index);
+            level_output(_LERROR_, "<Server %2d> request batch #%d: Connection error, retrying\n", ids[lid], workload_obj.get_current_batch());
             std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
             continue;
+        } else if (exp_ended) {
+            return;
         }
-        json result_obj = json::parse(result);
+
+        json result_obj;
+        cout << "Result : " << result << "\n";
+        try {
+            result_obj = json::parse(result);
+        } catch (json::parse_error& error) {
+            level_output(_LERROR_,
+                         "<Server %2d> serialized request batch #%d: got invalid response \"%s\", retrying\n",
+                         ids[lid],
+                         workload_obj.get_current_batch(),
+                         result.c_str());
+            continue;
+        }
+
         if (result_obj["success"]) {
-            arrive << json({{"index", req.index}, {"time", now_()}}).dump() + "\n";
-            break;
+            sync_writeline(arrive, json({{"index_start", reqs.front().index}, {"index_end", reqs.back().index}, {"time", now_()}}).dump());
+            sync_writeline(arrive, json({{"index", result_obj["index"]}, {"time", now_()}}).dump());
+            level_output(_LINFO_, "<Server %2d> request batch #%d, index #%lu, Success\n", ids[lid], workload_obj.get_current_batch(), result_obj["index"]);
+            return;
         }
 
         level_output(_LERROR_,
-                     "<Server %2d> request #%d failed (%s)\n",
+                     "<Server %2d> request batch #%d failed (%s)\n",
                      ids[lid],
-                     req.index,
+                     workload_obj.get_current_batch(),
                      result_obj["error"].dump().c_str());
 
         if (!result_obj.contains("ec")) {
-            break;
+            return;
         }
 
         // Handle error
@@ -249,9 +358,9 @@ void submit_request(nuraft::request req) {
         if (ec == nuraft::cmd_result_code::NOT_LEADER) {
             if (!result_obj.contains("leader")) {
                 level_output(_LERROR_,
-                             "<Server %2d> request #%d: Got a NOT_LEADER error but no leader is reported. Given up.\n",
+                             "<Server %2d> request batch #%d: Got a NOT_LEADER error but no leader is reported. Given up.\n",
                              ids[lid],
-                             req.index);
+                             workload_obj.get_current_batch());
                 return;
             } else {
                 int leader_id = result_obj["leader"];
@@ -260,9 +369,9 @@ void submit_request(nuraft::request req) {
                     if (itr == ids.cend()) {
                         level_output(
                             _LERROR_,
-                            "<Server %2d> request #%d: Got a NOT_LEADER error but leader id not found. Given up.\n",
+                            "<Server %2d> request batch #%d: Got a NOT_LEADER error but leader id not found. Given up.\n",
                             ids[lid],
-                            req.index);
+                            workload_obj.get_current_batch());
                         return;
                     } else {
                         int leader_index = std::distance(ids.begin(), itr);
@@ -299,29 +408,41 @@ void wait_for_threads(vector<std::thread*> threads) {
 }
 
 void experiment(string path) {
-    nuraft::workload load(path);
+    nuraft::workload workload_obj(path);
+    
 
     timeout_mutex.lock();
 
     std::thread timeout_thread(timeout);
     timeout_thread.detach();
 
-    d_raft_scheduler::Scheduler scheduler(MAX_NUMBER_OF_JOBS, [](const std::exception &e) {
-       level_output(_LERROR_, "Error: %s", e.what());
-    });
+    // d_raft_scheduler::Scheduler scheduler(MAX_NUMBER_OF_JOBS, [](const std::exception &e) {
+    //    level_output(_LERROR_, "Error: %s", e.what());
+    // });
 
     while (!exp_ended) {
-        int delay;
-        nuraft::request req(0);
-        std::tie(req, delay) = load.get_next_req_us();
+        vector<nuraft::request> batch = workload_obj.get_next_batch();
+        int batch_delay = workload_obj.get_next_batch_delay_us();
 
-        if (req.index < 0) {
+        if(batch.size() == 0) {
+            level_output(_LINFO_, "All requests sent\n");
             break;
         }
-        scheduler.add_task_to_queue(req);
-        scheduler.schedule(submit_request);
-        auto interval = std::chrono::system_clock::now() + std::chrono::microseconds(delay);
-        std::this_thread::sleep_until(interval);
+        std::thread* pthread = new std::thread(submit_batched_request, batch, workload_obj);
+        request_submissions.emplace_back(pthread);
+        std::this_thread::sleep_for(std::chrono::microseconds(batch_delay));
+
+        // int delay;
+        // nuraft::request req(0);
+        // std::tie(req, delay) = load.get_next_req_us();
+
+        // if (req.index < 0) {
+        //     break;
+        // }
+        // scheduler.add_task_to_queue(req);
+        // scheduler.schedule(submit_request);
+        // auto interval = std::chrono::system_clock::now() + std::chrono::microseconds(delay);
+        // std::this_thread::sleep_until(interval);
 
 
         // std::thread* pthread = new std::thread(submit_request, req);
@@ -329,7 +450,13 @@ void experiment(string path) {
         // request_submissions.emplace_back(pthread);
         // std::this_thread::sleep_for(std::chrono::microseconds(delay));
     }
-    scheduler.wait();
+    for (std::thread* pthread: request_submissions) {
+        if (pthread != nullptr) {
+            pthread->join();
+            delete pthread;
+        }
+    }
+    // scheduler.wait();
     // for (std::thread* pthread: request_submissions) {
     //     if (pthread != nullptr) {
     //         pthread->join();
@@ -454,8 +581,24 @@ int main(int argc, const char** argv) {
         exit(1);
     }
 
-    depart.open(working_dir / "depart.jsonl", ofstream::out);
-    arrive.open(working_dir / "arrive.jsonl", ofstream::out);
+    depart.open(working_dir / "depart.jsonl", std::fstream::in | std::fstream::out | std::fstream::app);
+    if (!depart) {
+		cout << "depart.jsonl not created!";
+        exit(1);
+	}
+	// else {
+	// 	// cout << "depart.jsonl created successfully!";
+	// 	// depart.close(); 
+	// }
+    arrive.open(working_dir / "arrive.jsonl", std::fstream::in | std::fstream::out | std::fstream::app);
+    if (!arrive) {
+		cout << "arrive.jsonl not created!";
+        exit(1);
+	}
+	// else {
+	// 	// cout << "arrive.jsonl created successfully!";
+	// 	// arrive.close(); 
+	// }
 
     vector<std::thread> server_creators(0);
     vector<std::thread> server_inits(0);

@@ -9,9 +9,15 @@ using json = nlohmann::json;
 namespace po = boost::program_options;
 
 namespace nuraft {
-request::request(int ind_) {
-    index = ind_;
-    payload = std::string("+1");
+// request::request(int ind_) {
+//     index = ind_;
+//     payload = std::string("+1");
+// }
+request::request(int ind_):
+    index(ind_),
+    payload(std::string("+1"))
+{
+    
 }
 
 request::~request() {}
@@ -22,7 +28,7 @@ std::string request::to_json_str() {
     return ss.str();
 }
 
-std::string to_jsonl(std::vector<request>& requests) {
+std::string workload::to_jsonl(std::vector<nuraft::request>& requests) {
     std::stringstream ss;
     for (request req: requests) {
         ss << req.to_json_str();
@@ -30,7 +36,36 @@ std::string to_jsonl(std::vector<request>& requests) {
     return ss.str();
 }
 
-workload::workload(std::string path) {
+// workload::workload(std::string path) {
+//     std::ifstream file(path.c_str());
+//     json object = json::parse(file);
+
+//     current = 0;
+//     size = object["size"];
+//     freq = object["freq"];
+//     batch_size = object["batch_size"];
+//     delay = -1;
+//     batch_delay = std::vector<int>(batch_size);
+
+//     std::string type_str = object.value("type", "NULL");
+//     if (std::string(type_str) == "UNIF") {
+//         type = UNIF;
+//     } else {
+//         std::fprintf(stderr, "Cannot read %s", type_str.c_str());
+//     }
+
+//     resample_delays(0);
+// }
+
+workload::workload(std::string path):
+    type(WORKLOAD_TYPE::UNIF),
+    size(-1),
+    current(-1),
+    batch_size(-1),
+    delay(-1),
+    batch_delay(),
+    freq(-1)
+{    
     std::ifstream file(path.c_str());
     json object = json::parse(file);
 
@@ -38,7 +73,6 @@ workload::workload(std::string path) {
     size = object["size"];
     freq = object["freq"];
     batch_size = object["batch_size"];
-    delay = -1;
     batch_delay = std::vector<int>(batch_size);
 
     std::string type_str = object.value("type", "NULL");
@@ -68,7 +102,9 @@ void workload::proceed() { proceed(1); }
 void workload::proceed_batch() { proceed(batch_size); }
 
 request workload::get_next_req() { return request(current); }
-
+int workload::get_current_batch() {
+    return current;
+}
 std::vector<request> workload::get_next_batch() {
     std::vector<request> requests(0);
     for (int i = current; i < current + batch_size && i < size; i++) {

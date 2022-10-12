@@ -6,6 +6,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <boost/asio.hpp>
 
 #define _ISSUBSTR_(s1, s2) ((s1).find(s2) != std::string::npos)
 #define _C_CYAN_ "\033[36m"              /* Cyan */
@@ -52,7 +53,7 @@ private:
 class server_data_mgr {
 public:
     server_data_mgr(json data) {
-        for (int i = 0; i < data.size(); i++) {
+        for (size_t i = 0; i < data.size(); i++) {
             int id = data[i]["id"];
             if (indices.find(id) != indices.end()) {
                 std::string error_message = "ID conflict: " + std::to_string(id);
@@ -61,7 +62,7 @@ public:
 
             ids.emplace_back(id);
             indices[id] = i;
-            endpoints.emplace_back(tcp::endpoint(asio::ip::address::from_string(data[i]["ip"]), data[i]["cport"]));
+            endpoints.emplace_back(boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string(data[i]["ip"]), data[i]["cport"]));
             endpoints_str.emplace_back(endpoint_wrapper(data[i]["ip"], data[i]["port"]));
         }
         leader_index = data.size() - 1;
@@ -79,7 +80,7 @@ public:
 
     inline int get_id(int index) { return ids[index]; }
 
-    inline tcp::endpoint get_endpoint(int index) { return endpoints[index]; }
+    inline boost::asio::ip::tcp::endpoint get_endpoint(int index) { return endpoints[index]; }
 
     inline std::string get_endpoint_str(int index) { return endpoints_str[index]; }
 
@@ -103,7 +104,7 @@ private:
     std::mutex mutex;
     std::unordered_map<int, int> indices;
     std::vector<int> ids;
-    std::vector<tcp::endpoint> endpoints;
+    std::vector<boost::asio::ip::tcp::endpoint> endpoints;
     std::vector<std::string> endpoints_str;
     int leader_index;
 };
