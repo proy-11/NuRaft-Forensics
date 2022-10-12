@@ -9,9 +9,15 @@ using json = nlohmann::json;
 namespace po = boost::program_options;
 
 namespace nuraft {
-request::request(int ind_) {
-    index = ind_;
-    payload = std::string("+1");
+// request::request(int ind_) {
+//     index = ind_;
+//     payload = std::string("+1");
+// }
+request::request(int ind_):
+    index(ind_),
+    payload(std::string("+1"))
+{
+    
 }
 
 request::~request() {}
@@ -30,7 +36,36 @@ std::string to_jsonl(std::vector<request>& requests) {
     return ss.str();
 }
 
-workload::workload(std::string path) {
+// workload::workload(std::string path) {
+//     std::ifstream file(path.c_str());
+//     json object = json::parse(file);
+
+//     current = 0;
+//     size = object["size"];
+//     freq = object["freq"];
+//     batch_size = object["batch_size"];
+//     delay = -1;
+//     batch_delay = std::vector<int>(batch_size);
+
+//     std::string type_str = object.value("type", "NULL");
+//     if (std::string(type_str) == "UNIF") {
+//         type = UNIF;
+//     } else {
+//         std::fprintf(stderr, "Cannot read %s", type_str.c_str());
+//     }
+
+//     resample_delays(0);
+// }
+
+workload::workload(std::string path):
+    type(WORKLOAD_TYPE::UNIF),
+    size(-1),
+    current(-1),
+    batch_size(-1),
+    delay(-1),
+    batch_delay(),
+    freq(-1)
+{    
     std::ifstream file(path.c_str());
     json object = json::parse(file);
 
@@ -38,7 +73,7 @@ workload::workload(std::string path) {
     size = object["size"];
     freq = object["freq"];
     batch_size = object["batch_size"];
-    delay = -1;
+    // delay = -1;
     batch_delay = std::vector<int>(batch_size);
 
     std::string type_str = object.value("type", "NULL");

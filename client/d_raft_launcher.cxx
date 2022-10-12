@@ -220,7 +220,7 @@ void end_srv(int i, bool recv) {
         try {
             json obj = json::parse(status);
             if (obj["success"]) replica_status_dict[std::to_string(ids[i])] = obj;
-        } catch (json::parse_error pe) {
+        } catch (json::parse_error& pe) {
             level_output(_LERROR_, "<Server %2d> got invalid response \"%s\"\n", ids[i], status.c_str());
         }
         table_mutex.unlock();
@@ -247,7 +247,7 @@ void submit_request(nuraft::request req) {
         json result_obj;
         try {
             result_obj = json::parse(result);
-        } catch (json::parse_error error) {
+        } catch (json::parse_error& error) {
             level_output(_LERROR_,
                          "<Server %2d> request #%d: got invalid response \"%s\", retrying\n",
                          ids[lid],
@@ -312,21 +312,21 @@ void submit_request(nuraft::request req) {
 std::mutex submit_req_mutex;
 void submit_batched_request(vector<nuraft::request> reqs) {
     submit_req_mutex.lock();
-    level_output(_LDEBUG_, "Sending req #%d, = %llu ns\n", req.index, now_());
+    // level_output(_LDEBUG_, "Sending req #%d, = %llu ns\n", reqs.index, now_());
     uint64_t now_ns = now_();
-    string serialized_reqs = nuraft::to_jsonl(reqs);
+    // string serialized_reqs = nuraft::to_jsonl(reqs);
     bool first = true;
 
     while (!exp_ended) {
-        int lid = current_raft_leader;
+        // int lid = current_raft_leader;
 
         if (!first) now_ns = now_();
         sync_writeline(
             depart, json({{"index_start", reqs[0].index}, {"index_end", reqs.back().index}, {"time", now_ns}}).dump());
 
-        string result = send_(serialized_reqs, lid, true);
+        string result = ERROR_CONN;//send_(serialized_reqs, lid, true);
         if (result == ERROR_CONN) {
-            level_output(_LERROR_, "<Server %2d> request #%d: Connection error, retrying\n", ids[lid], req.index);
+            // level_output(_LERROR_, "<Server %2d> request #%d: Connection error, retrying\n", ids[lid], req.index);
             std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
             continue;
         } else if (exp_ended) {
@@ -336,25 +336,25 @@ void submit_batched_request(vector<nuraft::request> reqs) {
         json result_obj;
         try {
             result_obj = json::parse(result);
-        } catch (json::parse_error error) {
-            level_output(_LERROR_,
-                         "<Server %2d> request #%d: got invalid response \"%s\", retrying\n",
-                         ids[lid],
-                         req.index,
-                         result.c_str());
+        } catch (json::parse_error& error) {
+            // level_output(_LERROR_,
+            //              "<Server %2d> request #%d: got invalid response \"%s\", retrying\n",
+            //              ids[lid],
+            //              req.index,
+            //              result.c_str());
             continue;
         }
 
         if (result_obj["success"]) {
-            sync_writeline(arrive, json({{"index", req.index}, {"time", now_()}}).dump());
+            // sync_writeline(arrive, json({{"index", req.index}, {"time", now_()}}).dump());
             return;
         }
 
-        level_output(_LERROR_,
-                     "<Server %2d> request #%d failed (%s)\n",
-                     ids[lid],
-                     req.index,
-                     result_obj["error"].dump().c_str());
+        // level_output(_LERROR_,
+        //              "<Server %2d> request #%d failed (%s)\n",
+        //              ids[lid],
+        //              req.index,
+        //              result_obj["error"].dump().c_str());
 
         if (!result_obj.contains("ec")) {
             return;
@@ -364,21 +364,21 @@ void submit_batched_request(vector<nuraft::request> reqs) {
         nuraft::cmd_result_code ec = static_cast<nuraft::cmd_result_code>(result_obj["ec"]);
         if (ec == nuraft::cmd_result_code::NOT_LEADER) {
             if (!result_obj.contains("leader")) {
-                level_output(_LERROR_,
-                             "<Server %2d> request #%d: Got a NOT_LEADER error but no leader is reported. Given up.\n",
-                             ids[lid],
-                             req.index);
+                // level_output(_LERROR_,
+                //              "<Server %2d> request #%d: Got a NOT_LEADER error but no leader is reported. Given up.\n",
+                //              ids[lid],
+                //              req.index);
                 return;
             } else {
                 int leader_id = result_obj["leader"];
                 if (leader_id > 0) {
                     auto itr = std::find(ids.begin(), ids.end(), leader_id);
                     if (itr == ids.cend()) {
-                        level_output(
-                            _LERROR_,
-                            "<Server %2d> request #%d: Got a NOT_LEADER error but leader id not found. Given up.\n",
-                            ids[lid],
-                            req.index);
+                        // level_output(
+                        //     _LERROR_,
+                        //     "<Server %2d> request #%d: Got a NOT_LEADER error but leader id not found. Given up.\n",
+                        //     ids[lid],
+                        //     req.index);
                         return;
                     } else {
                         int leader_index = std::distance(ids.begin(), itr);
@@ -466,6 +466,7 @@ void experiment(string path) {
     // for (std::thread* pthread: request_submissions) {
     //     delete pthread;
     // }
+    }
 }
 
 void show_exp_duration() {

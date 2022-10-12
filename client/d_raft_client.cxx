@@ -118,17 +118,18 @@ int main(int argc, const char** argv) {
     
     nuraft::workload load(args.config_path);
     while (true) {
-        int delay;
-        nuraft::request req(0);
-        std::tie(req, delay) = load.get_next_req_us();
+        std::cout << "Sending request\n";
+        // int delay;
+        // nuraft::request req(0);
+        // std::tie(req, delay) = load.get_next_req_us();
 
-        if (req.index < 0) {
-            break;
-        }
+        // if (req.index < 0) {
+        //     break;
+        // }
 
-        std::thread thread_(communicate, &sock, std::ref(req));
-        thread_.detach();
-        boost::this_thread::sleep(boost::posix_time::microseconds(delay));
+        // std::thread thread_(communicate, &sock, std::ref(req));
+        // thread_.detach();
+        // boost::this_thread::sleep(boost::posix_time::microseconds(delay));
     }
 
     return 0;

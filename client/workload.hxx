@@ -13,7 +13,14 @@ enum WORKLOAD_TYPE {
 
 struct request {
 public:
+    request();
     request(int index);
+    // request(int index):
+    //     index(index),
+    //     payload(std::string("+1"))
+    // {
+
+    // }
     ~request();
 
     std::string to_json_str();
