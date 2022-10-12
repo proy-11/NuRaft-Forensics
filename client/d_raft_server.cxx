@@ -131,7 +131,7 @@ size_t sync_write(tcp::socket* psock, const asio::const_buffers_1& buf) {
     write_mutex.lock();
     try {
         res = asio::write(*psock, buf);
-    } catch (boost::system::system_error &error) {
+    } catch (boost::system::system_error& error) {
         std::cerr << error.what();
     }
     write_mutex.unlock();
@@ -352,7 +352,7 @@ void replicate_request(tcp::socket* psock, std::string request) {
     try {
         json req_obj = json::parse(request);
         rid = req_obj["index"];
-    } catch (json::exception &ec) {
+    } catch (json::exception& ec) {
         json reply = {{"success", false}, {"error", ec.what()}};
         sync_write(psock, asio::buffer(reply.dump() + "\n"));
         return;
@@ -362,7 +362,7 @@ void replicate_request(tcp::socket* psock, std::string request) {
 
     if (committed_reqs.find(rid) != committed_reqs.end()) {
         service_mutex.unlock();
-        json reply = {{"success", false}, {"error", "request already committed"}};
+        json reply = {{"rid", rid}, {"success", false}, {"error", "request already committed"}};
         sync_write(psock, asio::buffer(reply.dump() + "\n"));
         return;
     }
@@ -381,7 +381,7 @@ void replicate_request(tcp::socket* psock, std::string request) {
         cmd_result_code rc = ret->get_result_code();
         std::cout << "failed to replicate: " << rc << ", " << TestSuite::usToString(timer->getTimeUs()) << std::endl;
         service_mutex.unlock();
-        json obj = {{"req", rid}, {"success", false}, {"ec", rc}, {"error", ret->get_result_str()}};
+        json obj = {{"rid", rid}, {"success", false}, {"ec", rc}, {"error", ret->get_result_str()}};
         if (rc == cmd_result_code::NOT_LEADER) {
             obj["leader"] = stuff.raft_instance_->get_leader();
         }
@@ -395,7 +395,7 @@ void replicate_request(tcp::socket* psock, std::string request) {
     int top_term = stuff.raft_instance_->get_last_log_term();
     service_mutex.unlock();
 
-    json obj = {{"req", rid}, {"success", true}, {"index", top_index}, {"term", top_term}};
+    json obj = {{"rid", rid}, {"success", true}, {"index", top_index}, {"term", top_term}};
     committed_reqs.insert(rid);
     sync_write(psock, asio::buffer(obj.dump() + "\n"));
     return;
