@@ -1,4 +1,3 @@
-#include "libnuraft/json.hpp"
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
@@ -13,13 +12,9 @@
 #define _C_BOLDYELLOW_ "\033[1m\033[33m" /* Bold Yellow */
 #define _C_RESET_ "\033[0m"
 
-using nlohmann::json;
-
 enum _levels_ { _LERROR_ = 0, _LWARNING_ = 1, _LINFO_ = 2, _LDEBUG_ = 3 };
 
 extern int _PROG_LEVEL_;
-
-inline std::string endpoint_wrapper(std::string ip, int port);
 
 class sync_file_obj {
 public:
@@ -49,64 +44,28 @@ private:
     std::mutex mutex;
 };
 
-class server_data_mgr {
-public:
-    server_data_mgr(json data) {
-        for (int i = 0; i < data.size(); i++) {
-            int id = data[i]["id"];
-            if (indices.find(id) != indices.end()) {
-                std::string error_message = "ID conflict: " + std::to_string(id);
-                throw std::logic_error(error_message.c_str());
-            }
+// class semaphore {
+// public:
+//     semaphore(int count_ = 0)
+//         : count(count_) {}
 
-            ids.emplace_back(id);
-            indices[id] = i;
-            endpoints.emplace_back(tcp::endpoint(asio::ip::address::from_string(data[i]["ip"]), data[i]["cport"]));
-            endpoints_str.emplace_back(endpoint_wrapper(data[i]["ip"], data[i]["port"]));
-        }
-        leader_index = data.size() - 1;
-    }
-    ~server_data_mgr() {}
+//     inline void notify() {
+//         std::unique_lock<std::mutex> lock(mtx);
+//         count++;
+//         cv.notify_one();
+//     }
 
-    int get_index(int id) {
-        auto itr = std::find(ids.begin(), ids.end(), id);
-        if (itr == ids.cend()) {
-            std::string error_message = "ID not found: " + std::to_string(id);
-            throw std::logic_error(error_message.c_str());
-        }
-        return std::distance(ids.begin(), itr);
-    }
+//     inline void wait() {
+//         std::unique_lock<std::mutex> lock(mtx);
+//         cv.wait(lock, [this]() { return count > 0; });
+//         count--;
+//     }
 
-    inline int get_id(int index) { return ids[index]; }
-
-    inline tcp::endpoint get_endpoint(int index) { return endpoints[index]; }
-
-    inline std::string get_endpoint_str(int index) { return endpoints_str[index]; }
-
-    void set_leader(int new_index) {
-        mutex.lock();
-        leader_index = new_index;
-        mutex.unlock();
-    }
-
-    int get_leader() {
-        int result;
-        mutex.lock();
-        result = leader_index;
-        mutex.unlock();
-        return result;
-    }
-
-    inline int get_leader_id() { return get_id(get_leader()); }
-
-private:
-    std::mutex mutex;
-    std::unordered_map<int, int> indices;
-    std::vector<int> ids;
-    std::vector<tcp::endpoint> endpoints;
-    std::vector<std::string> endpoints_str;
-    int leader_index;
-};
+// private:
+//     std::mutex mtx;
+//     std::condition_variable cv;
+//     int count;
+// };
 
 void level_output(_levels_ level, const char* fmt, ...) {
     if (level > _PROG_LEVEL_) return;
@@ -131,8 +90,6 @@ void level_output(_levels_ level, const char* fmt, ...) {
     }
     va_end(args);
 }
-
-inline std::string endpoint_wrapper(std::string ip, int port) { return ip + ":" + std::to_string(port); }
 
 inline std::string strip_endl(std::string str) {
     size_t len = str.length();

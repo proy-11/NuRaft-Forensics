@@ -1,5 +1,4 @@
 add_executable(raft_client
-               main.cxx
                raft_client.cxx
                in_memory_log_store.cxx)
 add_dependencies(raft_client
@@ -55,7 +54,10 @@ if(Boost_FOUND)
                     workload.cxx
                     d_raft_scheduler.cxx
                     d_raft_launcher.cxx
-                    utils.hxx)
+                    utils.hxx
+                    socket_mgr.hxx
+                    req_socket_mgr.hxx
+                    server_data_mgr.hxx)
     include_directories(${Boost_INCLUDE_DIRS})
     add_dependencies(d_raft_launcher
                      static_lib)

@@ -16,6 +16,8 @@ request::request(int ind_) {
 
 request::~request() {}
 
+/* Send serialized string with line break
+ */
 std::string request::to_json_str() {
     std::stringstream ss;
     ss << "{\"index\": " << index << ", \"payload\": \"" << payload << "\"}\n";
