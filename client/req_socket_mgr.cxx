@@ -28,6 +28,7 @@ req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
 }
 
 req_socket_manager::~req_socket_manager() {
+    level_output(_LWARNING_, "destroying mgr #%d \n", my_mgr_index);
     if (psock != nullptr) {
         psock->close();
         delete psock;
@@ -56,7 +57,7 @@ void req_socket_manager::auto_submit() {
     while (!terminated) {
         submit_all_requests(ec);
         if (ec) {
-            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message());
+            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message().c_str());
             wait_retry();
         } else {
             break;
@@ -86,7 +87,7 @@ void req_socket_manager::auto_submit() {
         pending_periods++;
         submit_requests(retries, ec);
         if (ec) {
-            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message());
+            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message().c_str());
             continue;
         } else {
             mutex.lock();
@@ -98,7 +99,7 @@ void req_socket_manager::auto_submit() {
         if (pending_periods >= MAX_PENDING_PERIOD) {
             submit_requests(pendings, ec);
             if (ec) {
-                level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message());
+                level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message().c_str());
                 continue;
             } else {
                 pending_periods = 0;
@@ -118,7 +119,8 @@ void req_socket_manager::listen() {
             asio::read_until(*psock, sbuf, "\n", ec);
 
             if (ec) {
-                level_output(_LERROR_, "<Server %2d> Got error %s\n", server_mgr->get_leader_id(), ec.message());
+                level_output(
+                    _LERROR_, "<Server %2d> Got error %s\n", server_mgr->get_leader_id(), ec.message().c_str());
                 if ((ec == asio::error::bad_descriptor || ec == asio::error::eof) && !terminated) {
                     connect();
                     continue;
@@ -131,6 +133,9 @@ void req_socket_manager::listen() {
             std::istringstream iss(std::string(asio::buffers_begin(data), asio::buffers_begin(data) + data.size()));
             std::string line;
             while (std::getline(iss, line)) {
+                if (is_empty(line)) {
+                    continue;
+                }
                 process_reply(line, timestamp);
             }
         }
@@ -185,7 +190,6 @@ void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {
                 }
                 mutex.unlock();
                 server_mgr->set_leader(leader);
-                level_output(_LWARNING_, "leader %d -> %d\n", server_mgr->get_leader_id(), leader_id);
             } else
                 set_status(rid, R_RETRY);
         }

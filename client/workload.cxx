@@ -81,25 +81,28 @@ std::vector<request> workload::get_next_batch() {
 
 int workload::get_next_delay_us() { return delay; }
 int workload::get_next_batch_delay_us() {
-    int sum_delays = 0;
-    for (int d: batch_delay) {
-        sum_delays += d;
-    }
-    return sum_delays;
+    // int sum_delays = 0;
+    // for (int d: batch_delay) {
+    //     sum_delays += d;
+    // }
+    // return sum_delays;
+
+    return delay;
 }
 
 void workload::resample_delays(int step) {
-    if (step <= 0) {
-        for (int i = 0; i < batch_size; i++) {
-            batch_delay[i] = sample_single_delay_us();
-        }
-        delay = batch_delay[current % batch_size];
-    } else {
-        for (int i = 0; i < batch_size && i < step; i++) {
-            batch_delay[(current + i) % batch_size] = sample_single_delay_us();
-        }
-        delay = batch_delay[(current + step) % batch_size];
-    }
+    // if (step <= 0) {
+    //     for (int i = 0; i < batch_size; i++) {
+    //         batch_delay[i] = sample_single_delay_us();
+    //     }
+    //     delay = batch_delay[current % batch_size];
+    // } else {
+    //     for (int i = 0; i < batch_size && i < step; i++) {
+    //         batch_delay[(current + i) % batch_size] = sample_single_delay_us();
+    //     }
+    //     delay = batch_delay[(current + step) % batch_size];
+    // }
+    delay = sample_single_delay_us();
 }
 
 int workload::sample_single_delay_us() {

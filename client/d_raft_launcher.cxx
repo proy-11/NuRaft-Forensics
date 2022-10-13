@@ -84,6 +84,7 @@ void experiment(string path) {
         if (!load.proceed_batch()) {
             break;
         }
+        level_output(_LDEBUG_, "sending batch #%d -- #%d\n", requests[0].index, requests.back().index);
 
         req_socket_manager* mgr = new req_socket_manager(requests, arrive, depart, server_mgr);
         scheduler.add_task_to_queue(mgr);
@@ -92,21 +93,22 @@ void experiment(string path) {
         std::this_thread::sleep_until(interval);
     }
     scheduler.wait();
+    server_mgr->wait();
     captain->terminate();
 }
 
 void signal_handler(int signal) {
     level_output(_LWARNING_, "got signal %d, terminating all servers...\n", signal);
 
+    fflush(stdout);
+    // if (arrive != nullptr) delete arrive;
+    // if (depart != nullptr) delete depart;
+
     if (captain != nullptr) {
         captain->terminate(signal);
-        delete captain;
+    } else {
+        exit(signal);
     }
-    if (arrive != nullptr) delete arrive;
-    if (depart != nullptr) delete depart;
-
-    fflush(stdout);
-    exit(signal);
 }
 
 int main(int argc, const char** argv) {
@@ -127,7 +129,7 @@ int main(int argc, const char** argv) {
     std::ifstream f(config_file);
     meta_setting = json::parse(f);
 
-    server_data_mgr server_mgr(meta_setting["server"]);
+    server_mgr = new server_data_mgr(meta_setting["server"]);
 
     fsys::path working_dir = meta_setting["working_dir"];
     if (!fsys::exists(working_dir)) {
@@ -144,18 +146,18 @@ int main(int argc, const char** argv) {
 
     level_output(_LINFO_, "Launching servers...\n");
 
-    for (int i = 0; i < server_mgr.ns; i++) {
+    for (int i = 0; i < server_mgr->ns; i++) {
         server_creators.emplace_back(create_server, meta_setting["server"][i]);
     }
 
-    for (int i = 0; i < server_mgr.ns; i++) {
+    for (int i = 0; i < server_mgr->ns; i++) {
         server_creators[i].join();
     }
 
     level_output(_LINFO_, "Connecting...\n");
     std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["connection_wait_ms"]));
 
-    captain = new commander(meta_setting, &server_mgr);
+    captain = new commander(meta_setting, server_mgr);
     captain->deploy();
 
     level_output(_LINFO_, "Launching client...\n");

@@ -22,4 +22,6 @@ std::string strip_endl(std::string str);
 
 uint64_t now_();
 
+bool is_empty(std::string str);
+
 #endif

@@ -44,5 +44,5 @@ private:
     std::recursive_mutex exit_mutex;
     std::latch *init_latch, *peer_latch;
     server_data_mgr* server_mgr;
-    std::vector<tcp::socket> sockets;
+    std::vector<tcp::socket*> sockets;
 };

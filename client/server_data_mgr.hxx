@@ -36,11 +36,14 @@ public:
     int register_sock_mgr(req_socket_manager* mgr);
     void unregister_sock_mgr(int index);
 
+    void wait();
+
     bool terminated;
     int ns;
 
 private:
     std::mutex mutex;
+    std::mutex empty_req_mutex;
     std::unordered_map<int, int> indices;
     std::vector<int> ids;
     std::vector<tcp::endpoint> endpoints;

@@ -12,11 +12,15 @@ commander::commander(json data, server_data_mgr* mgr)
     init_latch = new std::latch(ns);
     peer_latch = new std::latch(ns - 1);
     maintain_connection();
+    std::this_thread::sleep_for(std::chrono::milliseconds(setting["connection_wait_ms"]));
 }
 
 commander::~commander() {
     delete init_latch;
     delete peer_latch;
+    for (auto psock: sockets) {
+        if (psock) delete psock;
+    }
 }
 
 void commander::deploy() {
@@ -27,7 +31,7 @@ void commander::deploy() {
                 boost::system::error_code ec;
                 send_command(j, "check\n", ec);
                 if (ec) {
-                    level_output(_LERROR_, "Commander check init of #%d failed: %s\n", j, ec.message());
+                    level_output(_LERROR_, "Commander check init of #%d failed: %s\n", j, ec.message().c_str());
                     exit(1);
                 } else
                     return;
@@ -47,7 +51,7 @@ void commander::deploy() {
 }
 
 void commander::send_command(int index, std::string cmd, boost::system::error_code& ec) {
-    sockets[index].write_some(asio::buffer(cmd, cmd.length()), ec);
+    sockets[index]->write_some(asio::buffer(cmd, cmd.length()), ec);
 }
 
 void commander::start_experiment_timer() {
@@ -75,7 +79,7 @@ void commander::terminate(int error) {
                     send_command(i, "exit\n", ec);
                     if (ec) {
                         level_output(
-                            _LERROR_, "Commander terminate #%d failed (%d left): %s.  \n", i, k, ec.message());
+                            _LERROR_, "Commander terminate #%d failed (%d left): %s.  \n", i, k, ec.message().c_str());
                         std::this_thread::sleep_for(std::chrono::milliseconds(setting["exit_retry_ms"]));
                     } else {
                         return;
@@ -106,7 +110,7 @@ void commander::send_addpeer_command(int j) {
     oss << "addpeer id=" << server_mgr->get_id(j) << " ep=" << server_mgr->get_endpoint_str(j) << "\n";
     send_command(0, oss.str(), ec);
     if (ec) {
-        level_output(_LERROR_, "Commander add peer #%d failed: %s\n", j, ec.message());
+        level_output(_LERROR_, "Commander add peer #%d failed: %s\n", j, ec.message().c_str());
         exit(1);
     } else
         return;
@@ -116,35 +120,45 @@ void commander::maintain_connection() {
     asio::io_service ios;
 
     for (int i = 0; i < ns; i++) {
-        sockets.emplace_back(tcp::socket(ios));
-        std::thread thr([this, i]() -> void {
-            while (true) {
-                boost::system::error_code ec;
-                sockets[i].connect(server_mgr->get_endpoint(i), ec);
-                if (ec) {
-                    level_output(_LERROR_, "Commander connection to #%d error: %s\n", i, ec.message());
-                    std::this_thread::sleep_for(std::chrono::milliseconds(setting["reconnect_retry_ms"]));
-                    continue;
-                }
-
+        sockets.emplace_back(new tcp::socket(ios));
+        std::thread thr(
+            [this](int i) -> void {
                 while (true) {
-                    asio::streambuf sbuf;
-                    asio::read_until(sockets[i], sbuf, "\n", ec);
+                    boost::system::error_code ec;
+                    sockets[i]->connect(server_mgr->get_endpoint(i), ec);
                     if (ec) {
-                        level_output(
-                            _LERROR_, "<Server %2d> Cmd got error %s\n", server_mgr->get_id(i), ec.message());
-                        break;
+                        level_output(_LERROR_, "Commander connection to #%d error: %s\n", i, ec.message().c_str());
+                        std::this_thread::sleep_for(std::chrono::milliseconds(setting["reconnect_retry_ms"]));
+                        continue;
                     }
-                    auto data = sbuf.data();
-                    std::istringstream iss(
-                        std::string(asio::buffers_begin(data), asio::buffers_begin(data) + data.size()));
-                    std::string line;
-                    while (std::getline(iss, line)) {
-                        process_reply(line);
+
+                    level_output(_LINFO_, "connected server %d\n", server_mgr->get_id(i));
+                    while (true) {
+                        asio::streambuf sbuf;
+                        asio::read_until(*sockets[i], sbuf, "\n", ec);
+                        if (ec) {
+                            level_output(_LERROR_,
+                                         "<Server %2d> Cmd got error %s\n",
+                                         server_mgr->get_id(i),
+                                         ec.message().c_str());
+                            break;
+                        }
+                        auto data = sbuf.data();
+                        std::istringstream iss(
+                            std::string(asio::buffers_begin(data), asio::buffers_begin(data) + data.size() - 1));
+                        std::string line;
+                        level_output(
+                            _LDEBUG_, "commander got lines \"%s\" (%llu)\n", iss.str().c_str(), iss.str().length());
+                        while (std::getline(iss, line)) {
+                            if (is_empty(line)) {
+                                continue;
+                            }
+                            process_reply(line);
+                        }
                     }
                 }
-            }
-        });
+            },
+            i);
         thr.detach();
     }
 }
@@ -158,7 +172,7 @@ void commander::process_reply(std::string reply) {
         int peer_id;
         int scanned = std::sscanf(reply.c_str(), "cannot add %d\n", &peer_id);
         if (scanned < 1) {
-            level_output(_LERROR_, "commander cannot parse %s\n", reply.c_str());
+            level_output(_LERROR_, "commander cannot parse \"%s\"\n", reply.c_str());
             exit(1);
         }
 
@@ -178,7 +192,11 @@ void commander::process_reply(std::string reply) {
                 mutex.unlock();
             }
         } catch (const json::parse_error& error) {
-            level_output(_LERROR_, "commander cannot parse %s\n", reply.c_str());
+            level_output(_LERROR_,
+                         "commander cannot parse \"%s\" (%x, %llu)\n",
+                         reply.c_str(),
+                         *((int*)(unsigned char*)&reply[0]),
+                         reply.length());
             return;
         }
     }

@@ -1,5 +1,6 @@
 #include "server_data_mgr.hxx"
 #include "req_socket_mgr.hxx"
+#include "utils.hxx"
 #include <iostream>
 
 server_data_mgr::server_data_mgr(json data)
@@ -45,6 +46,7 @@ std::string server_data_mgr::get_endpoint_str(int index) { return endpoints_str[
 
 void server_data_mgr::set_leader(int new_index) {
     mutex.lock();
+    level_output(_LWARNING_, "leader %d -> %d\n", leader_index, new_index);
     leader_index = new_index;
     mutex.unlock();
 
@@ -77,6 +79,7 @@ int server_data_mgr::register_sock_mgr(req_socket_manager* mgr) {
     int seqno = manager_index;
     socket_managers[manager_index] = mgr;
     manager_index++;
+    empty_req_mutex.try_lock();
     mutex.unlock();
     return seqno;
 }
@@ -84,5 +87,8 @@ int server_data_mgr::register_sock_mgr(req_socket_manager* mgr) {
 void server_data_mgr::unregister_sock_mgr(int index) {
     mutex.lock();
     socket_managers.erase(index);
+    if (socket_managers.empty()) empty_req_mutex.unlock();
     mutex.unlock();
 }
+
+void server_data_mgr::wait() { empty_req_mutex.lock(); }
