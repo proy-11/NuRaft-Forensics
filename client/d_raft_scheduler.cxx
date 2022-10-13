@@ -10,7 +10,7 @@ Scheduler::Scheduler(size_t size, const Error error)
     }
 }
 
-void Scheduler::add_task_to_queue(req_socket_manager* mgr) { task_queue.emplace(mgr); }
+void Scheduler::add_task_to_queue(std::shared_ptr<req_socket_manager> mgr) { task_queue.emplace(mgr); }
 
 void Scheduler::schedule(const Tasks t) {
     std::unique_lock<std::mutex> lock(this->mutex);

@@ -16,7 +16,7 @@ class server_data_mgr;
 
 class commander {
 public:
-    commander(json data, server_data_mgr* mgr);
+    commander(json data, std::shared_ptr<server_data_mgr> mgr);
     ~commander();
 
     void deploy();
@@ -29,7 +29,7 @@ public:
     void send_addpeer_command(int j);
 
     void maintain_connection();
-    void process_reply(std::string reply);
+    bool process_reply(std::string reply);
 
     void show_exp_duration();
 
@@ -42,7 +42,8 @@ private:
     json replica_status_dict;
     std::mutex mutex;
     std::recursive_mutex exit_mutex;
-    std::latch *init_latch, *peer_latch;
-    server_data_mgr* server_mgr;
-    std::vector<tcp::socket*> sockets;
+    std::unique_ptr<std::latch> init_latch;
+    std::unique_ptr<std::latch> peer_latch;
+    std::shared_ptr<server_data_mgr> server_mgr;
+    std::vector<std::unique_ptr<tcp::socket>> sockets;
 };

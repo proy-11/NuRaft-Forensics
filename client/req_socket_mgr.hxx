@@ -29,19 +29,18 @@ enum req_status {
 
 class server_data_mgr;
 
-class req_socket_manager {
+class req_socket_manager : public std::enable_shared_from_this<req_socket_manager> {
 public:
     req_socket_manager(std::vector<nuraft::request> requests_,
-                       sync_file_obj* arrive_,
-                       sync_file_obj* depart_,
-                       server_data_mgr* mgr_);
+                       std::shared_ptr<sync_file_obj> arrive_,
+                       std::shared_ptr<sync_file_obj> depart_,
+                       std::shared_ptr<server_data_mgr> mgr_);
 
     ~req_socket_manager();
 
+    void self_register();
     void connect();
-
     void terminate();
-
     void wait_retry();
 
     void auto_submit();
@@ -60,18 +59,18 @@ public:
     const int seqno();
 
 private:
-    std::unordered_map<int, req_status> status;
-    std::unordered_map<int, nuraft::request> requests;
-    std::recursive_mutex mutex;
-    std::mutex connection_waiter;
-    tcp::socket* psock;
-    sync_file_obj* arrive;
-    sync_file_obj* depart;
-    server_data_mgr* server_mgr;
     int my_mgr_index;
     int start;
     int end;
     bool terminated;
+    std::unordered_map<int, req_status> status;
+    std::unordered_map<int, nuraft::request> requests;
+    std::recursive_mutex mutex;
+    std::mutex connection_waiter;
+    std::unique_ptr<tcp::socket> psock;
+    std::shared_ptr<sync_file_obj> arrive;
+    std::shared_ptr<sync_file_obj> depart;
+    std::shared_ptr<server_data_mgr> server_mgr;
 };
 
 #endif

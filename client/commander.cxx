@@ -5,23 +5,17 @@
 #include <sstream>
 #include <thread>
 
-commander::commander(json data, server_data_mgr* mgr)
+commander::commander(json data, std::shared_ptr<server_data_mgr> mgr)
     : setting(data)
     , server_mgr(mgr) {
     ns = setting["server"].size();
-    init_latch = new std::latch(ns);
-    peer_latch = new std::latch(ns - 1);
+    init_latch = std::unique_ptr<std::latch>(new std::latch(ns));
+    peer_latch = std::unique_ptr<std::latch>(new std::latch(ns - 1));
     maintain_connection();
     std::this_thread::sleep_for(std::chrono::milliseconds(setting["connection_wait_ms"]));
 }
 
-commander::~commander() {
-    delete init_latch;
-    delete peer_latch;
-    for (auto psock: sockets) {
-        if (psock) delete psock;
-    }
-}
+commander::~commander() {}
 
 void commander::deploy() {
     level_output(_LINFO_, "Checking initialization...\n");
@@ -67,7 +61,6 @@ void commander::start_experiment_timer() {
 
 void commander::terminate(int error) {
     exit_mutex.lock();
-
     server_mgr->terminate_all_req_mgrs();
 
     std::vector<std::thread> terminaters;
@@ -120,10 +113,11 @@ void commander::maintain_connection() {
     asio::io_service ios;
 
     for (int i = 0; i < ns; i++) {
-        sockets.emplace_back(new tcp::socket(ios));
+        sockets.emplace_back(std::unique_ptr<tcp::socket>(new tcp::socket(ios)));
         std::thread thr(
             [this](int i) -> void {
-                while (true) {
+                bool final_result = false;
+                while (!final_result) {
                     boost::system::error_code ec;
                     sockets[i]->connect(server_mgr->get_endpoint(i), ec);
                     if (ec) {
@@ -153,7 +147,7 @@ void commander::maintain_connection() {
                             if (is_empty(line)) {
                                 continue;
                             }
-                            process_reply(line);
+                            final_result = process_reply(line);
                         }
                     }
                 }
@@ -163,11 +157,13 @@ void commander::maintain_connection() {
     }
 }
 
-void commander::process_reply(std::string reply) {
+bool commander::process_reply(std::string reply) {
     if (_ISSUBSTR_(reply, "init")) {
         init_latch->count_down();
+        return false;
     } else if (_ISSUBSTR_(reply, "added")) {
         peer_latch->count_down();
+        return false;
     } else if (_ISSUBSTR_(reply, "cannot add")) {
         int peer_id;
         int scanned = std::sscanf(reply.c_str(), "cannot add %d\n", &peer_id);
@@ -183,6 +179,7 @@ void commander::process_reply(std::string reply) {
             },
             peer_id);
         thr.detach();
+        return false;
     } else {
         try {
             json obj = json::parse(reply);
@@ -190,14 +187,16 @@ void commander::process_reply(std::string reply) {
                 mutex.lock();
                 replica_status_dict[std::to_string(int(obj["id"]))] = obj;
                 mutex.unlock();
+                return true;
             }
+            return false;
         } catch (const json::parse_error& error) {
             level_output(_LERROR_,
                          "commander cannot parse \"%s\" (%x, %llu)\n",
                          reply.c_str(),
                          *((int*)(unsigned char*)&reply[0]),
                          reply.length());
-            return;
+            return false;
         }
     }
 }

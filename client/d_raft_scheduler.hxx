@@ -11,7 +11,7 @@
 #define D_RAFT_SCHEDULER
 
 using namespace std;
-using Tasks = void (*)(req_socket_manager* mgr);
+using Tasks = void (*)(std::shared_ptr<req_socket_manager> mgr);
 using Error = void (*)(const std::exception&);
 
 namespace d_raft_scheduler {
@@ -23,7 +23,7 @@ public:
 
     Scheduler(const Scheduler&) = delete;
 
-    void add_task_to_queue(req_socket_manager* mgr);
+    void add_task_to_queue(std::shared_ptr<req_socket_manager> mgr);
 
     void schedule(Tasks f);
 
@@ -39,10 +39,15 @@ private:
     size_t count{};
 
     struct Lesser_Index {
-        bool operator()(req_socket_manager* lhs, req_socket_manager* rhs) const { return lhs->seqno() < rhs->seqno(); }
+        bool operator()(std::shared_ptr<req_socket_manager> lhs, std::shared_ptr<req_socket_manager> rhs) const {
+            return lhs->seqno() < rhs->seqno();
+        }
     };
 
-    std::priority_queue<req_socket_manager*, std::vector<req_socket_manager*>, Lesser_Index> task_queue;
+    std::priority_queue<std::shared_ptr<req_socket_manager>,
+                        std::vector<std::shared_ptr<req_socket_manager>>,
+                        Lesser_Index>
+        task_queue;
 };
 }; // namespace d_raft_scheduler
 

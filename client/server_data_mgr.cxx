@@ -6,7 +6,7 @@
 server_data_mgr::server_data_mgr(json data)
     : terminated(false) {
     ns = data.size();
-    leader_index = ns - 1;
+    leader_index = 0;
     manager_index = 0;
 
     if (ns < 1) {
@@ -74,7 +74,7 @@ tcp::endpoint server_data_mgr::get_leader_endpoint() { return endpoints[get_lead
 
 int server_data_mgr::get_leader_id() { return get_id(get_leader()); }
 
-int server_data_mgr::register_sock_mgr(req_socket_manager* mgr) {
+int server_data_mgr::register_sock_mgr(std::shared_ptr<req_socket_manager> mgr) {
     mutex.lock();
     int seqno = manager_index;
     socket_managers[manager_index] = mgr;

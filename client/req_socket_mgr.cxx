@@ -6,17 +6,17 @@
 #define MAX_PENDING_PERIOD 5
 
 req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
-                                       sync_file_obj* arrive_,
-                                       sync_file_obj* depart_,
-                                       server_data_mgr* mgr_)
-    : arrive(arrive_)
+                                       std::shared_ptr<sync_file_obj> arrive_,
+                                       std::shared_ptr<sync_file_obj> depart_,
+                                       std::shared_ptr<server_data_mgr> mgr_)
+    : my_mgr_index(-1)
+    , arrive(arrive_)
     , depart(depart_)
     , server_mgr(mgr_) {
-    my_mgr_index = server_mgr->register_sock_mgr(this);
     terminated = server_mgr->terminated;
 
     asio::io_service io_service;
-    psock = new tcp::socket(io_service);
+    psock = std::unique_ptr<tcp::socket>(new tcp::socket(io_service));
     start = INT_MAX;
     end = -1;
     for (auto& req: requests_) {
@@ -31,9 +31,10 @@ req_socket_manager::~req_socket_manager() {
     level_output(_LWARNING_, "destroying mgr #%d \n", my_mgr_index);
     if (psock != nullptr) {
         psock->close();
-        delete psock;
     }
 }
+
+void req_socket_manager::self_register() { my_mgr_index = server_mgr->register_sock_mgr(shared_from_this()); }
 
 void req_socket_manager::connect() {
     connection_waiter.lock();

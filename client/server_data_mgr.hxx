@@ -33,7 +33,7 @@ public:
     tcp::endpoint get_leader_endpoint();
     int get_leader_id();
 
-    int register_sock_mgr(req_socket_manager* mgr);
+    int register_sock_mgr(std::shared_ptr<req_socket_manager> mgr);
     void unregister_sock_mgr(int index);
 
     void wait();
@@ -48,7 +48,7 @@ private:
     std::vector<int> ids;
     std::vector<tcp::endpoint> endpoints;
     std::vector<std::string> endpoints_str;
-    std::unordered_map<int, req_socket_manager*> socket_managers;
+    std::unordered_map<int, std::shared_ptr<req_socket_manager>> socket_managers;
     int leader_index;
     int manager_index;
 };

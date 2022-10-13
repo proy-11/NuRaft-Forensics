@@ -21,9 +21,10 @@ const int MAX_NUMBER_OF_JOBS = 1000;
 
 json meta_setting;
 
-server_data_mgr* server_mgr = nullptr;
-commander* captain = nullptr;
-sync_file_obj *depart = nullptr, *arrive = nullptr;
+std::shared_ptr<server_data_mgr> server_mgr = nullptr;
+std::shared_ptr<commander> captain = nullptr;
+std::shared_ptr<sync_file_obj> arrive = nullptr;
+std::shared_ptr<sync_file_obj> depart = nullptr;
 
 int _PROG_LEVEL_ = _LINFO_;
 
@@ -63,7 +64,7 @@ void create_server(json data) {
 }
 
 std::mutex submit_req_mutex;
-void submit_batch(req_socket_manager* req_mgr) { req_mgr->auto_submit(); }
+void submit_batch(std::shared_ptr<req_socket_manager> req_mgr) { req_mgr->auto_submit(); }
 
 // void submit_batch(std::vector<nuraft::request> requests) {
 //     req_socket_manager* req_mgr = new req_socket_manager(requests, arrive, depart, server_mgr);
@@ -86,7 +87,7 @@ void experiment(string path) {
         }
         level_output(_LDEBUG_, "sending batch #%d -- #%d\n", requests[0].index, requests.back().index);
 
-        req_socket_manager* mgr = new req_socket_manager(requests, arrive, depart, server_mgr);
+        auto mgr = std::shared_ptr<req_socket_manager>(new req_socket_manager(requests, arrive, depart, server_mgr));
         scheduler.add_task_to_queue(mgr);
         scheduler.schedule(submit_batch);
         auto interval = std::chrono::system_clock::now() + std::chrono::microseconds(delay);
@@ -129,7 +130,7 @@ int main(int argc, const char** argv) {
     std::ifstream f(config_file);
     meta_setting = json::parse(f);
 
-    server_mgr = new server_data_mgr(meta_setting["server"]);
+    server_mgr = std::shared_ptr<server_data_mgr>(new server_data_mgr(meta_setting["server"]));
 
     fsys::path working_dir = meta_setting["working_dir"];
     if (!fsys::exists(working_dir)) {
@@ -139,8 +140,8 @@ int main(int argc, const char** argv) {
         exit(1);
     }
 
-    depart = new sync_file_obj(working_dir / "depart.jsonl");
-    arrive = new sync_file_obj(working_dir / "arrive.jsonl");
+    depart = std::shared_ptr<sync_file_obj>(new sync_file_obj(working_dir / "depart.jsonl"));
+    arrive = std::shared_ptr<sync_file_obj>(new sync_file_obj(working_dir / "arrive.jsonl"));
 
     vector<std::thread> server_creators(0);
 
@@ -157,7 +158,7 @@ int main(int argc, const char** argv) {
     level_output(_LINFO_, "Connecting...\n");
     std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["connection_wait_ms"]));
 
-    captain = new commander(meta_setting, server_mgr);
+    captain = std::shared_ptr<commander>(new commander(meta_setting, server_mgr));
     captain->deploy();
 
     level_output(_LINFO_, "Launching client...\n");
