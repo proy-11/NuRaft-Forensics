@@ -1,3 +1,5 @@
+#pragma once
+
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
@@ -5,6 +7,9 @@
 #include <mutex>
 #include <string>
 #include <vector>
+
+#ifndef D_RAFT_UTILS
+#define D_RAFT_UTILS
 
 #define _ISSUBSTR_(s1, s2) ((s1).find(s2) != std::string::npos)
 #define _C_CYAN_ "\033[36m"              /* Cyan */
@@ -15,34 +20,6 @@
 enum _levels_ { _LERROR_ = 0, _LWARNING_ = 1, _LINFO_ = 2, _LDEBUG_ = 3 };
 
 extern int _PROG_LEVEL_;
-
-class sync_file_obj {
-public:
-    sync_file_obj(std::string path) {
-        fp = std::fopen(path.c_str(), "w");
-        if (errno != 0) {
-            std::fprintf(stderr, "Error: Cannot open file %s\n", path.c_str());
-            exit(1);
-        }
-    };
-    ~sync_file_obj() { std::fclose(fp); };
-
-    void writeline(std::string line) {
-        if (line.empty()) {
-            return;
-        }
-        if (line.back() != '\n') {
-            line += "\n";
-        }
-        mutex.lock();
-        std::fprintf(fp, "%s", line.c_str());
-        mutex.unlock();
-    }
-
-private:
-    FILE* fp;
-    std::mutex mutex;
-};
 
 // class semaphore {
 // public:
@@ -104,3 +81,5 @@ inline uint64_t now_() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
         .count();
 }
+
+#endif

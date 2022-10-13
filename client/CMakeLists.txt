@@ -1,11 +1,11 @@
-add_executable(raft_client
-               raft_client.cxx
-               in_memory_log_store.cxx)
-add_dependencies(raft_client
-                 static_lib)
-target_link_libraries(raft_client
-                      ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
-                      ${LIBRARIES})
+# add_executable(raft_client
+#                raft_client.cxx
+#                in_memory_log_store.cxx)
+# add_dependencies(raft_client
+#                  static_lib)
+# target_link_libraries(raft_client
+#                       ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+#                       ${LIBRARIES})
 
 
 set(Boost_USE_STATIC_LIBS OFF)
@@ -37,27 +37,28 @@ if(Boost_FOUND)
                           ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
                           ${LIBRARIES})
 
-    add_executable(d_raft_client
-                    d_raft_client.cxx
-                    d_raft_scheduler.cxx
-                    workload.cxx
-                    in_memory_log_store.cxx)
-    include_directories(${Boost_INCLUDE_DIRS})
-    add_dependencies(d_raft_client
-                     static_lib)
-    target_link_libraries(d_raft_client
-                          ${Boost_LIBRARIES}
-                          ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
-                          ${LIBRARIES})
+    # add_executable(d_raft_client
+    #                 d_raft_client.cxx
+    #                 d_raft_scheduler.cxx
+    #                 workload.cxx
+    #                 in_memory_log_store.cxx)
+    # include_directories(${Boost_INCLUDE_DIRS})
+    # add_dependencies(d_raft_client
+    #                  static_lib)
+    # target_link_libraries(d_raft_client
+    #                       ${Boost_LIBRARIES}
+    #                       ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+    #                       ${LIBRARIES})
 
     add_executable(d_raft_launcher
                     workload.cxx
                     d_raft_scheduler.cxx
                     d_raft_launcher.cxx
+                    req_socket_mgr.cxx
+                    server_data_mgr.cxx
                     utils.hxx
-                    socket_mgr.hxx
-                    req_socket_mgr.hxx
-                    server_data_mgr.hxx)
+                    sync_file_obj.hxx
+                    commander.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
     add_dependencies(d_raft_launcher
                      static_lib)

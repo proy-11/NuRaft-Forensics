@@ -411,7 +411,8 @@ void handle_message(tcp::socket* psock, std::string request) {
         int log_term = stuff.raft_instance_->get_last_log_term();
         int term = stuff.raft_instance_->get_term();
         int clog_height = stuff.raft_instance_->get_committed_log_idx();
-        json obj = {{"success", true},
+        json obj = {{"id", stuff.server_id_},
+                    {"success", true},
                     {"log_height", log_height},
                     {"log_height_committed", clog_height},
                     {"log_term", log_term},

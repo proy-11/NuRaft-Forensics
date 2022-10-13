@@ -55,8 +55,8 @@ workload::workload(std::string path) {
 
 workload::~workload() {}
 
-void workload::proceed(int step) {
-    if (current >= size) return;
+bool workload::proceed(int step) {
+    if (current >= size) return false;
 
     if (current + step > size) {
         step = size - current;
@@ -64,10 +64,10 @@ void workload::proceed(int step) {
 
     resample_delays(step);
     current += step;
+    return true;
 }
 
-void workload::proceed() { proceed(1); }
-void workload::proceed_batch() { proceed(batch_size); }
+bool workload::proceed_batch() { return proceed(batch_size); }
 
 request workload::get_next_req() { return request(current); }
 

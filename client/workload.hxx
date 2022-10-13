@@ -13,7 +13,7 @@ enum WORKLOAD_TYPE {
 
 struct request {
 public:
-    request(int index);
+    request(int index = -1);
     ~request();
 
     std::string to_json_str();
@@ -26,9 +26,8 @@ class workload {
 public:
     workload(std::string path);
     ~workload();
-    void proceed(int step);
-    void proceed();
-    void proceed_batch();
+    bool proceed(int step = 1);
+    bool proceed_batch();
     request get_next_req();
     std::vector<request> get_next_batch();
     int get_next_delay_us();
