@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "d_raft_state_machine.hxx"
 #include "in_memory_state_mgr.hxx"
+#include "job_queue.hxx"
 #include "libnuraft/json.hpp"
 #include "logger_wrapper.hxx"
 #include "nuraft.hxx"
@@ -29,6 +30,7 @@ limitations under the License.
 #include <map>
 #include <mutex>
 #include <netinet/in.h>
+#include <queue>
 #include <sstream>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -55,19 +57,21 @@ using raft_result = cmd_result<ptr<buffer>>;
 std::mutex service_mutex;
 std::mutex addpeer_mutex;
 std::unordered_map<int, std::shared_ptr<std::mutex>> write_mutex;
-
-// std::atomic_int committed_req_index(-1);
-
 std::unordered_set<int> committed_reqs;
 
+void replicate_request(int sock, std::string request);
+void handle_message(int sock, std::string request);
+void handle_session(int sock);
+
+job_queue jobq(replicate_request);
+
 struct cmargs {
-    cmargs(int id_, std::string ipaddr_, int port_, int cport_, std::string byzantine_) {
-        this->id = id_;
-        this->ipaddr = ipaddr_;
-        this->port = port_;
-        this->cport = cport_;
-        this->byzantine = byzantine_;
-    }
+    cmargs(int id_, std::string ipaddr_, int port_, int cport_, std::string byzantine_)
+        : id(id_)
+        , ipaddr(ipaddr_)
+        , port(port_)
+        , cport(cport_)
+        , byzantine(byzantine_) {}
 
     int id;
     std::string ipaddr;
@@ -184,8 +188,6 @@ void server_list() {
 }
 
 // bool do_cmd(const std::vector<std::string>& tokens);
-void handle_message(int sock, std::string request);
-void handle_session(int sock);
 
 void loop() {
     int server_fd;
@@ -346,36 +348,6 @@ void add_peer(int sock, std::string& request) {
         exit(1);
     }
 
-    // const char *ID_PREFIX = "id=", *EP_PREFIX = "ep=";
-    // size_t idpos = request.find(ID_PREFIX);
-    // size_t eppos = request.find(EP_PREFIX);
-
-    // if (_ISNPOS_(idpos) || _ISNPOS_(eppos)) {
-    //     std::cerr << "cannot find keywords" << std::endl;
-    //     exit(1);
-    // }
-
-    // idpos += std::strlen(ID_PREFIX);
-    // eppos += std::strlen(EP_PREFIX);
-
-    // size_t delim;
-    // for (delim = idpos; delim < request.length() && request[delim] != ' ' && request[delim] != '\n'; delim++) {
-    // }
-    // if (delim >= request.length()) {
-    //     std::cerr << "request format wrong: " << request << std::endl;
-    //     exit(1);
-    // }
-    // int id = std::stoi(request.substr(idpos, delim));
-
-    // for (delim = eppos; delim < request.length() && request[delim] != ' ' && request[delim] != '\n'; delim++) {
-    // }
-    // if (delim >= request.length()) {
-    //     std::cerr << "request format wrong: " << request << std::endl;
-    //     exit(1);
-    // }
-    // std::string endpoint = request.substr(eppos, delim);
-
-    // std::cout << "got id = " << id << ", endpoint = " << endpoint << "\n";
     if (add_server(id, ep)) {
         sync_write(sock, std::string("added ") + std::to_string(id) + "\n");
     } else {
@@ -384,6 +356,7 @@ void add_peer(int sock, std::string& request) {
 }
 
 void replicate_request(int sock, std::string request) {
+    std::cerr << "replicating " << request << std::endl;
     int rid;
     try {
         json req_obj = json::parse(request);
@@ -457,7 +430,10 @@ void handle_message(int sock, std::string request) {
         std::cout << "terminating -- info:\n" << obj.dump() << std::endl;
         exit(0);
     } else {
-        replicate_request(sock, request);
+        if (!jobq.enque(sock, request)) {
+            json reply = {{"success", false}, {"error", "queue is full"}};
+            sync_write(sock, reply.dump() + "\n");
+        }
     }
 }
 
@@ -478,8 +454,9 @@ void handle_session(int sock) {
                 line += std::string(buffer + start, i - start);
                 if (!is_empty(line)) {
                     std::cout << "Got message ~~ " << line << " ~~" << std::endl;
-                    std::thread thr(handle_message, sock, line);
-                    thr.detach();
+                    handle_message(sock, line);
+                    // std::thread thr(handle_message, sock, line);
+                    // thr.detach();
                 }
                 start = i + 1;
                 line.clear();
@@ -557,6 +534,7 @@ int main(int argc, char** argv) {
     std::cout << "    Server ID:    " << stuff.server_id_ << std::endl;
     std::cout << "    Endpoint:     " << stuff.endpoint_ << std::endl;
     init_raft(cs_new<d_raft_state_machine>());
+    jobq.process_jobs();
     loop();
 
     return 0;
