@@ -43,10 +43,11 @@
   "exit_cooldown_ms": 2000,
   "exit_retry_ms": 1000,
   "reconnect_retry_ms": 2000,
+  "socket_wait_ms": 200,
   "connection_wait_ms": 2000,
   "add_server_gap_ms": 500,
   "add_server_retry_ms": 1000,
   "submit_retry_ms": 1000,
-  "exp_duration_ms": 8500,
+  "exp_duration_ms": 850000,
   "working_dir": "benchmark_results/example/"
 }

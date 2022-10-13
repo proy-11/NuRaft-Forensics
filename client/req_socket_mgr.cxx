@@ -10,13 +10,11 @@ req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
                                        std::shared_ptr<sync_file_obj> depart_,
                                        std::shared_ptr<server_data_mgr> mgr_)
     : my_mgr_index(-1)
+    , sock(-1)
     , arrive(arrive_)
     , depart(depart_)
     , server_mgr(mgr_) {
     terminated = server_mgr->terminated;
-
-    asio::io_service io_service;
-    psock = std::unique_ptr<tcp::socket>(new tcp::socket(io_service));
     start = INT_MAX;
     end = -1;
     for (auto& req: requests_) {
@@ -29,21 +27,25 @@ req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
 
 req_socket_manager::~req_socket_manager() {
     level_output(_LWARNING_, "destroying mgr #%d \n", my_mgr_index);
-    if (psock != nullptr) {
-        psock->close();
-    }
+    close(client_fd);
 }
 
 void req_socket_manager::self_register() { my_mgr_index = server_mgr->register_sock_mgr(shared_from_this()); }
 
-void req_socket_manager::connect() {
+void req_socket_manager::self_connect() {
     connection_waiter.lock();
-    psock->connect(server_mgr->get_leader_endpoint());
+
+    int cfd = connect(sock, (sockaddr*)(server_mgr->get_leader_endpoint().get()), sizeof(sockaddr));
+    if (cfd < 0) {
+        level_output(
+            _LERROR_, "Commander connection to %d error: %s\n", server_mgr->get_leader_id(), std::strerror(errno));
+    }
+    client_fd = cfd;
 }
 
 void req_socket_manager::terminate() {
     terminated = true;
-    psock->close();
+    close(client_fd);
 }
 
 inline void req_socket_manager::wait_retry() {
@@ -51,14 +53,12 @@ inline void req_socket_manager::wait_retry() {
 }
 
 void req_socket_manager::auto_submit() {
-    boost::system::error_code ec;
-    connect();
+    self_connect();
     listen();
 
     while (!terminated) {
-        submit_all_requests(ec);
-        if (ec) {
-            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message().c_str());
+        if (!submit_all_requests()) {
+            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, std::strerror(errno));
             wait_retry();
         } else {
             break;
@@ -86,9 +86,8 @@ void req_socket_manager::auto_submit() {
         }
 
         pending_periods++;
-        submit_requests(retries, ec);
-        if (ec) {
-            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message().c_str());
+        if (!submit_requests(retries)) {
+            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, std::strerror(errno));
             continue;
         } else {
             mutex.lock();
@@ -98,9 +97,8 @@ void req_socket_manager::auto_submit() {
             mutex.unlock();
         }
         if (pending_periods >= MAX_PENDING_PERIOD) {
-            submit_requests(pendings, ec);
-            if (ec) {
-                level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message().c_str());
+            if (!submit_requests(pendings)) {
+                level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, std::strerror(errno));
                 continue;
             } else {
                 pending_periods = 0;
@@ -113,31 +111,29 @@ void req_socket_manager::auto_submit() {
 
 void req_socket_manager::listen() {
     std::thread thr([this]() -> void {
-        boost::system::error_code ec;
-
+        char buffer[BUF_SIZE] = {0};
+        std::string line;
         while (!terminated) {
-            asio::streambuf sbuf;
-            asio::read_until(*psock, sbuf, "\n", ec);
-
-            if (ec) {
+            ssize_t bytes_read = recv(sock, buffer, BUF_SIZE, 0);
+            if (bytes_read < 0) {
                 level_output(
-                    _LERROR_, "<Server %2d> Got error %s\n", server_mgr->get_leader_id(), ec.message().c_str());
-                if ((ec == asio::error::bad_descriptor || ec == asio::error::eof) && !terminated) {
-                    connect();
-                    continue;
-                }
-                return;
+                    _LERROR_, "<Server %2d> Got error %s\n", server_mgr->get_leader_id(), std::strerror(errno));
+
+                self_connect();
+                continue;
             }
 
+            int start = 0;
             uint64_t timestamp = now_();
-            auto data = sbuf.data();
-            std::istringstream iss(std::string(asio::buffers_begin(data), asio::buffers_begin(data) + data.size()));
-            std::string line;
-            while (std::getline(iss, line)) {
-                if (is_empty(line)) {
-                    continue;
+            for (int i = 0; i < bytes_read; i++) {
+                if (buffer[i] == '\n') {
+                    line += std::string(buffer + start, i - start);
+                    if (!is_empty(line)) {
+                        process_reply(line, timestamp);
+                    }
+                    start = i + 1;
+                    line.clear();
                 }
-                process_reply(line, timestamp);
             }
         }
     });
@@ -209,15 +205,31 @@ inline void req_socket_manager::set_status(int rid, req_status status_) {
     mutex.unlock();
 }
 
-void req_socket_manager::submit_request(int rid, boost::system::error_code& ec) {
+ssize_t req_socket_manager::submit_msg(std::string msg) {
+    ssize_t sent;
+    ssize_t p = 0, total = msg.length();
+    const char* cmsg = msg.c_str();
+    while (total > 0) {
+        sent = send(sock, cmsg + p, total - p, 0);
+        if (sent < 0) return sent;
+        p += sent;
+    }
+    return p;
+}
+
+bool req_socket_manager::submit_request(int rid) {
     const std::string msg = requests[rid].to_json_str();
     set_status(rid, R_PENDING);
     uint64_t timestamp = now_();
-    psock->write_some(asio::buffer(msg, msg.length()), ec);
-    if (!ec) depart->writeline(json({{"index", rid}, {"time", timestamp}}).dump());
+    if (submit_msg(msg) < 0) {
+        return false;
+    } else {
+        depart->writeline(json({{"index", rid}, {"time", timestamp}}).dump());
+    }
+    return true;
 }
 
-void req_socket_manager::submit_requests(std::vector<int>& rids, boost::system::error_code& ec) {
+bool req_socket_manager::submit_requests(std::vector<int>& rids) {
     mutex.lock();
     std::string msg;
     for (int rid: rids) {
@@ -225,15 +237,18 @@ void req_socket_manager::submit_requests(std::vector<int>& rids, boost::system::
         set_status(rid, R_PENDING);
     }
     uint64_t timestamp = now_();
-    psock->write_some(asio::buffer(msg, msg.length()), ec);
-    if (!ec) {
+    if (submit_msg(msg) < 0) {
+        mutex.unlock();
+        return false;
+    } else {
         for (int rid: rids)
             depart->writeline(json({{"index", rid}, {"time", timestamp}}).dump());
+        mutex.unlock();
+        return true;
     }
-    mutex.unlock();
 }
 
-void req_socket_manager::submit_all_requests(boost::system::error_code& ec) {
+bool req_socket_manager::submit_all_requests() {
     mutex.lock();
     std::string msg;
     for (auto& pair: requests) {
@@ -241,9 +256,14 @@ void req_socket_manager::submit_all_requests(boost::system::error_code& ec) {
         set_status(pair.first, R_PENDING);
     }
     uint64_t timestamp = now_();
-    psock->write_some(asio::buffer(msg, msg.length()), ec);
-    if (!ec) depart->writeline(json({{"index_start", start}, {"index_end", end}, {"time", timestamp}}).dump());
-    mutex.unlock();
+    if (submit_msg(msg) < 0) {
+        mutex.unlock();
+        return false;
+    } else {
+        depart->writeline(json({{"index_start", start}, {"index_end", end}, {"time", timestamp}}).dump());
+        mutex.unlock();
+        return true;
+    }
 }
 
 const int req_socket_manager::seqno() { return my_mgr_index; }

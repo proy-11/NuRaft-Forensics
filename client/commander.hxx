@@ -1,16 +1,13 @@
 #pragma once
 
 #include "libnuraft/json.hpp"
-#include <boost/asio.hpp>
 #include <latch>
 #include <mutex>
 #include <string>
+#include <sys/socket.h>
 #include <vector>
 
-using boost::asio::ip::tcp;
 using nlohmann::json;
-
-namespace asio = boost::asio;
 
 class server_data_mgr;
 
@@ -20,7 +17,7 @@ public:
     ~commander();
 
     void deploy();
-    void send_command(int index, std::string cmd, boost::system::error_code& ec);
+    ssize_t send_command(int index, std::string cmd);
 
     void start_experiment_timer();
 
@@ -45,5 +42,6 @@ private:
     std::unique_ptr<std::latch> init_latch;
     std::unique_ptr<std::latch> peer_latch;
     std::shared_ptr<server_data_mgr> server_mgr;
-    std::vector<std::unique_ptr<tcp::socket>> sockets;
+    std::vector<int> sockets;
+    std::vector<int> client_fds;
 };

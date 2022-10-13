@@ -23,10 +23,18 @@ server_data_mgr::server_data_mgr(json data)
 
         ids.emplace_back(id);
         indices[id] = i;
-        endpoints.emplace_back(tcp::endpoint(asio::ip::address::from_string(data[i]["ip"]), data[i]["cport"]));
+        auto serv_addr = std::shared_ptr<sockaddr_in>(new sockaddr_in());
+        serv_addr->sin_family = AF_INET;
+        serv_addr->sin_port = htons(data[i]["cport"]);
+        if (inet_pton(AF_INET, std::string(data[i]["ip"]).c_str(), &serv_addr->sin_addr) <= 0) {
+            level_output(_LERROR_, "Invalid address: \"%s\"\n", std::string(data[i]["ip"]).c_str());
+            exit(-1);
+        }
+        endpoints.emplace_back(serv_addr);
         endpoints_str.emplace_back(endpoint_wrapper(data[i]["ip"], data[i]["port"]));
     }
 }
+
 server_data_mgr::~server_data_mgr() {}
 
 int server_data_mgr::get_index(int id) {
@@ -40,7 +48,7 @@ int server_data_mgr::get_index(int id) {
 
 int server_data_mgr::get_id(int index) { return ids[index]; }
 
-tcp::endpoint server_data_mgr::get_endpoint(int index) { return endpoints[index]; }
+std::shared_ptr<sockaddr_in> server_data_mgr::get_endpoint(int index) { return endpoints[index]; }
 
 std::string server_data_mgr::get_endpoint_str(int index) { return endpoints_str[index]; }
 
@@ -70,7 +78,7 @@ int server_data_mgr::get_leader() {
     return result;
 }
 
-tcp::endpoint server_data_mgr::get_leader_endpoint() { return endpoints[get_leader()]; }
+std::shared_ptr<sockaddr_in> server_data_mgr::get_leader_endpoint() { return endpoints[get_leader()]; }
 
 int server_data_mgr::get_leader_id() { return get_id(get_leader()); }
 

@@ -6,6 +6,8 @@
 #ifndef D_RAFT_UTILS
 #define D_RAFT_UTILS
 
+#define BUF_SIZE 1024
+
 #define _ISSUBSTR_(s1, s2) ((s1).find(s2) != std::string::npos)
 #define _C_CYAN_ "\033[36m"              /* Cyan */
 #define _C_BOLDRED_ "\033[1m\033[31m"    /* Bold Red */

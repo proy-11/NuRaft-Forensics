@@ -3,19 +3,19 @@
 #include "libnuraft/json.hpp"
 #include "sync_file_obj.hxx"
 #include "workload.hxx"
-#include <boost/asio.hpp>
+
+#include <arpa/inet.h>
 #include <map>
 #include <mutex>
 #include <string>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #ifndef F_REQ_SOCKET_MGR
 #define F_REQ_SOCKET_MGR
 
 #define MAX_PENDING_PERIOD 5
 
-namespace asio = boost::asio;
-using boost::asio::ip::tcp;
-using boost::system::error_code;
 using nlohmann::json;
 
 extern json meta_setting;
@@ -39,7 +39,7 @@ public:
     ~req_socket_manager();
 
     void self_register();
-    void connect();
+    void self_connect();
     void terminate();
     void wait_retry();
 
@@ -52,9 +52,10 @@ public:
 
     void set_status(int rid, req_status status_);
 
-    void submit_request(int rid, boost::system::error_code& ec);
-    void submit_requests(std::vector<int>& rids, boost::system::error_code& ec);
-    void submit_all_requests(boost::system::error_code& ec);
+    ssize_t submit_msg(std::string msg);
+    bool submit_request(int rid);
+    bool submit_requests(std::vector<int>& rids);
+    bool submit_all_requests();
 
     const int seqno();
 
@@ -62,12 +63,13 @@ private:
     int my_mgr_index;
     int start;
     int end;
+    int sock;
+    int client_fd;
     bool terminated;
     std::unordered_map<int, req_status> status;
     std::unordered_map<int, nuraft::request> requests;
     std::recursive_mutex mutex;
     std::mutex connection_waiter;
-    std::unique_ptr<tcp::socket> psock;
     std::shared_ptr<sync_file_obj> arrive;
     std::shared_ptr<sync_file_obj> depart;
     std::shared_ptr<server_data_mgr> server_mgr;

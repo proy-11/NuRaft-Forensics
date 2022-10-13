@@ -19,21 +19,22 @@ limitations under the License.
 #include "in_memory_state_mgr.hxx"
 #include "libnuraft/json.hpp"
 #include "logger_wrapper.hxx"
-
 #include "nuraft.hxx"
-
 #include "test_common.h"
 
-#include <boost/asio.hpp>
-#include <boost/program_options.hpp>
-
 #include <atomic>
+#include <boost/program_options.hpp>
 #include <chrono>
 #include <iostream>
+#include <map>
 #include <mutex>
+#include <netinet/in.h>
 #include <sstream>
+#include <sys/socket.h>
 #include <sys/wait.h>
 #include <thread>
+
+#define BUF_SIZE 65536
 
 #define _ISSUBSTR_(s1, s2) ((s1).find(s2) != std::string::npos)
 #define _ISNPOS_(p) ((p) == std::string::npos)
@@ -41,10 +42,8 @@ limitations under the License.
 using namespace nuraft;
 
 namespace po = boost::program_options;
-namespace asio = boost::asio;
 
 using json = nlohmann::json;
-using boost::asio::ip::tcp;
 
 namespace d_raft_server {
 
@@ -55,7 +54,7 @@ using raft_result = cmd_result<ptr<buffer>>;
 
 std::mutex service_mutex;
 std::mutex addpeer_mutex;
-std::mutex write_mutex;
+std::unordered_map<int, std::shared_ptr<std::mutex>> write_mutex;
 
 // std::atomic_int committed_req_index(-1);
 
@@ -126,26 +125,26 @@ struct server_stuff {
 };
 static server_stuff stuff;
 
-size_t sync_write(tcp::socket* psock, const asio::const_buffers_1& buf) {
-    size_t res = 0;
-    write_mutex.lock();
-    try {
-        res = asio::write(*psock, buf);
-    } catch (boost::system::system_error& error) {
-        std::cerr << error.what();
-    }
-    write_mutex.unlock();
-    return res;
+inline bool is_empty(std::string str) {
+    return std::string(str.c_str()) == "" || str.find_first_not_of(" \0\t\n\v\f\r") == str.npos;
 }
 
-std::string readline(tcp::socket* psock) {
-    std::string message = "";
-    char buf[1] = {'k'};
-    for (; buf[0] != '\n';) {
-        asio::read(*psock, asio::buffer(buf, 1));
-        message += buf[0];
+ssize_t sync_write(int sock, std::string msg) {
+    ssize_t sent;
+    ssize_t p = 0, total = msg.length();
+    const char* cmsg = msg.c_str();
+
+    write_mutex[sock]->lock();
+    while (total > 0) {
+        sent = send(sock, cmsg + p, total - p, 0);
+        if (sent < 0) {
+            write_mutex[sock]->unlock();
+            return sent;
+        }
+        p += sent;
     }
-    return message;
+    write_mutex[sock]->unlock();
+    return p;
 }
 
 bool add_server(int peer_id, std::string endpoint_to_add) {
@@ -185,19 +184,48 @@ void server_list() {
 }
 
 // bool do_cmd(const std::vector<std::string>& tokens);
-void handle_message(tcp::socket* psock, std::string request);
-void handle_session(tcp::socket* psock);
+void handle_message(int sock, std::string request);
+void handle_session(int sock);
 
 void loop() {
-    // char cmd[1000];
-    // std::string prompt = "calc " + std::to_string(stuff.server_id_) + "> ";
+    int server_fd;
+    int new_sock;
+    int opt = 1;
+    int addrlen = sizeof(sockaddr_in);
+    sockaddr_in address;
 
-    asio::io_service io_service;
-    tcp::acceptor acceptor_(io_service, tcp::endpoint(tcp::v4(), stuff.cport_));
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Forcefully attaching socket to the port 8080
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(stuff.cport_);
+
+    if (bind(server_fd, (sockaddr*)&address, sizeof(address)) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(server_fd, 3) < 0) {
+        perror("listen");
+        exit(EXIT_FAILURE);
+    }
+
     while (true) {
-        tcp::socket* psocket_ = new tcp::socket(io_service);
-        acceptor_.accept(*psocket_);
-        std::thread thr(handle_session, psocket_);
+        if ((new_sock = accept(server_fd, (sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
+            perror("accept");
+            exit(errno);
+        }
+        write_mutex[new_sock] = std::shared_ptr<std::mutex>(new std::mutex());
+        std::thread thr(handle_session, new_sock);
         thr.detach();
     }
 }
@@ -306,9 +334,9 @@ void handle_result(ptr<TestSuite::Timer> timer, raft_result& result, ptr<std::ex
               << ", state machine value: " << get_sm()->get_current_value() << std::endl;
 }
 
-void reply_check_init(tcp::socket* psock, std::string& request) { sync_write(psock, asio::buffer("init\n")); }
+void reply_check_init(int sock) { sync_write(sock, "init\n"); }
 
-void add_peer(tcp::socket* psock, std::string& request) {
+void add_peer(int sock, std::string& request) {
     const char *ID_PREFIX = "id=", *EP_PREFIX = "ep=";
     size_t idpos = request.find(ID_PREFIX);
     size_t eppos = request.find(EP_PREFIX);
@@ -341,20 +369,20 @@ void add_peer(tcp::socket* psock, std::string& request) {
     // std::cout << "got id = " << id << ", endpoint = " << endpoint << "\n";
     bool add_result = add_server(id, endpoint);
     if (add_result) {
-        sync_write(psock, asio::buffer(std::string("added ") + std::to_string(id) + "\n"));
+        sync_write(sock, std::string("added ") + std::to_string(id) + "\n");
     } else {
-        sync_write(psock, asio::buffer(std::string("cannot add ") + std::to_string(id) + "\n"));
+        sync_write(sock, std::string("cannot add ") + std::to_string(id) + "\n");
     }
 }
 
-void replicate_request(tcp::socket* psock, std::string request) {
+void replicate_request(int sock, std::string request) {
     int rid;
     try {
         json req_obj = json::parse(request);
         rid = req_obj["index"];
     } catch (json::exception& ec) {
         json reply = {{"success", false}, {"error", ec.what()}};
-        sync_write(psock, asio::buffer(reply.dump() + "\n"));
+        sync_write(sock, reply.dump() + "\n");
         return;
     }
 
@@ -363,7 +391,7 @@ void replicate_request(tcp::socket* psock, std::string request) {
     if (committed_reqs.find(rid) != committed_reqs.end()) {
         service_mutex.unlock();
         json reply = {{"rid", rid}, {"success", false}, {"error", "request already committed"}};
-        sync_write(psock, asio::buffer(reply.dump() + "\n"));
+        sync_write(sock, reply.dump() + "\n");
         return;
     }
 
@@ -385,7 +413,7 @@ void replicate_request(tcp::socket* psock, std::string request) {
         if (rc == cmd_result_code::NOT_LEADER) {
             obj["leader"] = stuff.raft_instance_->get_leader();
         }
-        sync_write(psock, asio::buffer(obj.dump() + "\n"));
+        sync_write(sock, obj.dump() + "\n");
         return;
     }
 
@@ -397,15 +425,15 @@ void replicate_request(tcp::socket* psock, std::string request) {
 
     json obj = {{"rid", rid}, {"success", true}, {"index", top_index}, {"term", top_term}};
     committed_reqs.insert(rid);
-    sync_write(psock, asio::buffer(obj.dump() + "\n"));
+    sync_write(sock, obj.dump() + "\n");
     return;
 }
 
-void handle_message(tcp::socket* psock, std::string request) {
+void handle_message(int sock, std::string request) {
     if (_ISSUBSTR_(request, "check")) {
-        reply_check_init(psock, request);
+        reply_check_init(sock);
     } else if (_ISSUBSTR_(request, "addpeer")) {
-        add_peer(psock, request);
+        add_peer(sock, request);
     } else if (_ISSUBSTR_(request, "exit")) {
         int log_height = stuff.raft_instance_->get_last_log_idx();
         int log_term = stuff.raft_instance_->get_last_log_term();
@@ -417,27 +445,35 @@ void handle_message(tcp::socket* psock, std::string request) {
                     {"log_height_committed", clog_height},
                     {"log_term", log_term},
                     {"term", term}};
-        sync_write(psock, asio::buffer(obj.dump() + "\n"));
+        sync_write(sock, obj.dump() + "\n");
         std::cout << "terminating -- info:\n" << obj.dump() << std::endl;
         exit(0);
     } else {
-        replicate_request(psock, request);
+        replicate_request(sock, request);
     }
 }
 
-void handle_session(tcp::socket* psock) {
-    try {
-        for (;;) {
-            std::string message = readline(psock);
-            std::cout << "Got message \"" << message << "\"" << std::endl;
-
-            std::thread thr(handle_message, psock, message);
-            thr.detach();
-        }
-    } catch (boost::wrapexcept<boost::system::system_error>&) {
-        std::cerr << "client disconnected!" << std::endl;
-        delete psock;
+void handle_session(int sock) {
+    char* buffer = new char[BUF_SIZE];
+    ssize_t bytes_read = recv(sock, buffer, BUF_SIZE, 0);
+    if (bytes_read < 0) {
+        std::cerr << "recv failed with error " << std::strerror(errno) << std::endl;
         return;
+    }
+
+    std::string line;
+    int start = 0;
+    for (int i = 0; i < bytes_read; i++) {
+        if (buffer[i] == '\n') {
+            line += std::string(buffer + start, i - start);
+            if (!is_empty(line)) {
+                std::cout << "Got message \"" << line << "\"" << std::endl;
+                std::thread thr(handle_message, sock, line);
+                thr.detach();
+            }
+            start = i + 1;
+            line.clear();
+        }
     }
 }
 

@@ -33,7 +33,7 @@ void create_server(json data) {
     char cmd[1024];
     std::snprintf(cmd,
                   sizeof(cmd),
-                  "client/d_raft --id %d --ip %s --port %d "
+                  "/Users/weizhaotang/raft/NuRaft-Forensics/build/client/d_raft --id %d --ip %s --port %d "
                   "--cport %d --byz %s 1> server_%d.log 2> err_server_%d.log",
                   id,
                   string(data["ip"]).c_str(),
@@ -75,8 +75,8 @@ void experiment(string path) {
     captain->start_experiment_timer();
     nuraft::workload load(path);
 
-    d_raft_scheduler::Scheduler scheduler(
-        MAX_NUMBER_OF_JOBS, [](const std::exception& e) { level_output(_LERROR_, "Error: %s", e.what()); });
+    // d_raft_scheduler::Scheduler scheduler(
+    //     MAX_NUMBER_OF_JOBS, [](const std::exception& e) { level_output(_LERROR_, "Error: %s", e.what()); });
 
     while (true) {
         int delay = load.get_next_batch_delay_us();
@@ -88,12 +88,15 @@ void experiment(string path) {
         level_output(_LDEBUG_, "sending batch #%d -- #%d\n", requests[0].index, requests.back().index);
 
         auto mgr = std::shared_ptr<req_socket_manager>(new req_socket_manager(requests, arrive, depart, server_mgr));
-        scheduler.add_task_to_queue(mgr);
-        scheduler.schedule(submit_batch);
-        auto interval = std::chrono::system_clock::now() + std::chrono::microseconds(delay);
-        std::this_thread::sleep_until(interval);
+        // scheduler.add_task_to_queue(mgr);
+        // scheduler.schedule(submit_batch);
+        // auto interval = std::chrono::system_clock::now() + std::chrono::microseconds(delay);
+        // std::this_thread::sleep_until(interval);
+        std::thread thr(submit_batch, mgr);
+        thr.detach();
+        std::this_thread::sleep_for(std::chrono::microseconds(delay));
     }
-    scheduler.wait();
+    // scheduler.wait();
     server_mgr->wait();
     captain->terminate();
 }

@@ -22,11 +22,10 @@ void commander::deploy() {
     for (int i = 0; i < ns; i++) {
         std::thread thr(
             [this](int j) -> void {
-                boost::system::error_code ec;
-                send_command(j, "check\n", ec);
-                if (ec) {
-                    level_output(_LERROR_, "Commander check init of #%d failed: %s\n", j, ec.message().c_str());
-                    exit(1);
+                ssize_t sent = send_command(j, "check\n");
+                if (sent < 0) {
+                    level_output(_LERROR_, "Commander check init of #%d failed: %s\n", j, std::strerror(errno));
+                    exit(errno);
                 } else
                     return;
             },
@@ -44,8 +43,16 @@ void commander::deploy() {
     peer_latch->wait();
 }
 
-void commander::send_command(int index, std::string cmd, boost::system::error_code& ec) {
-    sockets[index]->write_some(asio::buffer(cmd, cmd.length()), ec);
+ssize_t commander::send_command(int index, std::string cmd) {
+    ssize_t sent;
+    ssize_t p = 0, total = cmd.length();
+    const char* msg = cmd.c_str();
+    while (total > 0) {
+        sent = send(sockets[index], msg + p, total - p, 0);
+        if (sent < 0) return sent;
+        p += sent;
+    }
+    return p;
 }
 
 void commander::start_experiment_timer() {
@@ -67,12 +74,10 @@ void commander::terminate(int error) {
     for (int i = 0; i < ns; i++) {
         terminaters.emplace_back(
             [this](int i) -> void {
-                boost::system::error_code ec;
                 for (int k = int(setting["exit_retries"]) - 1; k >= 0; k--) {
-                    send_command(i, "exit\n", ec);
-                    if (ec) {
+                    if (send_command(i, "exit\n") < 0) {
                         level_output(
-                            _LERROR_, "Commander terminate #%d failed (%d left): %s.  \n", i, k, ec.message().c_str());
+                            _LERROR_, "Commander terminate #%d failed (%d left): %s. \n", i, k, std::strerror(errno));
                         std::this_thread::sleep_for(std::chrono::milliseconds(setting["exit_retry_ms"]));
                     } else {
                         return;
@@ -98,56 +103,63 @@ void commander::terminate(int error) {
 }
 
 void commander::send_addpeer_command(int j) {
-    boost::system::error_code ec;
     std::ostringstream oss;
     oss << "addpeer id=" << server_mgr->get_id(j) << " ep=" << server_mgr->get_endpoint_str(j) << "\n";
-    send_command(0, oss.str(), ec);
-    if (ec) {
-        level_output(_LERROR_, "Commander add peer #%d failed: %s\n", j, ec.message().c_str());
-        exit(1);
+    if (send_command(0, oss.str()) < 0) {
+        level_output(_LERROR_, "Commander add peer #%d failed: %s\n", j, std::strerror(errno));
+        exit(errno);
     } else
         return;
 }
 
 void commander::maintain_connection() {
-    asio::io_service ios;
+    for (int i = 0; i < ns; i++) {
+        int sock;
+        if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+            printf("\n Socket creation error \n");
+            exit(1);
+        }
+        sockets.emplace_back(sock);
+        client_fds.emplace_back(-1);
+    }
 
     for (int i = 0; i < ns; i++) {
-        sockets.emplace_back(std::unique_ptr<tcp::socket>(new tcp::socket(ios)));
         std::thread thr(
             [this](int i) -> void {
                 bool final_result = false;
                 while (!final_result) {
-                    boost::system::error_code ec;
-                    sockets[i]->connect(server_mgr->get_endpoint(i), ec);
-                    if (ec) {
-                        level_output(_LERROR_, "Commander connection to #%d error: %s\n", i, ec.message().c_str());
+                    int cfd = connect(sockets[i], (sockaddr*)(server_mgr->get_endpoint(i).get()), sizeof(sockaddr));
+                    if (cfd < 0) {
+                        level_output(_LERROR_,
+                                     "Commander connection to %d error: %s\n",
+                                     server_mgr->get_id(i),
+                                     std::strerror(errno));
                         std::this_thread::sleep_for(std::chrono::milliseconds(setting["reconnect_retry_ms"]));
                         continue;
                     }
-
+                    client_fds[i] = cfd;
                     level_output(_LINFO_, "connected server %d\n", server_mgr->get_id(i));
+
+                    char buffer[BUF_SIZE] = {0};
+                    std::string line;
                     while (true) {
-                        asio::streambuf sbuf;
-                        asio::read_until(*sockets[i], sbuf, "\n", ec);
-                        if (ec) {
+                        ssize_t bytes_read = recv(sockets[i], buffer, BUF_SIZE, 0);
+                        if (bytes_read < 0) {
                             level_output(_LERROR_,
                                          "<Server %2d> Cmd got error %s\n",
                                          server_mgr->get_id(i),
-                                         ec.message().c_str());
+                                         std::strerror(errno));
                             break;
                         }
-                        auto data = sbuf.data();
-                        std::istringstream iss(
-                            std::string(asio::buffers_begin(data), asio::buffers_begin(data) + data.size() - 1));
-                        std::string line;
-                        level_output(
-                            _LDEBUG_, "commander got lines \"%s\" (%llu)\n", iss.str().c_str(), iss.str().length());
-                        while (std::getline(iss, line)) {
-                            if (is_empty(line)) {
-                                continue;
+
+                        int start = 0;
+                        for (int i = 0; i < bytes_read; i++) {
+                            if (buffer[i] == '\n') {
+                                line += std::string(buffer + start, i - start);
+                                if (!is_empty(line) && process_reply(line)) final_result = true;
+                                start = i + 1;
+                                line.clear();
                             }
-                            final_result = process_reply(line);
                         }
                     }
                 }
