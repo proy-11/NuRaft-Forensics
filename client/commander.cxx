@@ -47,7 +47,7 @@ ssize_t commander::send_command(int index, std::string cmd) {
     ssize_t sent;
     ssize_t p = 0, total = cmd.length();
     const char* msg = cmd.c_str();
-    while (total > 0) {
+    while (p < total) {
         sent = send(sockets[index], msg + p, total - p, 0);
         if (sent < 0) return sent;
         p += sent;
@@ -108,8 +108,9 @@ void commander::send_addpeer_command(int j) {
     if (send_command(0, oss.str()) < 0) {
         level_output(_LERROR_, "Commander add peer #%d failed: %s\n", j, std::strerror(errno));
         exit(errno);
-    } else
+    } else {
         return;
+    }
 }
 
 void commander::maintain_connection() {
@@ -145,10 +146,11 @@ void commander::maintain_connection() {
                     while (true) {
                         ssize_t bytes_read = recv(sockets[i], buffer, BUF_SIZE, 0);
                         if (bytes_read < 0) {
-                            level_output(_LERROR_,
-                                         "<Server %2d> Cmd got error %s\n",
-                                         server_mgr->get_id(i),
-                                         std::strerror(errno));
+                            if (!final_result)
+                                level_output(_LERROR_,
+                                             "<Server %2d> cmd recv got error %s\n",
+                                             server_mgr->get_id(i),
+                                             std::strerror(errno));
                             break;
                         }
 
@@ -170,6 +172,7 @@ void commander::maintain_connection() {
 }
 
 bool commander::process_reply(std::string reply) {
+    level_output(_LDEBUG_, "cmd processing reply \"%s\"\n", reply.c_str());
     if (_ISSUBSTR_(reply, "init")) {
         init_latch->count_down();
         return false;

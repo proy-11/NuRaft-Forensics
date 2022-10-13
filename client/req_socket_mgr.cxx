@@ -17,11 +17,17 @@ req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
     terminated = server_mgr->terminated;
     start = INT_MAX;
     end = -1;
+
     for (auto& req: requests_) {
         status[req.index] = R_RETRY;
         requests[req.index] = req;
         start = start < req.index ? start : req.index;
         end = end > req.index ? end : req.index;
+    }
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        level_output(_LERROR_, "cannot create socket for reqs #%d -- #%d\n", start, end);
+        exit(1);
     }
 }
 
@@ -151,7 +157,8 @@ void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {
     }
 
     if (!reply_data.contains("rid")) {
-        level_output(_LERROR_, "<Server %2d> %s\n", server_id, reply_data["error"].dump().c_str());
+        level_output(_LERROR_, "<Server %2d> No request id: %s\n", server_id, reply_data.dump().c_str());
+        return;
     }
 
     rid = reply_data["rid"];
@@ -209,7 +216,7 @@ ssize_t req_socket_manager::submit_msg(std::string msg) {
     ssize_t sent;
     ssize_t p = 0, total = msg.length();
     const char* cmsg = msg.c_str();
-    while (total > 0) {
+    while (p < total) {
         sent = send(sock, cmsg + p, total - p, 0);
         if (sent < 0) return sent;
         p += sent;

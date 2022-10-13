@@ -135,7 +135,7 @@ ssize_t sync_write(int sock, std::string msg) {
     const char* cmsg = msg.c_str();
 
     write_mutex[sock]->lock();
-    while (total > 0) {
+    while (p < total) {
         sent = send(sock, cmsg + p, total - p, 0);
         if (sent < 0) {
             write_mutex[sock]->unlock();
@@ -337,38 +337,46 @@ void handle_result(ptr<TestSuite::Timer> timer, raft_result& result, ptr<std::ex
 void reply_check_init(int sock) { sync_write(sock, "init\n"); }
 
 void add_peer(int sock, std::string& request) {
-    const char *ID_PREFIX = "id=", *EP_PREFIX = "ep=";
-    size_t idpos = request.find(ID_PREFIX);
-    size_t eppos = request.find(EP_PREFIX);
+    int id;
+    char ep[50] = {0};
+    int scanned = std::sscanf(request.c_str(), "addpeer id=%d ep=%s", &id, ep);
 
-    if (_ISNPOS_(idpos) || _ISNPOS_(eppos)) {
-        std::cerr << "cannot find keywords" << std::endl;
-        exit(1);
-    }
-
-    idpos += std::strlen(ID_PREFIX);
-    eppos += std::strlen(EP_PREFIX);
-
-    size_t delim;
-    for (delim = idpos; delim < request.length() && request[delim] != ' ' && request[delim] != '\n'; delim++) {
-    }
-    if (delim >= request.length()) {
+    if (scanned != 2) {
         std::cerr << "request format wrong: " << request << std::endl;
         exit(1);
     }
-    int id = std::stoi(request.substr(idpos, delim));
 
-    for (delim = eppos; delim < request.length() && request[delim] != ' ' && request[delim] != '\n'; delim++) {
-    }
-    if (delim >= request.length()) {
-        std::cerr << "request format wrong: " << request << std::endl;
-        exit(1);
-    }
-    std::string endpoint = request.substr(eppos, delim);
+    // const char *ID_PREFIX = "id=", *EP_PREFIX = "ep=";
+    // size_t idpos = request.find(ID_PREFIX);
+    // size_t eppos = request.find(EP_PREFIX);
+
+    // if (_ISNPOS_(idpos) || _ISNPOS_(eppos)) {
+    //     std::cerr << "cannot find keywords" << std::endl;
+    //     exit(1);
+    // }
+
+    // idpos += std::strlen(ID_PREFIX);
+    // eppos += std::strlen(EP_PREFIX);
+
+    // size_t delim;
+    // for (delim = idpos; delim < request.length() && request[delim] != ' ' && request[delim] != '\n'; delim++) {
+    // }
+    // if (delim >= request.length()) {
+    //     std::cerr << "request format wrong: " << request << std::endl;
+    //     exit(1);
+    // }
+    // int id = std::stoi(request.substr(idpos, delim));
+
+    // for (delim = eppos; delim < request.length() && request[delim] != ' ' && request[delim] != '\n'; delim++) {
+    // }
+    // if (delim >= request.length()) {
+    //     std::cerr << "request format wrong: " << request << std::endl;
+    //     exit(1);
+    // }
+    // std::string endpoint = request.substr(eppos, delim);
 
     // std::cout << "got id = " << id << ", endpoint = " << endpoint << "\n";
-    bool add_result = add_server(id, endpoint);
-    if (add_result) {
+    if (add_server(id, ep)) {
         sync_write(sock, std::string("added ") + std::to_string(id) + "\n");
     } else {
         sync_write(sock, std::string("cannot add ") + std::to_string(id) + "\n");
@@ -454,25 +462,28 @@ void handle_message(int sock, std::string request) {
 }
 
 void handle_session(int sock) {
-    char* buffer = new char[BUF_SIZE];
-    ssize_t bytes_read = recv(sock, buffer, BUF_SIZE, 0);
-    if (bytes_read < 0) {
-        std::cerr << "recv failed with error " << std::strerror(errno) << std::endl;
-        return;
-    }
-
     std::string line;
-    int start = 0;
-    for (int i = 0; i < bytes_read; i++) {
-        if (buffer[i] == '\n') {
-            line += std::string(buffer + start, i - start);
-            if (!is_empty(line)) {
-                std::cout << "Got message \"" << line << "\"" << std::endl;
-                std::thread thr(handle_message, sock, line);
-                thr.detach();
+    char* buffer = new char[BUF_SIZE];
+    while (true) {
+        ssize_t bytes_read = recv(sock, buffer, BUF_SIZE, 0);
+        if (bytes_read < 0) {
+            std::cerr << "recv failed with error " << std::strerror(errno) << std::endl;
+            delete[] buffer;
+            return;
+        }
+
+        int start = 0;
+        for (int i = 0; i < bytes_read; i++) {
+            if (buffer[i] == '\n') {
+                line += std::string(buffer + start, i - start);
+                if (!is_empty(line)) {
+                    std::cout << "Got message ~~ " << line << " ~~" << std::endl;
+                    std::thread thr(handle_message, sock, line);
+                    thr.detach();
+                }
+                start = i + 1;
+                line.clear();
             }
-            start = i + 1;
-            line.clear();
         }
     }
 }

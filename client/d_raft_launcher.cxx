@@ -88,6 +88,7 @@ void experiment(string path) {
         level_output(_LDEBUG_, "sending batch #%d -- #%d\n", requests[0].index, requests.back().index);
 
         auto mgr = std::shared_ptr<req_socket_manager>(new req_socket_manager(requests, arrive, depart, server_mgr));
+        mgr->self_register();
         // scheduler.add_task_to_queue(mgr);
         // scheduler.schedule(submit_batch);
         // auto interval = std::chrono::system_clock::now() + std::chrono::microseconds(delay);
