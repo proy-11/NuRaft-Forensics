@@ -37,11 +37,11 @@ int server_data_mgr::get_index(int id) {
     return std::distance(ids.begin(), itr);
 }
 
-inline int server_data_mgr::get_id(int index) { return ids[index]; }
+int server_data_mgr::get_id(int index) { return ids[index]; }
 
-inline tcp::endpoint server_data_mgr::get_endpoint(int index) { return endpoints[index]; }
+tcp::endpoint server_data_mgr::get_endpoint(int index) { return endpoints[index]; }
 
-inline std::string server_data_mgr::get_endpoint_str(int index) { return endpoints_str[index]; }
+std::string server_data_mgr::get_endpoint_str(int index) { return endpoints_str[index]; }
 
 void server_data_mgr::set_leader(int new_index) {
     mutex.lock();
@@ -68,9 +68,9 @@ int server_data_mgr::get_leader() {
     return result;
 }
 
-inline tcp::endpoint server_data_mgr::get_leader_endpoint() { return endpoints[get_leader()]; }
+tcp::endpoint server_data_mgr::get_leader_endpoint() { return endpoints[get_leader()]; }
 
-inline int server_data_mgr::get_leader_id() { return get_id(get_leader()); }
+int server_data_mgr::get_leader_id() { return get_id(get_leader()); }
 
 int server_data_mgr::register_sock_mgr(req_socket_manager* mgr) {
     mutex.lock();

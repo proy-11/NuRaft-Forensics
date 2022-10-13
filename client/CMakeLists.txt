@@ -56,7 +56,7 @@ if(Boost_FOUND)
                     d_raft_launcher.cxx
                     req_socket_mgr.cxx
                     server_data_mgr.cxx
-                    utils.hxx
+                    utils.cxx
                     sync_file_obj.hxx
                     commander.cxx)
     include_directories(${Boost_INCLUDE_DIRS})

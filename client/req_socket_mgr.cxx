@@ -241,4 +241,4 @@ void req_socket_manager::submit_all_requests(boost::system::error_code& ec) {
     mutex.unlock();
 }
 
-inline const int req_socket_manager::seqno() { return my_mgr_index; }
+const int req_socket_manager::seqno() { return my_mgr_index; }
