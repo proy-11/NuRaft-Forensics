@@ -27,7 +27,7 @@ void commander::deploy() {
                 boost::system::error_code ec;
                 send_command(j, "check\n", ec);
                 if (ec) {
-                    level_output(_LERROR_, "Commander check init of #%d failed: %s\n", j, ec.what().c_str());
+                    level_output(_LERROR_, "Commander check init of #%d failed: %s\n", j, ec.message());
                     exit(1);
                 } else
                     return;
@@ -75,7 +75,7 @@ void commander::terminate(int error) {
                     send_command(i, "exit\n", ec);
                     if (ec) {
                         level_output(
-                            _LERROR_, "Commander terminate #%d failed (%d left): %s.  \n", i, k, ec.what().c_str());
+                            _LERROR_, "Commander terminate #%d failed (%d left): %s.  \n", i, k, ec.message());
                         std::this_thread::sleep_for(std::chrono::milliseconds(setting["exit_retry_ms"]));
                     } else {
                         return;
@@ -106,7 +106,7 @@ void commander::send_addpeer_command(int j) {
     oss << "addpeer id=" << server_mgr->get_id(j) << " ep=" << server_mgr->get_endpoint_str(j) << "\n";
     send_command(0, oss.str(), ec);
     if (ec) {
-        level_output(_LERROR_, "Commander add peer #%d failed: %s\n", j, ec.what().c_str());
+        level_output(_LERROR_, "Commander add peer #%d failed: %s\n", j, ec.message());
         exit(1);
     } else
         return;
@@ -122,7 +122,7 @@ void commander::maintain_connection() {
                 boost::system::error_code ec;
                 sockets[i].connect(server_mgr->get_endpoint(i), ec);
                 if (ec) {
-                    level_output(_LERROR_, "Commander connection to #%d error: %s\n", i, ec.what().c_str());
+                    level_output(_LERROR_, "Commander connection to #%d error: %s\n", i, ec.message());
                     std::this_thread::sleep_for(std::chrono::milliseconds(setting["reconnect_retry_ms"]));
                     continue;
                 }
@@ -132,7 +132,7 @@ void commander::maintain_connection() {
                     asio::read_until(sockets[i], sbuf, "\n", ec);
                     if (ec) {
                         level_output(
-                            _LERROR_, "<Server %2d> Cmd got error %s\n", server_mgr->get_id(i), ec.what().c_str());
+                            _LERROR_, "<Server %2d> Cmd got error %s\n", server_mgr->get_id(i), ec.message());
                         break;
                     }
                     auto data = sbuf.data();

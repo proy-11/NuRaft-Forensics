@@ -56,7 +56,7 @@ void req_socket_manager::auto_submit() {
     while (!terminated) {
         submit_all_requests(ec);
         if (ec) {
-            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.what().c_str());
+            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message());
             wait_retry();
         } else {
             break;
@@ -86,7 +86,7 @@ void req_socket_manager::auto_submit() {
         pending_periods++;
         submit_requests(retries, ec);
         if (ec) {
-            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.what().c_str());
+            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message());
             continue;
         } else {
             mutex.lock();
@@ -98,7 +98,7 @@ void req_socket_manager::auto_submit() {
         if (pending_periods >= MAX_PENDING_PERIOD) {
             submit_requests(pendings, ec);
             if (ec) {
-                level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.what().c_str());
+                level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, ec.message());
                 continue;
             } else {
                 pending_periods = 0;
@@ -118,7 +118,7 @@ void req_socket_manager::listen() {
             asio::read_until(*psock, sbuf, "\n", ec);
 
             if (ec) {
-                level_output(_LERROR_, "<Server %2d> Got error %s\n", server_mgr->get_leader_id(), ec.what().c_str());
+                level_output(_LERROR_, "<Server %2d> Got error %s\n", server_mgr->get_leader_id(), ec.message());
                 if ((ec == asio::error::bad_descriptor || ec == asio::error::eof) && !terminated) {
                     connect();
                     continue;
