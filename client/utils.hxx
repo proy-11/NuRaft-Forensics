@@ -6,6 +6,9 @@
 #include <string>
 #include <vector>
 
+#ifndef D_RAFT_UTILS
+#define D_RAFT_UTILS
+
 #define _ISSUBSTR_(s1, s2) ((s1).find(s2) != std::string::npos)
 #define _C_CYAN_ "\033[36m"              /* Cyan */
 #define _C_BOLDRED_ "\033[1m\033[31m"    /* Bold Red */
@@ -104,3 +107,5 @@ inline uint64_t now_() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch())
         .count();
 }
+
+#endif

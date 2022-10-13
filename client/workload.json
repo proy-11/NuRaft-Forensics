@@ -1,5 +1,6 @@
 {
     "size": 1000,
     "freq": 200.0,
-    "type": "UNIF"
+    "type": "UNIF",
+    "batch_size": 5
 }

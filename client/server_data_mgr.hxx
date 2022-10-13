@@ -17,20 +17,20 @@ inline std::string endpoint_wrapper(std::string ip, int port) { return ip + ":" 
 
 class server_data_mgr {
 public:
-    server_data_mgr(json data) {
-        for (int i = 0; i < data.size(); i++) {
-            int id = data[i]["id"];
+    server_data_mgr(nlohmann::json data) {
+        for (size_t i = 0; i < data["server"].size(); i++) {
+            int id = data["server"][i]["id"];
             if (indices.find(id) != indices.end()) {
                 std::string error_message = "ID conflict: " + std::to_string(id);
                 throw std::logic_error(error_message.c_str());
             }
-
             ids.emplace_back(id);
             indices[id] = i;
-            endpoints.emplace_back(tcp::endpoint(asio::ip::address::from_string(data[i]["ip"]), data[i]["cport"]));
-            endpoints_str.emplace_back(endpoint_wrapper(data[i]["ip"], data[i]["port"]));
+            endpoints.emplace_back(tcp::endpoint(asio::ip::address::from_string(data["server"][i]["ip"]), data["server"][i]["cport"]));
+            endpoints_str.emplace_back(endpoint_wrapper(data["server"][i]["ip"], data["server"][i]["port"]));
         }
-        leader_index = data.size() - 1;
+        leader_index = 0; //data["server"].size() - 1;
+        cout << "server data mgr ctor leader_index: " << leader_index << endl;
         manager_index = 0;
     }
     ~server_data_mgr() {}
@@ -53,6 +53,7 @@ public:
     void set_leader(int new_index) {
         mutex.lock();
         leader_index = new_index;
+        cout << "set_leader " << leader_index << endl;
         mutex.unlock();
 
         for (auto pair: socket_managers) {
@@ -64,6 +65,7 @@ public:
         int result;
         mutex.lock();
         result = leader_index;
+        cout << "get_leader leader_index : " << leader_index << "\n";
         mutex.unlock();
         return result;
     }
@@ -77,6 +79,7 @@ public:
         socket_managers[manager_index] = mgr;
         manager_index++;
         mutex.unlock();
+        return 1;
     }
 
     inline void unregister_sock_mgr(int index) {

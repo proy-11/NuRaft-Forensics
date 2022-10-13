@@ -9,6 +9,9 @@
 #include <string>
 #include <thread>
 
+#ifndef REQ_SOCK_MGR
+#define REQ_SOCK_MGR
+
 #define MAX_BUF_SIZE 65536
 #define MAX_PENDING_PERIOD 5
 
@@ -62,7 +65,8 @@ public:
 
         int pending_periods = 0;
         while (true) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
+            // std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["missing_leader_retry_ms"]));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
             std::vector<int> retries(0), pendings(0);
             mutex.lock();
@@ -91,15 +95,19 @@ public:
 
     void listen() {
         std::thread thr([this]() -> void {
-            error_code ec;
+            boost::system::error_code ec;
 
             while (true) {
                 asio::streambuf sbuf;
                 asio::read_until(*psock, sbuf, "\n", ec);
 
                 if (ec) {
-                    level_output(_LERROR_, "<Server %2d> Got error %s\n", ec.what());
-                    if (ec == asio::error::bad_descriptor) {
+                    level_output(_LERROR_, "<Server %2d> Got error message %s\n",  this->server_id, ec.message());
+                    // if (ec == asio::error::bad_descriptor || ec == asio::error::broken_pipe) {
+                    if (ec != asio::error::not_connected) {
+                        int leader_id = server_mgr->get_leader_id();
+                        int leader = server_mgr->get_index(leader_id);
+                        server_mgr->set_leader(leader);
                         connect();
                         continue;
                     }
@@ -164,8 +172,10 @@ public:
                     for (auto pair: status) {
                         if (pair.second == R_PENDING) set_status(pair.first, R_RETRY);
                     }
-                    mutex.unlock();
                     server_mgr->set_leader(leader);
+                    cout << "Set leader #" << leader << "\n";
+                    mutex.unlock();
+                   
                     level_output(_LWARNING_, "leader %d -> %d\n", server_mgr->get_leader_id(), leader_id);
                 } else
                     set_status(rid, R_RETRY);
@@ -209,7 +219,13 @@ public:
             msg += pair.second.to_json_str();
             set_status(pair.first, R_PENDING);
         }
-        psock->write_some(asio::buffer(msg, msg.length()));
+        try {
+            psock->write_some(asio::buffer(msg, msg.length()));
+        }
+        catch( const boost::system::system_error& ex ) 
+        {
+            cout << "Exception " << ex.code();
+        }
         mutex.unlock();
     }
 
@@ -220,8 +236,10 @@ private:
     std::recursive_mutex mutex;
     std::mutex connection_waiter;
     tcp::socket* psock;
-    sync_file_obj* depart;
     sync_file_obj* arrive;
+    sync_file_obj* depart;
     server_data_mgr* server_mgr;
     int my_mgr_index;
 };
+
+#endif

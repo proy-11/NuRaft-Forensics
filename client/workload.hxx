@@ -13,6 +13,7 @@ enum WORKLOAD_TYPE {
 
 struct request {
 public:
+    request();
     request(int index);
     ~request();
 
@@ -30,13 +31,15 @@ public:
     void proceed();
     void proceed_batch();
     request get_next_req();
-    std::vector<request> get_next_batch();
+    std::vector<request> get_next_batch(int batch);
     int get_next_delay_us();
     int get_next_batch_delay_us();
-
+    // int get_current_batch();
+    int get_total_num_batch();
     void resample_delays(int step);
     int sample_single_delay_us();
 
+    std::string to_jsonl(std::vector<nuraft::request>& requests);
 private:
     WORKLOAD_TYPE type;
     int size;
@@ -45,9 +48,8 @@ private:
     int delay;
     std::vector<int> batch_delay;
     float freq;
+    // int current_batch;
 };
-
-std::string to_jsonl(std::vector<request> requests);
 } // namespace nuraft
 
 #endif // D_RAFT_WORKLOAD
