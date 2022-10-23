@@ -5,6 +5,7 @@
 #include "workload.hxx"
 
 #include <arpa/inet.h>
+#include <atomic>
 #include <map>
 #include <mutex>
 #include <string>
@@ -44,7 +45,7 @@ public:
     void wait_retry();
 
     void auto_submit();
-    void listen();
+    std::shared_ptr<std::thread> listen();
 
     void process_reply(std::string reply, uint64_t timestamp);
 
@@ -65,7 +66,7 @@ private:
     int end;
     int sock;
     int client_fd;
-    bool terminated;
+    std::atomic_bool terminated;
     std::unordered_map<int, req_status> status;
     std::unordered_map<int, nuraft::request> requests;
     std::recursive_mutex mutex;

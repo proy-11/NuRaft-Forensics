@@ -66,11 +66,6 @@ void create_server(json data) {
 std::mutex submit_req_mutex;
 void submit_batch(std::shared_ptr<req_socket_manager> req_mgr) { req_mgr->auto_submit(); }
 
-// void submit_batch(std::vector<nuraft::request> requests) {
-//     req_socket_manager* req_mgr = new req_socket_manager(requests, arrive, depart, server_mgr);
-//     req_mgr->auto_submit();
-// }
-
 void experiment(string path) {
     captain->start_experiment_timer();
     nuraft::workload load(path);
@@ -112,6 +107,7 @@ void signal_handler(int signal) {
     if (captain != nullptr) {
         captain->terminate(signal);
     } else {
+        level_output(_LWARNING_, "failed to find commander, exit without proper termination\n");
         exit(signal);
     }
 }

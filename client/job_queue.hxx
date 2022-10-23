@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <mutex>
 #include <queue>
 #include <semaphore>
 #include <string>
@@ -24,7 +25,8 @@ public:
 
 private:
     job_func jfunc;
-    std::unique_ptr<semaphore<MAX_THREADS>> sem_threads;
-    std::unique_ptr<semaphore<MAX_QUEUE_LEN>> sem_jobs;
+    std::mutex mutex;
+    std::shared_ptr<semaphore<MAX_THREADS>> sem_threads;
+    std::shared_ptr<semaphore<MAX_QUEUE_LEN>> sem_jobs;
     std::queue<std::pair<int, std::string>> jobs;
 };

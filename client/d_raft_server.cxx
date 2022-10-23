@@ -133,6 +133,29 @@ inline bool is_empty(std::string str) {
     return std::string(str.c_str()) == "" || str.find_first_not_of(" \0\t\n\v\f\r") == str.npos;
 }
 
+std::string escape_quote(std::string str) {
+    char* buf = new char[2 * str.length() + 1];
+    if (buf == NULL) {
+        return "";
+    }
+
+    size_t p = 0;
+    for (const char c: str) {
+        if (c == '"') {
+            buf[p] = '\\';
+            buf[p + 1] = '"';
+            p += 2;
+        } else {
+            buf[p] = c;
+            p += 1;
+        }
+    }
+    buf[p] = '\0';
+    std::string res(buf);
+    delete[] buf;
+    return res;
+}
+
 ssize_t sync_write(int sock, std::string msg) {
     ssize_t sent;
     ssize_t p = 0, total = msg.length();
@@ -186,8 +209,6 @@ void server_list() {
         std::cout << std::endl;
     }
 }
-
-// bool do_cmd(const std::vector<std::string>& tokens);
 
 void loop() {
     int server_fd;
@@ -356,14 +377,15 @@ void add_peer(int sock, std::string& request) {
 }
 
 void replicate_request(int sock, std::string request) {
-    std::cerr << "replicating " << request << std::endl;
     int rid;
     try {
         json req_obj = json::parse(request);
         rid = req_obj["index"];
     } catch (json::exception& ec) {
-        json reply = {{"success", false}, {"error", ec.what()}};
-        sync_write(sock, reply.dump() + "\n");
+        std::string errmsg = "{\"success\": false, \"error\": \"";
+        errmsg += escape_quote(request);
+        errmsg += "\"}\n";
+        sync_write(sock, errmsg);
         return;
     }
 
@@ -455,12 +477,13 @@ void handle_session(int sock) {
                 if (!is_empty(line)) {
                     std::cout << "Got message ~~ " << line << " ~~" << std::endl;
                     handle_message(sock, line);
-                    // std::thread thr(handle_message, sock, line);
-                    // thr.detach();
                 }
                 start = i + 1;
                 line.clear();
             }
+        }
+        if (start != bytes_read) {
+            line += std::string(buffer + start, bytes_read - start);
         }
     }
 }

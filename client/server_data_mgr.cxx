@@ -95,6 +95,7 @@ int server_data_mgr::register_sock_mgr(std::shared_ptr<req_socket_manager> mgr) 
 void server_data_mgr::unregister_sock_mgr(int index) {
     mutex.lock();
     socket_managers.erase(index);
+    level_output(_LWARNING_, "Unregistered mgr #%d\n", index);
     if (socket_managers.empty()) empty_req_mutex.unlock();
     mutex.unlock();
 }

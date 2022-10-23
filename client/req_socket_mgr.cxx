@@ -31,10 +31,7 @@ req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
     }
 }
 
-req_socket_manager::~req_socket_manager() {
-    level_output(_LWARNING_, "destroying mgr #%d \n", my_mgr_index);
-    close(client_fd);
-}
+req_socket_manager::~req_socket_manager() { level_output(_LWARNING_, "destroying mgr #%d \n", my_mgr_index); }
 
 void req_socket_manager::self_register() { my_mgr_index = server_mgr->register_sock_mgr(shared_from_this()); }
 
@@ -50,8 +47,10 @@ void req_socket_manager::self_connect() {
 }
 
 void req_socket_manager::terminate() {
+    level_output(_LWARNING_, "trying to terminate mgr #%d \n", my_mgr_index);
     terminated = true;
     close(client_fd);
+    close(sock);
 }
 
 inline void req_socket_manager::wait_retry() {
@@ -60,7 +59,7 @@ inline void req_socket_manager::wait_retry() {
 
 void req_socket_manager::auto_submit() {
     self_connect();
-    listen();
+    auto listener = listen();
 
     while (!terminated) {
         if (!submit_all_requests()) {
@@ -112,15 +111,18 @@ void req_socket_manager::auto_submit() {
         }
     }
 
+    terminate();
+    listener->join();
     server_mgr->unregister_sock_mgr(my_mgr_index);
 }
 
-void req_socket_manager::listen() {
-    std::thread thr([this]() -> void {
+std::shared_ptr<std::thread> req_socket_manager::listen() {
+    return std::shared_ptr<std::thread>(new std::thread([this]() -> void {
         char buffer[BUF_SIZE] = {0};
         std::string line;
         while (!terminated) {
             ssize_t bytes_read = recv(sock, buffer, BUF_SIZE, 0);
+            if (terminated) break;
             if (bytes_read < 0) {
                 level_output(
                     _LERROR_, "<Server %2d> Got error %s\n", server_mgr->get_leader_id(), std::strerror(errno));
@@ -141,18 +143,23 @@ void req_socket_manager::listen() {
                     line.clear();
                 }
             }
+            if (start != bytes_read) {
+                line += std::string(buffer + start, bytes_read - start);
+            }
         }
-    });
-    thr.detach();
+        level_output(_LWARNING_, "mgr #%d stopped listening\n", my_mgr_index);
+    }));
 }
 
 void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {
+    if (terminated) return;
+
     int rid, server_id = server_mgr->get_leader_id();
     json reply_data;
     try {
         reply_data = json::parse(reply);
     } catch (json::exception& ec) {
-        level_output(_LERROR_, "<Server %2d> Got invalid reply \"%s\"\n", server_id, ec.what());
+        level_output(_LERROR_, "<Server %2d> Got invalid reply ~~ %s ~~\n", server_id, reply.c_str());
         return;
     }
 
@@ -165,6 +172,11 @@ void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {
     if (reply_data["success"]) {
         set_status(rid, R_COMMITTED);
         arrive->writeline(json({{"index", rid}, {"time", timestamp}}).dump());
+        return;
+    }
+
+    if (_ISSUBSTR_(std::string(reply_data["error"]), "request already committed")) {
+        set_status(rid, R_COMMITTED);
         return;
     }
 
