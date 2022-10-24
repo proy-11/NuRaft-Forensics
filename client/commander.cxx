@@ -4,6 +4,7 @@
 #include <chrono>
 #include <sstream>
 #include <thread>
+#include <csignal>
 
 commander::commander(json data, std::shared_ptr<server_data_mgr> mgr)
     : setting(data)

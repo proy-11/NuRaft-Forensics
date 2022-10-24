@@ -6,6 +6,7 @@
 #include <semaphore>
 #include <string>
 #include <thread>
+#include <memory>
 
 #define MAX_THREADS 1024
 #define MAX_QUEUE_LEN 300000
