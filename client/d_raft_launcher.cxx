@@ -31,10 +31,12 @@ int _PROG_LEVEL_ = _LINFO_;
 void create_server(json data) {
     int id = data["id"];
     char cmd[1024];
+    std::string current_path = std::filesystem::current_path();
     std::snprintf(cmd,
                   sizeof(cmd),
-                  "/Users/weizhaotang/raft/NuRaft-Forensics/build/client/d_raft --id %d --ip %s --port %d "
+                  "%s/client/d_raft --id %d --ip %s --port %d "
                   "--cport %d --byz %s 1> server_%d.log 2> err_server_%d.log",
+                  current_path.c_str(),
                   id,
                   string(data["ip"]).c_str(),
                   int(data["port"]),
