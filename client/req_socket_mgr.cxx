@@ -183,6 +183,11 @@ void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {
     level_output(
         _LERROR_, "<Server %2d> request #%d failed (%s)\n", server_id, rid, reply_data["error"].dump().c_str());
 
+    if (_ISSUBSTR_(std::string(reply_data["error"]), "queue is full")) {
+        level_output(_LERROR_, "Queue is full, dropping request #%d\n", rid);
+        set_status(rid, R_ERROR);
+    }
+
     if (!reply_data.contains("ec")) {
         set_status(rid, R_ERROR);
         return;

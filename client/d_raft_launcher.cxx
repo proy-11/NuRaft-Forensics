@@ -117,6 +117,7 @@ void signal_handler(int signal) {
 int main(int argc, const char** argv) {
     std::signal(SIGINT, signal_handler);
     std::signal(SIGABRT, signal_handler);
+    std::signal(SIGPIPE, signal_handler);
 
     string config_file = "";
     if (argc == 2) {
