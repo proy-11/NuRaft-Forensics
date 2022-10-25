@@ -453,7 +453,18 @@ void handle_message(int sock, std::string request) {
         exit(0);
     } else {
         if (!jobq.enque(sock, request)) {
-            json reply = {{"success", false}, {"error", "queue is full"}};
+            int rid;
+            try {
+                json req_obj = json::parse(request);
+                rid = req_obj["index"];
+            } catch (json::exception& ec) {
+                std::string errmsg = "{\"success\": false, \"error\": \"";
+                errmsg += escape_quote(request);
+                errmsg += "\"}\n";
+                sync_write(sock, errmsg);
+                return;
+            }
+            json reply = {{"rid", rid}, {"success", false}, {"error", "queue is full"}};
             sync_write(sock, reply.dump() + "\n");
         }
     }
