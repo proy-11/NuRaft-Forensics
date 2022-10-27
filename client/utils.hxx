@@ -14,7 +14,7 @@
 #define _C_BOLDYELLOW_ "\033[1m\033[33m" /* Bold Yellow */
 #define _C_RESET_ "\033[0m"
 
-enum _levels_ { _LERROR_ = 0, _LWARNING_ = 1, _LINFO_ = 2, _LDEBUG_ = 3 };
+enum _levels_ { _LERROR_ = 0, _LWARNING_ = 2, _LINFO_ = 1, _LDEBUG_ = 3 };
 
 extern int _PROG_LEVEL_;
 

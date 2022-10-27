@@ -6,12 +6,47 @@
 
 #define MAX_PENDING_PERIOD 5
 
+void* listening_task(void* arg) {
+    req_socket_manager* mgr = (req_socket_manager*)arg;
+    char buffer[BUF_SIZE] = {0};
+    std::string line;
+    while (!mgr->terminated) {
+        ssize_t bytes_read = recv(mgr->sock, buffer, BUF_SIZE, 0);
+        if (mgr->terminated) break;
+        if (bytes_read < 0) {
+            level_output(
+                _LWARNING_, "<Server %2d> Got error %s\n", mgr->server_mgr->get_leader_id(), std::strerror(errno));
+
+            mgr->self_connect();
+            continue;
+        }
+
+        int start = 0;
+        uint64_t timestamp = now_();
+        for (int i = 0; i < bytes_read; i++) {
+            if (buffer[i] == '\n') {
+                line += std::string(buffer + start, i - start);
+                if (!is_empty(line)) {
+                    mgr->process_reply(line, timestamp);
+                }
+                start = i + 1;
+                line.clear();
+            }
+        }
+        if (start != bytes_read) {
+            line += std::string(buffer + start, bytes_read - start);
+        }
+    }
+    pthread_exit(NULL);
+}
+
 req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
                                        std::shared_ptr<sync_file_obj> arrive_,
                                        std::shared_ptr<sync_file_obj> depart_,
                                        std::shared_ptr<server_data_mgr> mgr_)
     : my_mgr_index(-1)
     , sock(-1)
+    , listener_tid(-1)
     , arrive(arrive_)
     , depart(depart_)
     , server_mgr(mgr_) {
@@ -32,7 +67,7 @@ req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
     }
 }
 
-req_socket_manager::~req_socket_manager() { level_output(_LWARNING_, "destroying mgr #%d \n", my_mgr_index); }
+req_socket_manager::~req_socket_manager() { level_output(_LWARNING_, "destroyed mgr #%d \n", my_mgr_index); }
 
 void req_socket_manager::self_register() { my_mgr_index = server_mgr->register_sock_mgr(shared_from_this()); }
 
@@ -48,8 +83,8 @@ void req_socket_manager::self_connect() {
 }
 
 void req_socket_manager::terminate() {
-    level_output(_LWARNING_, "trying to terminate mgr #%d \n", my_mgr_index);
     terminated = true;
+    pthread_cancel(listener_thread);
     close(client_fd);
     close(sock);
 }
@@ -60,11 +95,11 @@ inline void req_socket_manager::wait_retry() {
 
 void req_socket_manager::auto_submit() {
     self_connect();
-    auto listener = listen();
+    listen();
 
     while (!terminated) {
         if (!submit_all_requests()) {
-            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, std::strerror(errno));
+            level_output(_LWARNING_, "mgr #%d cannot send: %s\n", my_mgr_index, std::strerror(errno));
             wait_retry();
         } else {
             break;
@@ -93,7 +128,7 @@ void req_socket_manager::auto_submit() {
 
         pending_periods++;
         if (!submit_requests(retries)) {
-            level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, std::strerror(errno));
+            level_output(_LWARNING_, "mgr #%d cannot send: %s\n", my_mgr_index, std::strerror(errno));
             continue;
         } else {
             mutex.lock();
@@ -104,7 +139,7 @@ void req_socket_manager::auto_submit() {
         }
         if (pending_periods >= MAX_PENDING_PERIOD) {
             if (!submit_requests(pendings)) {
-                level_output(_LERROR_, "mgr #%d cannot send: %s\n", my_mgr_index, std::strerror(errno));
+                level_output(_LWARNING_, "mgr #%d cannot send: %s\n", my_mgr_index, std::strerror(errno));
                 continue;
             } else {
                 pending_periods = 0;
@@ -113,42 +148,19 @@ void req_socket_manager::auto_submit() {
     }
 
     terminate();
-    listener->join();
+    if (listener_thread) {
+        void* ret;
+        if (pthread_join(listener_thread, &ret) != 0) {
+            level_output(_LERROR_, "mgr #%d failed to join listener thread\n", my_mgr_index);
+        }
+    }
     server_mgr->unregister_sock_mgr(my_mgr_index);
 }
 
-std::shared_ptr<std::thread> req_socket_manager::listen() {
-    return std::shared_ptr<std::thread>(new std::thread([this]() -> void {
-        char buffer[BUF_SIZE] = {0};
-        std::string line;
-        while (!terminated) {
-            ssize_t bytes_read = recv(sock, buffer, BUF_SIZE, 0);
-            if (terminated) break;
-            if (bytes_read < 0) {
-                level_output(
-                    _LERROR_, "<Server %2d> Got error %s\n", server_mgr->get_leader_id(), std::strerror(errno));
-
-                self_connect();
-                continue;
-            }
-
-            int start = 0;
-            uint64_t timestamp = now_();
-            for (int i = 0; i < bytes_read; i++) {
-                if (buffer[i] == '\n') {
-                    line += std::string(buffer + start, i - start);
-                    if (!is_empty(line)) {
-                        process_reply(line, timestamp);
-                    }
-                    start = i + 1;
-                    line.clear();
-                }
-            }
-            if (start != bytes_read) {
-                line += std::string(buffer + start, bytes_read - start);
-            }
-        }
-    }));
+void req_socket_manager::listen() {
+    if (pthread_create(&listener_thread, NULL, listening_task, this) != 0) {
+        level_output(_LERROR_, "mgr #%d failed to create listener thread\n", my_mgr_index);
+    }
 }
 
 void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {
@@ -159,12 +171,12 @@ void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {
     try {
         reply_data = json::parse(reply);
     } catch (json::exception& ec) {
-        level_output(_LERROR_, "<Server %2d> Got invalid reply ~~ %s ~~\n", server_id, reply.c_str());
+        level_output(_LWARNING_, "<Server %2d> Got invalid reply ~~ %s ~~\n", server_id, reply.c_str());
         return;
     }
 
     if (!reply_data.contains("rid")) {
-        level_output(_LERROR_, "<Server %2d> No request id: %s\n", server_id, reply_data.dump().c_str());
+        level_output(_LWARNING_, "<Server %2d> No request id: %s\n", server_id, reply_data.dump().c_str());
         return;
     }
 
@@ -181,7 +193,7 @@ void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {
     }
 
     level_output(
-        _LERROR_, "<Server %2d> request #%d failed (%s)\n", server_id, rid, reply_data["error"].dump().c_str());
+        _LWARNING_, "<Server %2d> request #%d failed (%s)\n", server_id, rid, reply_data["error"].dump().c_str());
 
     if (_ISSUBSTR_(std::string(reply_data["error"]), "queue is full")) {
         set_status(rid, R_ERROR);
@@ -198,7 +210,8 @@ void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {
     switch (ec) {
     case nuraft::cmd_result_code::NOT_LEADER:
         if (!reply_data.contains("leader")) {
-            level_output(_LERROR_, "<Server %2d> request #%d: NOT_LEADER without reporting leader. \n", server_id, rid);
+            level_output(
+                _LWARNING_, "<Server %2d> request #%d: NOT_LEADER without reporting leader. \n", server_id, rid);
             return;
         } else {
             int leader_id = reply_data["leader"];
@@ -233,8 +246,8 @@ ssize_t req_socket_manager::submit_msg(std::string msg) {
     ssize_t p = 0, total = msg.length();
     const char* cmsg = msg.c_str();
     while (p < total) {
-        sent = send(sock, cmsg + p, total - p, 0);
-        if (sent < 0) return sent;
+        sent = send(sock, cmsg + p, total - p, MSG_NOSIGNAL);
+        if (errno || sent < 0) return sent;
         p += sent;
     }
     return p;

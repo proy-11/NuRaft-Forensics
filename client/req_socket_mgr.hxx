@@ -6,8 +6,10 @@
 
 #include <arpa/inet.h>
 #include <atomic>
+#include <boost/thread.hpp>
 #include <map>
 #include <mutex>
+#include <pthread.h>
 #include <string>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -45,7 +47,7 @@ public:
     void wait_retry();
 
     void auto_submit();
-    std::shared_ptr<std::thread> listen();
+    void listen();
 
     void process_reply(std::string reply, uint64_t timestamp);
 
@@ -60,12 +62,14 @@ public:
 
     const int seqno();
 
-private:
+    // private:
     int my_mgr_index;
     int start;
     int end;
     int sock;
     int client_fd;
+    int listener_tid;
+    pthread_t listener_thread;
     std::atomic<bool> terminated;
     std::unordered_map<int, req_status> status;
     std::map<int, nuraft::request> requests;

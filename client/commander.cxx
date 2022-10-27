@@ -1,23 +1,27 @@
 #include "commander.hxx"
 #include "server_data_mgr.hxx"
 #include "utils.hxx"
+#include <boost/filesystem.hpp>
 #include <chrono>
 #include <csignal>
 #include <sstream>
-#include <thread>
 
 commander::commander(json data, std::shared_ptr<server_data_mgr> mgr)
     : setting(data)
     , server_mgr(mgr) {
     ns = setting["server"].size();
     server_waited = ns;
-    // init_latch = std::unique_ptr<std::latch>(new std::latch(ns));
-    // peer_latch = std::unique_ptr<std::latch>(new std::latch(ns - 1));
     maintain_connection();
     std::this_thread::sleep_for(std::chrono::milliseconds(setting["connection_wait_ms"]));
 }
 
-commander::~commander() { level_output(_LWARNING_, "destroying commander"); }
+commander::~commander() {
+    // raise(SIGUSR1);
+    for (auto& conn: connections) {
+        conn->join();
+    }
+    level_output(_LWARNING_, "destroyed commander cleanly\n");
+}
 
 void commander::deploy() {
     level_output(_LINFO_, "Checking initialization...\n");
@@ -57,8 +61,8 @@ ssize_t commander::send_command(int index, std::string cmd) {
     ssize_t p = 0, total = cmd.length();
     const char* msg = cmd.c_str();
     while (p < total) {
-        sent = send(sockets[index], msg + p, total - p, 0);
-        if (sent < 0) return sent;
+        sent = send(sockets[index], msg + p, total - p, MSG_NOSIGNAL);
+        if (errno || sent < 0) return sent;
         p += sent;
     }
     return p;
@@ -68,7 +72,7 @@ void commander::start_experiment_timer() {
     std::thread thr([this]() -> void {
         std::this_thread::sleep_for(std::chrono::milliseconds(setting["exp_duration_ms"]));
         if (exit_mutex.try_lock()) {
-            level_output(_LWARNING_, "experiment terminated due to expiration\n");
+            level_output(_LINFO_, "experiment terminated due to expiration\n");
             terminate(0);
         }
     });
@@ -134,7 +138,7 @@ void commander::maintain_connection() {
     }
 
     for (int i = 0; i < ns; i++) {
-        std::thread thr(
+        std::shared_ptr<std::thread> thr = std::shared_ptr<std::thread>(new std::thread(
             [this](int i) -> void {
                 bool final_result = false;
                 while (!final_result) {
@@ -148,7 +152,6 @@ void commander::maintain_connection() {
                         continue;
                     }
                     client_fds[i] = cfd;
-                    level_output(_LINFO_, "connected server %d\n", server_mgr->get_id(i));
 
                     char buffer[BUF_SIZE] = {0};
                     std::string line;
@@ -167,16 +170,21 @@ void commander::maintain_connection() {
                         for (int i = 0; i < bytes_read; i++) {
                             if (buffer[i] == '\n') {
                                 line += std::string(buffer + start, i - start);
-                                if (!is_empty(line) && process_reply(line)) final_result = true;
+                                if (!is_empty(line) && process_reply(line)) {
+                                    final_result = true;
+                                    break;
+                                }
                                 start = i + 1;
                                 line.clear();
                             }
                         }
+
+                        if (final_result) break;
                     }
                 }
             },
-            i);
-        thr.detach();
+            i));
+        connections.emplace_back(thr);
     }
 }
 
@@ -240,11 +248,11 @@ char* commander::status_table() {
         return NULL;
     }
     char* result = new char[10000];
-    const char* fmt = "%6d %8d %8d %8d %14d\n";
-    const char* fmt_header = "%6s %8s %8s %8s %14s\n";
+    const char* fmt = "%6d %8d %8d %8d %14d %8d\n";
+    const char* fmt_header = "%6s %8s %8s %8s %14s %8s\n";
 
     size_t pos = 0;
-    pos += std::sprintf(result, fmt_header, "id", "term", "T", "J", "J(committed)");
+    pos += std::sprintf(result, fmt_header, "id", "term", "T", "J", "J(committed)", "n_req");
     for (auto& pair: replica_status_dict.items()) {
         int id = std::stoi(pair.key());
         json obj = pair.value();
@@ -255,8 +263,19 @@ char* commander::status_table() {
                             int(obj["term"]),
                             int(obj["log_term"]),
                             int(obj["log_height"]),
-                            int(obj["log_height_committed"]));
+                            int(obj["log_height_committed"]),
+                            int(obj["num_committed"]));
     }
+
+    boost::filesystem::path report = setting["working_dir"];
+    report /= "server_report.json";
+    FILE* fp = std::fopen(report.c_str(), "w");
+    if (errno != 0) {
+        std::fprintf(stderr, "Error: Cannot open file %s\n", report.c_str());
+        exit(1);
+    }
+    std::fprintf(fp, replica_status_dict.dump(4).c_str());
+    std::fclose(fp);
 
     return result;
 }

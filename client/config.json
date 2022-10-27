@@ -7,7 +7,7 @@
       "port": 23334,
       "cport": 33334,
       "workers": 1024,
-      "qlen": 300
+      "qlen": 1000
     },
     {
       "id": 2,
@@ -58,6 +58,6 @@
   "add_server_gap_ms": 500,
   "add_server_retry_ms": 1000,
   "submit_retry_ms": 1000,
-  "exp_duration_ms": 850000,
+  "exp_duration_ms": 30000,
   "working_dir": "benchmark_results/example/"
 }

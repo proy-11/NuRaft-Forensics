@@ -76,7 +76,7 @@ void experiment(json workload_) {
     // d_raft_scheduler::Scheduler scheduler(
     //     MAX_NUMBER_OF_JOBS, [](const std::exception& e) { level_output(_LERROR_, "Error: %s", e.what()); });
 
-    while (true) {
+    while (!server_mgr->terminated) {
         int delay = load.get_next_batch_delay_us();
         auto requests = load.get_next_batch();
 
@@ -104,8 +104,6 @@ void signal_handler(int signal) {
     level_output(_LWARNING_, "got signal %d, terminating all servers...\n", signal);
 
     fflush(stdout);
-    // if (arrive != nullptr) delete arrive;
-    // if (depart != nullptr) delete depart;
 
     if (captain != nullptr) {
         captain->terminate(signal);
@@ -123,7 +121,8 @@ int main(int argc, const char** argv) {
                                                        po::value<std::string>()->required(),
                                                        "config file path")("size", po::value<int>(), "total size")(
         "freq", po::value<float>(), "frequency")("batch-size", po::value<int>(), "batch size")(
-        "log-level", po::value<int>()->default_value(2), "print log level");
+        "log-level", po::value<int>()->default_value(2), "print log level")(
+        "datadir", po::value<std::string>(), "directory to save results");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -177,6 +176,10 @@ int main(int argc, const char** argv) {
         workload_setting["batch_size"] = vm["batch-size"].as<int>();
     }
 
+    if (vm.count("datadir")) {
+        meta_setting["working_dir"] = vm["datadir"].as<std::string>();
+    }
+
     level_output(_LINFO_,
                  "Using workload settings\nsize      = %10d,\nfreq      = %10.4f,\nbatchsize = %10d\n",
                  int(workload_setting.at("size")),
@@ -195,7 +198,6 @@ int main(int argc, const char** argv) {
 
     std::signal(SIGINT, signal_handler);
     std::signal(SIGABRT, signal_handler);
-    std::signal(SIGPIPE, signal_handler);
 
     depart = std::shared_ptr<sync_file_obj>(new sync_file_obj((working_dir / "depart.jsonl").string()));
     arrive = std::shared_ptr<sync_file_obj>(new sync_file_obj((working_dir / "arrive.jsonl").string()));

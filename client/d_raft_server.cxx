@@ -473,7 +473,8 @@ void handle_message(int sock, std::string request) {
                     {"log_height", log_height},
                     {"log_height_committed", clog_height},
                     {"log_term", log_term},
-                    {"term", term}};
+                    {"term", term},
+                    {"num_committed", committed_reqs.size()}};
         sync_write(sock, obj.dump() + "\n");
         std::cout << "terminating -- info:\n" << obj.dump() << std::endl;
         exit(0);
