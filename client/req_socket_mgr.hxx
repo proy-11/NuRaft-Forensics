@@ -9,7 +9,6 @@
 #include <boost/thread.hpp>
 #include <map>
 #include <mutex>
-#include <pthread.h>
 #include <string>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -67,9 +66,7 @@ public:
     int start;
     int end;
     int sock;
-    int client_fd;
-    int listener_tid;
-    pthread_t listener_thread;
+    std::shared_ptr<std::thread> listener;
     std::atomic<bool> terminated;
     std::atomic<bool> ended_listening;
     std::unordered_map<int, req_status> status;

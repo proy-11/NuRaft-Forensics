@@ -7,6 +7,7 @@
 #include <string>
 #include <sys/socket.h>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 using nlohmann::json;
@@ -42,9 +43,9 @@ private:
     std::mutex mutex;
     std::recursive_mutex exit_mutex;
     std::atomic<int> server_waited;
+    std::atomic<bool> terminated;
     std::condition_variable cv_server;
     std::shared_ptr<server_data_mgr> server_mgr;
     std::vector<int> sockets;
-    std::vector<int> client_fds;
     std::vector<std::shared_ptr<std::thread>> connections;
 };

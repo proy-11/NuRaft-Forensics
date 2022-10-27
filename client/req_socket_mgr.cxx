@@ -2,44 +2,11 @@
 #include "server_data_mgr.hxx"
 #include "utils.hxx"
 #include <climits>
+#include <csignal>
+#include <sys/ioctl.h>
 #include <thread>
 
 #define MAX_PENDING_PERIOD 5
-
-void* listening_task(void* arg) {
-    req_socket_manager* mgr = (req_socket_manager*)arg;
-    char buffer[BUF_SIZE] = {0};
-    std::string line;
-    while (!mgr->terminated) {
-        ssize_t bytes_read = recv(mgr->sock, buffer, BUF_SIZE, 0);
-        if (mgr->terminated) break;
-        if (bytes_read < 0) {
-            level_output(
-                _LWARNING_, "<Server %2d> Got error %s\n", mgr->server_mgr->get_leader_id(), std::strerror(errno));
-
-            mgr->self_connect();
-            continue;
-        }
-
-        int start = 0;
-        uint64_t timestamp = now_();
-        for (int i = 0; i < bytes_read; i++) {
-            if (buffer[i] == '\n') {
-                line += std::string(buffer + start, i - start);
-                if (!is_empty(line)) {
-                    mgr->process_reply(line, timestamp);
-                }
-                start = i + 1;
-                line.clear();
-            }
-        }
-        if (start != bytes_read) {
-            line += std::string(buffer + start, bytes_read - start);
-        }
-    }
-    mgr->ended_listening = true;
-    pthread_exit(NULL);
-}
 
 req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
                                        std::shared_ptr<sync_file_obj> arrive_,
@@ -47,7 +14,7 @@ req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
                                        std::shared_ptr<server_data_mgr> mgr_)
     : my_mgr_index(-1)
     , sock(-1)
-    , listener_tid(-1)
+    , listener(nullptr)
     , ended_listening(false)
     , arrive(arrive_)
     , depart(depart_)
@@ -55,6 +22,8 @@ req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
     terminated = server_mgr->terminated;
     start = INT_MAX;
     end = -1;
+
+    int on;
 
     for (auto& req: requests_) {
         status[req.index] = R_RETRY;
@@ -66,6 +35,11 @@ req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         level_output(_LERROR_, "cannot create socket for reqs #%d -- #%d\n", start, end);
         exit(1);
+    }
+    if (ioctl(sock, FIONBIO, (char*)&on) < 0) {
+        level_output(_LERROR_, "cannot call iotcl for reqs #%d -- #%d\n", start, end);
+        close(sock);
+        exit(-1);
     }
 }
 
@@ -81,14 +55,13 @@ void req_socket_manager::self_connect() {
         level_output(
             _LERROR_, "Commander connection to %d error: %s\n", server_mgr->get_leader_id(), std::strerror(errno));
     }
-    client_fd = cfd;
 }
 
 void req_socket_manager::terminate() {
     terminated = true;
-    if (!ended_listening) pthread_cancel(listener_thread);
-    close(client_fd);
+    if (!ended_listening) raise(SIGUSR1);
     close(sock);
+    sock = -1;
 }
 
 inline void req_socket_manager::wait_retry() {
@@ -150,19 +123,72 @@ void req_socket_manager::auto_submit() {
     }
 
     terminate();
-    if (listener_thread) {
-        void* ret;
-        if (pthread_join(listener_thread, &ret) != 0) {
-            level_output(_LERROR_, "mgr #%d failed to join listener thread\n", my_mgr_index);
-        }
+    if (listener != nullptr) {
+        listener->join();
     }
     server_mgr->unregister_sock_mgr(my_mgr_index);
 }
 
 void req_socket_manager::listen() {
-    if (pthread_create(&listener_thread, NULL, listening_task, this) != 0) {
-        level_output(_LERROR_, "mgr #%d failed to create listener thread\n", my_mgr_index);
-    }
+    listener = std::shared_ptr<std::thread>(new std::thread([this]() -> void {
+        char buffer[BUF_SIZE] = {0};
+        std::string line;
+        timeval timeout;
+        fd_set working_set;
+
+        FD_ZERO(&working_set);
+        FD_SET((unsigned int)sock, &working_set);
+
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 500;
+
+        while (!terminated) {
+            int rc = select(sock + 1, &working_set, NULL, NULL, &timeout);
+            if (rc < 0) {
+                level_output(_LERROR_, "select failed for mgr #%d\n", my_mgr_index);
+                exit(1);
+            }
+            if (terminated) {
+                break;
+            }
+            if (rc == 0) continue;
+
+            for (int i = sock; i >= 0 && rc > 0; i--) {
+                if (!FD_ISSET(i, &working_set)) continue;
+
+                rc--;
+                memset(buffer, 0, sizeof(buffer));
+                ssize_t bytes_read = recv(i, buffer, BUF_SIZE, 0);
+                level_output(_LDEBUG_, "%s\n", buffer);
+
+                // if (terminated) break;
+                if (bytes_read < 0) {
+                    level_output(
+                        _LWARNING_, "<Server %2d> Got error %s\n", server_mgr->get_leader_id(), std::strerror(errno));
+
+                    self_connect();
+                    continue;
+                }
+
+                int start = 0;
+                uint64_t timestamp = now_();
+                for (int i = 0; i < bytes_read; i++) {
+                    if (buffer[i] == '\n') {
+                        line += std::string(buffer + start, i - start);
+                        if (!is_empty(line)) {
+                            process_reply(line, timestamp);
+                        }
+                        start = i + 1;
+                        line.clear();
+                    }
+                }
+                if (start != bytes_read) {
+                    line += std::string(buffer + start, bytes_read - start);
+                }
+            }
+        }
+        ended_listening = true;
+    }));
 }
 
 void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {

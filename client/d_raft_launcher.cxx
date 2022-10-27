@@ -17,8 +17,6 @@
 namespace po = boost::program_options;
 namespace fsys = boost::filesystem;
 
-const int MAX_NUMBER_OF_JOBS = 1000;
-
 json meta_setting, workload_setting;
 
 std::shared_ptr<server_data_mgr> server_mgr = nullptr;
@@ -198,6 +196,7 @@ int main(int argc, const char** argv) {
 
     std::signal(SIGINT, signal_handler);
     std::signal(SIGABRT, signal_handler);
+    std::signal(SIGUSR1, [](int) -> void {});
 
     depart = std::shared_ptr<sync_file_obj>(new sync_file_obj((working_dir / "depart.jsonl").string()));
     arrive = std::shared_ptr<sync_file_obj>(new sync_file_obj((working_dir / "arrive.jsonl").string()));

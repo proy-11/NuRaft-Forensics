@@ -8,6 +8,7 @@
 
 commander::commander(json data, std::shared_ptr<server_data_mgr> mgr)
     : setting(data)
+    , terminated(false)
     , server_mgr(mgr) {
     ns = setting["server"].size();
     server_waited = ns;
@@ -30,7 +31,8 @@ void commander::deploy() {
             [this](int j) -> void {
                 ssize_t sent = send_command(j, "check\n");
                 if (sent < 0) {
-                    level_output(_LERROR_, "Commander check init of #%d failed: %s\n", j, std::strerror(errno));
+                    level_output(
+                        _LERROR_, "Commander check init of #%d failed: %s (%d)\n", j, std::strerror(errno), errno);
                     exit(errno);
                 } else
                     return;
@@ -103,6 +105,7 @@ void commander::terminate(int error) {
         terminaters[i].join();
     }
 
+    terminated = true;
     if (error == 0 || error == SIGINT) {
         std::this_thread::sleep_for(std::chrono::milliseconds(setting["exit_cooldown_ms"]));
 
@@ -134,28 +137,51 @@ void commander::maintain_connection() {
             exit(1);
         }
         sockets.emplace_back(sock);
-        client_fds.emplace_back(-1);
     }
 
     for (int i = 0; i < ns; i++) {
         std::shared_ptr<std::thread> thr = std::shared_ptr<std::thread>(new std::thread(
             [this](int i) -> void {
                 bool final_result = false;
-                while (!final_result) {
-                    int cfd = connect(sockets[i], (sockaddr*)(server_mgr->get_endpoint(i).get()), sizeof(sockaddr));
-                    if (cfd < 0) {
-                        level_output(_LERROR_,
-                                     "Commander connection to %d error: %s\n",
-                                     server_mgr->get_id(i),
-                                     std::strerror(errno));
-                        std::this_thread::sleep_for(std::chrono::milliseconds(setting["reconnect_retry_ms"]));
-                        continue;
+                while (!final_result && !terminated) {
+                    if (connect(sockets[i], (sockaddr*)(server_mgr->get_endpoint(i).get()), sizeof(sockaddr)) < 0) {
+                        if (errno != EINPROGRESS) {
+                            level_output(_LERROR_,
+                                         "Commander connection to %d error: %s\n",
+                                         server_mgr->get_id(i),
+                                         std::strerror(errno));
+                            std::this_thread::sleep_for(std::chrono::milliseconds(setting["reconnect_retry_ms"]));
+                            continue;
+                        }
+                        fd_set wfd, efd;
+
+                        FD_ZERO(&wfd);
+                        FD_SET(sockets[i], &wfd);
+
+                        FD_ZERO(&efd);
+                        FD_SET(sockets[i], &efd);
+
+                        timeval tv;
+                        tv.tv_sec = 5;
+                        tv.tv_usec = 0;
+
+                        int rc = select(sockets[i] + 1, NULL, &wfd, &efd, &tv);
+                        if (terminated) return;
+                        if (rc == -1 || rc == 0) {
+                            continue;
+                        }
+
+                        if (FD_ISSET(sockets[i], &efd)) {
+                            // getsockopt(sockets[i], SOL_SOCKET, SO_ERROR, &so_error, &len);
+                            // close(sockfd);
+                            std::this_thread::sleep_for(std::chrono::milliseconds(setting["reconnect_retry_ms"]));
+                            continue;
+                        }
                     }
-                    client_fds[i] = cfd;
 
                     char buffer[BUF_SIZE] = {0};
                     std::string line;
-                    while (true) {
+                    while (!final_result && !terminated) {
                         ssize_t bytes_read = recv(sockets[i], buffer, BUF_SIZE, 0);
                         if (bytes_read < 0) {
                             if (!final_result)
@@ -178,8 +204,6 @@ void commander::maintain_connection() {
                                 line.clear();
                             }
                         }
-
-                        if (final_result) break;
                     }
                 }
             },
@@ -274,7 +298,7 @@ char* commander::status_table() {
         std::fprintf(stderr, "Error: Cannot open file %s\n", report.c_str());
         exit(1);
     }
-    std::fprintf(fp, replica_status_dict.dump(4).c_str());
+    std::fprintf(fp, "%s", replica_status_dict.dump(4).c_str());
     std::fclose(fp);
 
     return result;
