@@ -6,16 +6,16 @@
 #include "server_data_mgr.hxx"
 #include "utils.hxx"
 #include "workload.hxx"
+#include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 #include <csignal>
 #include <cstdio>
-#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 
 namespace po = boost::program_options;
-namespace fsys = std::filesystem;
+namespace fsys = boost::filesystem;
 
 const int MAX_NUMBER_OF_JOBS = 1000;
 
@@ -31,12 +31,11 @@ int _PROG_LEVEL_ = _LINFO_;
 void create_server(json data) {
     int id = data["id"];
     char cmd[1024];
-    std::string current_path = std::filesystem::current_path();
     std::snprintf(cmd,
                   sizeof(cmd),
                   "%s/client/d_raft --id %d --ip %s --port %d "
                   "--cport %d --byz %s --workers %d --qlen %d 1> server_%d.log 2> err_server_%d.log",
-                  current_path.c_str(),
+                  fsys::current_path().c_str(),
                   id,
                   string(data["ip"]).c_str(),
                   int(data["port"]),
@@ -197,8 +196,8 @@ int main(int argc, const char** argv) {
     std::signal(SIGABRT, signal_handler);
     std::signal(SIGPIPE, signal_handler);
 
-    depart = std::shared_ptr<sync_file_obj>(new sync_file_obj(working_dir / "depart.jsonl"));
-    arrive = std::shared_ptr<sync_file_obj>(new sync_file_obj(working_dir / "arrive.jsonl"));
+    depart = std::shared_ptr<sync_file_obj>(new sync_file_obj((working_dir / "depart.jsonl").string()));
+    arrive = std::shared_ptr<sync_file_obj>(new sync_file_obj((working_dir / "arrive.jsonl").string()));
 
     vector<std::thread> server_creators(0);
 

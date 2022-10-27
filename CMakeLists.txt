@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.5)
 project(NuRaft VERSION 1.0.0 LANGUAGES CXX)
 
+set(CMAKE_THREAD_LIBS_INIT "-lpthread")
+set(CMAKE_HAVE_THREADS_LIBRARY 1)
+set(CMAKE_USE_WIN32_THREADS_INIT 0)
+set(CMAKE_USE_PTHREADS_INIT 1)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+
 # === Build type (default: RelWithDebInfo, O2) ===========
 if (NOT CMAKE_BUILD_TYPE)
     set(DEFAULT_BUILD_TYPE "RelWithDebInfo")
@@ -82,7 +88,7 @@ endif()
 if (NOT WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-pessimizing-move")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
     if (APPLE)

@@ -10,8 +10,9 @@ commander::commander(json data, std::shared_ptr<server_data_mgr> mgr)
     : setting(data)
     , server_mgr(mgr) {
     ns = setting["server"].size();
-    init_latch = std::unique_ptr<std::latch>(new std::latch(ns));
-    peer_latch = std::unique_ptr<std::latch>(new std::latch(ns - 1));
+    server_waited = ns;
+    // init_latch = std::unique_ptr<std::latch>(new std::latch(ns));
+    // peer_latch = std::unique_ptr<std::latch>(new std::latch(ns - 1));
     maintain_connection();
     std::this_thread::sleep_for(std::chrono::milliseconds(setting["connection_wait_ms"]));
 }
@@ -33,15 +34,22 @@ void commander::deploy() {
             i);
         thr.detach();
     }
-
-    init_latch->wait();
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        cv_server.wait(lock, [this]() -> bool { return server_waited <= 0; });
+        server_waited = ns - 1;
+    }
 
     level_output(_LINFO_, "Adding servers...\n");
     for (int i = 1; i < ns; i++) {
         send_addpeer_command(i);
         std::this_thread::sleep_for(std::chrono::milliseconds(setting["add_server_gap_ms"]));
     }
-    peer_latch->wait();
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        cv_server.wait(lock, [this]() -> bool { return server_waited <= 0; });
+        server_waited = ns;
+    }
 }
 
 ssize_t commander::send_command(int index, std::string cmd) {
@@ -174,11 +182,10 @@ void commander::maintain_connection() {
 
 bool commander::process_reply(std::string reply) {
     level_output(_LDEBUG_, "cmd processing reply \"%s\"\n", reply.c_str());
-    if (_ISSUBSTR_(reply, "init")) {
-        init_latch->count_down();
-        return false;
-    } else if (_ISSUBSTR_(reply, "added")) {
-        peer_latch->count_down();
+    if (_ISSUBSTR_(reply, "init") || _ISSUBSTR_(reply, "added")) {
+        std::unique_lock<std::mutex> lock(mutex);
+        server_waited--;
+        cv_server.notify_one();
         return false;
     } else if (_ISSUBSTR_(reply, "cannot add")) {
         int peer_id;

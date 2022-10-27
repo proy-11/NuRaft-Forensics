@@ -1,7 +1,7 @@
 #pragma once
 
 #include "libnuraft/json.hpp"
-#include <latch>
+#include <condition_variable>
 #include <mutex>
 #include <string>
 #include <sys/socket.h>
@@ -39,8 +39,10 @@ private:
     json replica_status_dict;
     std::mutex mutex;
     std::recursive_mutex exit_mutex;
-    std::unique_ptr<std::latch> init_latch;
-    std::unique_ptr<std::latch> peer_latch;
+    // std::unique_ptr<std::latch> init_latch;
+    // std::unique_ptr<std::latch> peer_latch;
+    std::atomic_int server_waited;
+    std::condition_variable cv_server;
     std::shared_ptr<server_data_mgr> server_mgr;
     std::vector<int> sockets;
     std::vector<int> client_fds;

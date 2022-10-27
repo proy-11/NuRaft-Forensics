@@ -8,13 +8,9 @@
 #include <memory>
 #include <mutex>
 #include <queue>
-#include <semaphore>
 #include <sstream>
 #include <string>
 #include <thread>
-
-#define MAX_THREADS 1024
-#define MAX_QUEUE_LEN 300
 
 #ifdef DEBUG
 void debug_print(const char* fmt, ...) {
@@ -30,7 +26,6 @@ void debug_print(const char* fmt, ...) {
 void debug_print(const char* fmt, ...) {}
 #endif // DEBUG
 
-template <ptrdiff_t diff> using semaphore = std::counting_semaphore<diff>;
 template <class T> using job_func = void (*)(T);
 
 template <class T> class job_queue {
@@ -45,7 +40,7 @@ public:
         bool success = false;
         {
             std::unique_lock<std::mutex> lock(job_allocation_lock);
-            if ((success = jobs.size() < MAX_QUEUE_LEN)) {
+            if ((success = jobs.size() < max_queue_length)) {
                 debug_print("Try IN\n");
                 jobs.push(element);
                 debug_print("IN , height = %6d\n", jobs.size());
