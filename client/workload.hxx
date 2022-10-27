@@ -6,6 +6,8 @@
 #ifndef D_RAFT_WORKLOAD
 #define D_RAFT_WORKLOAD
 
+using json = nlohmann::json;
+
 namespace nuraft {
 enum WORKLOAD_TYPE {
     UNIF,
@@ -25,6 +27,7 @@ public:
 class workload {
 public:
     workload(std::string path);
+    workload(json settings);
     ~workload();
     bool proceed(int step = 1);
     bool proceed_batch();

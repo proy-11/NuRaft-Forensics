@@ -1,27 +1,25 @@
 #include "commander.hxx"
 #include "d_raft_scheduler.hxx"
+#include "libnuraft/json.hpp"
 #include "nuraft.hxx"
 #include "req_socket_mgr.hxx"
 #include "server_data_mgr.hxx"
 #include "utils.hxx"
 #include "workload.hxx"
-#include "libnuraft/json.hpp"
 #include <boost/program_options.hpp>
 #include <csignal>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 
 namespace po = boost::program_options;
 namespace fsys = std::filesystem;
 
-using std::string;
-
 const int MAX_NUMBER_OF_JOBS = 1000;
 
-json meta_setting;
+json meta_setting, workload_setting;
 
 std::shared_ptr<server_data_mgr> server_mgr = nullptr;
 std::shared_ptr<commander> captain = nullptr;
@@ -37,13 +35,15 @@ void create_server(json data) {
     std::snprintf(cmd,
                   sizeof(cmd),
                   "%s/client/d_raft --id %d --ip %s --port %d "
-                  "--cport %d --byz %s 1> server_%d.log 2> err_server_%d.log",
+                  "--cport %d --byz %s --workers %d --qlen %d 1> server_%d.log 2> err_server_%d.log",
                   current_path.c_str(),
                   id,
                   string(data["ip"]).c_str(),
                   int(data["port"]),
                   int(data["cport"]),
                   string(data["byzantine"]).c_str(),
+                  int(data["workers"]),
+                  int(data["qlen"]),
                   id,
                   id);
     pid_t pid = fork();
@@ -70,9 +70,9 @@ void create_server(json data) {
 std::mutex submit_req_mutex;
 void submit_batch(std::shared_ptr<req_socket_manager> req_mgr) { req_mgr->auto_submit(); }
 
-void experiment(string path) {
+void experiment(json workload_) {
     captain->start_experiment_timer();
-    nuraft::workload load(path);
+    nuraft::workload load(workload_);
 
     // d_raft_scheduler::Scheduler scheduler(
     //     MAX_NUMBER_OF_JOBS, [](const std::exception& e) { level_output(_LERROR_, "Error: %s", e.what()); });
@@ -117,74 +117,71 @@ void signal_handler(int signal) {
 }
 
 int main(int argc, const char** argv) {
-    std::signal(SIGINT, signal_handler);
-    std::signal(SIGABRT, signal_handler);
-    std::signal(SIGPIPE, signal_handler);
-
     string config_file = "";
-    int size = 0, batch_size = 0;
-    float frequency = 0.0;
 
     po::options_description desc("Allowed options");
-    desc.add_options()
-        ("help", "produce help message")
-        ("config_file", po::value<std::string>()->required(), "config file path")
-        ("size", po::value<int>()->default_value(0), "total size")
-        ("freq", po::value<float>()->default_value(0.0), "frequency")
-        ("batch_size", po::value<int>()->default_value(0), "batch size")
-        ("log_level", po::value<int>()->default_value(2), "print log level")
-    ;
-    
+    desc.add_options()("help", "produce help message")("config-file",
+                                                       po::value<std::string>()->required(),
+                                                       "config file path")("size", po::value<int>(), "total size")(
+        "freq", po::value<float>(), "frequency")("batch-size", po::value<int>(), "batch size")(
+        "log-level", po::value<int>()->default_value(2), "print log level");
+
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
-    
 
     if (vm.count("help")) {
         std::cout << _C_BOLDYELLOW_ << desc << "\n";
         exit(0);
     }
 
-    if(vm.count("config_file")) {
-        config_file = vm["config_file"].as<std::string>();
+    if (vm.count("config-file")) {
+        config_file = vm["config-file"].as<std::string>();
     } else {
-        std::cout << "config file not set.\n";
+        level_output(_LERROR_, "config file not set, aborting\n");
         exit(1);
     }
 
-    if(vm.count("size")) {
-        size = vm["size"].as<int>();
+    if (vm.count("log-level")) {
+        _PROG_LEVEL_ = vm["log-level"].as<int>();
     }
 
-    if(vm.count("freq")) {
-        frequency = vm["freq"].as<float>();
+    try {
+        std::ifstream f(config_file);
+        meta_setting = json::parse(f);
+    } catch (json::exception& je) {
+        level_output(_LERROR_, "Error reading meta settings: %s\n", je.what());
+        exit(1);
     }
 
-    if(vm.count("batch_size")) {
-        batch_size = vm["batch_size"].as<int>();
+    try {
+        std::ifstream file(std::string(meta_setting["client"]["path"]).c_str());
+        workload_setting = json::parse(file);
+    } catch (json::exception& je) {
+        level_output(_LERROR_, "Error reading workload settings: %s\n", je.what());
+        exit(1);
     }
 
-    if(vm.count("log_level")) {
-        _PROG_LEVEL_ = vm["log_level"].as<int>();
+    if (vm.count("size")) {
+        workload_setting["size"] = vm["size"].as<int>();
     }
 
-    std::ifstream f(config_file);
-    meta_setting = json::parse(f);
-
-    if(size != 0 && frequency != 0.0 && batch_size != 0) {
-        using json = nlohmann::basic_json<std::map, std::vector, std::string, bool, std::int64_t, std::uint64_t, float>;
-        
-        json workload_json;
-        workload_json["size"] = size;
+    if (vm.count("freq")) {
+        float frequency = vm["freq"].as<float>();
         std::stringstream ss;
         ss << std::setprecision(4) << frequency;
-        workload_json["freq"] = std::stof(ss.str());
-        workload_json["batch_size"] = batch_size;
-        workload_json["type"] = "UNIF";
-
-        std::ofstream file(meta_setting["client"]["path"]);
-        file << std::setw(4) << workload_json << std::endl;
+        workload_setting["freq"] = std::stof(ss.str());
     }
+
+    if (vm.count("batch-size")) {
+        workload_setting["batch_size"] = vm["batch-size"].as<int>();
+    }
+
+    level_output(_LINFO_,
+                 "Using workload settings\nsize      = %10d,\nfreq      = %10.4f,\nbatchsize = %10d\n",
+                 int(workload_setting.at("size")),
+                 float(workload_setting.at("freq")),
+                 int(workload_setting.at("batch_size")));
 
     server_mgr = std::shared_ptr<server_data_mgr>(new server_data_mgr(meta_setting["server"]));
 
@@ -195,6 +192,10 @@ int main(int argc, const char** argv) {
         level_output(_LERROR_, "Cannot create directory %s\n", fsys::absolute(working_dir).c_str());
         exit(1);
     }
+
+    std::signal(SIGINT, signal_handler);
+    std::signal(SIGABRT, signal_handler);
+    std::signal(SIGPIPE, signal_handler);
 
     depart = std::shared_ptr<sync_file_obj>(new sync_file_obj(working_dir / "depart.jsonl"));
     arrive = std::shared_ptr<sync_file_obj>(new sync_file_obj(working_dir / "arrive.jsonl"));
@@ -219,7 +220,7 @@ int main(int argc, const char** argv) {
 
     level_output(_LINFO_, "Launching client...\n");
 
-    experiment(meta_setting["client"]["path"]);
+    experiment(workload_setting);
 
     return 0;
 }

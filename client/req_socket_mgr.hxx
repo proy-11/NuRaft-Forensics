@@ -68,7 +68,7 @@ private:
     int client_fd;
     std::atomic_bool terminated;
     std::unordered_map<int, req_status> status;
-    std::unordered_map<int, nuraft::request> requests;
+    std::map<int, nuraft::request> requests;
     std::recursive_mutex mutex;
     std::mutex connection_waiter;
     std::shared_ptr<sync_file_obj> arrive;

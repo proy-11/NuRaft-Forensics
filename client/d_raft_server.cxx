@@ -30,7 +30,6 @@ limitations under the License.
 #include <map>
 #include <mutex>
 #include <netinet/in.h>
-#include <queue>
 #include <sstream>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -59,25 +58,35 @@ std::mutex addpeer_mutex;
 std::unordered_map<int, std::shared_ptr<std::mutex>> write_mutex;
 std::unordered_set<int> committed_reqs;
 
-void replicate_request(int sock, std::string request);
+struct simple_job {
+    simple_job(int sock_, std::string request_)
+        : sock(sock_)
+        , request(request_) {}
+    int sock;
+    std::string request;
+};
+
+void replicate_request(simple_job job);
 void handle_message(int sock, std::string request);
 void handle_session(int sock);
 
-job_queue jobq(replicate_request);
-
 struct cmargs {
-    cmargs(int id_, std::string ipaddr_, int port_, int cport_, std::string byzantine_)
+    cmargs(int id_, std::string ipaddr_, int port_, int cport_, std::string byzantine_, int workers_, int qlen_)
         : id(id_)
         , ipaddr(ipaddr_)
         , port(port_)
         , cport(cport_)
-        , byzantine(byzantine_) {}
+        , byzantine(byzantine_)
+        , workers(workers_)
+        , qlen(qlen_) {}
 
     int id;
     std::string ipaddr;
     int port;
     int cport;
     std::string byzantine;
+    int workers;
+    int qlen;
 };
 
 struct server_stuff {
@@ -129,6 +138,8 @@ struct server_stuff {
 };
 static server_stuff stuff;
 
+std::shared_ptr<job_queue<simple_job>> jobq;
+
 inline bool is_empty(std::string str) {
     return std::string(str.c_str()) == "" || str.find_first_not_of(" \0\t\n\v\f\r") == str.npos;
 }
@@ -161,16 +172,16 @@ ssize_t sync_write(int sock, std::string msg) {
     ssize_t p = 0, total = msg.length();
     const char* cmsg = msg.c_str();
 
-    write_mutex[sock]->lock();
+    std::unique_lock<std::mutex> lock(*write_mutex[sock]);
     while (p < total) {
-        sent = send(sock, cmsg + p, total - p, 0);
-        if (sent < 0) {
-            write_mutex[sock]->unlock();
+        sent = send(sock, cmsg + p, total - p, MSG_NOSIGNAL);
+        if (errno || sent < 0) {
+            std::fprintf(
+                stderr, "Warning: <send> encountered errno %d (%s):\n%s\n", errno, std::strerror(errno), msg.c_str());
             return sent;
         }
         p += sent;
     }
-    write_mutex[sock]->unlock();
     return p;
 }
 
@@ -376,27 +387,35 @@ void add_peer(int sock, std::string& request) {
     }
 }
 
-void replicate_request(int sock, std::string request) {
+void replicate_request(simple_job job) {
     int rid;
+
+    debug_print("Replicating req %s\n", job.request.c_str());
+
     try {
-        json req_obj = json::parse(request);
+        json req_obj = json::parse(job.request);
         rid = req_obj["index"];
     } catch (json::exception& ec) {
         std::string errmsg = "{\"success\": false, \"error\": \"";
-        errmsg += escape_quote(request);
+        errmsg += escape_quote(job.request);
         errmsg += "\"}\n";
-        sync_write(sock, errmsg);
+        sync_write(job.sock, errmsg);
+        debug_print("req %s format error\n", job.request.c_str());
         return;
     }
 
+    debug_print("req %s in service\n", job.request.c_str());
     service_mutex.lock();
 
     if (committed_reqs.find(rid) != committed_reqs.end()) {
         service_mutex.unlock();
         json reply = {{"rid", rid}, {"success", false}, {"error", "request already committed"}};
-        sync_write(sock, reply.dump() + "\n");
+        sync_write(job.sock, reply.dump() + "\n");
+        debug_print("req %s already committed\n", job.request.c_str());
         return;
     }
+
+    debug_print("req %s appending\n", job.request.c_str());
 
     ptr<TestSuite::Timer> timer = cs_new<TestSuite::Timer>();
 
@@ -408,6 +427,8 @@ void replicate_request(int sock, std::string request) {
 
     ptr<raft_result> ret = stuff.raft_instance_->append_entries({new_log});
 
+    debug_print("req %s finished appending\n", job.request.c_str());
+
     if (!ret->get_accepted()) {
         cmd_result_code rc = ret->get_result_code();
         std::cout << "failed to replicate: " << rc << ", " << TestSuite::usToString(timer->getTimeUs()) << std::endl;
@@ -416,9 +437,12 @@ void replicate_request(int sock, std::string request) {
         if (rc == cmd_result_code::NOT_LEADER) {
             obj["leader"] = stuff.raft_instance_->get_leader();
         }
-        sync_write(sock, obj.dump() + "\n");
+        sync_write(job.sock, obj.dump() + "\n");
+        debug_print("req %s not accepted, reason: %s\n", job.request.c_str(), ret->get_result_str().c_str());
         return;
     }
+
+    debug_print("req %s accepted\n", job.request.c_str());
 
     ptr<std::exception> err(nullptr);
     handle_result(timer, *ret, err);
@@ -428,7 +452,9 @@ void replicate_request(int sock, std::string request) {
 
     json obj = {{"rid", rid}, {"success", true}, {"index", top_index}, {"term", top_term}};
     committed_reqs.insert(rid);
-    sync_write(sock, obj.dump() + "\n");
+    sync_write(job.sock, obj.dump() + "\n");
+
+    debug_print("req %s committed\n", job.request.c_str());
     return;
 }
 
@@ -452,7 +478,7 @@ void handle_message(int sock, std::string request) {
         std::cout << "terminating -- info:\n" << obj.dump() << std::endl;
         exit(0);
     } else {
-        if (!jobq.enque(sock, request)) {
+        if (!jobq->enque(simple_job(sock, request))) {
             int rid;
             try {
                 json req_obj = json::parse(request);
@@ -503,7 +529,8 @@ cmargs parse_args(int argc, char** argv) {
     po::options_description desc("Allowed options");
     desc.add_options()("help", "produce help message")("id", po::value<int>(), "server id")(
         "ip", po::value<std::string>(), "IP address")("port", po::value<int>(), "port number")(
-        "cport", po::value<int>(), "Client port number")("byz", po::value<std::string>(), "Byzantine status");
+        "cport", po::value<int>(), "Client port number")("byz", po::value<std::string>(), "Byzantine status")(
+        "workers", po::value<int>(), "number of threads at max")("qlen", po::value<int>(), "max queue length");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -514,52 +541,60 @@ cmargs parse_args(int argc, char** argv) {
         exit(0);
     }
 
-    int id, port, cport;
+    int id, port, cport, workers, qlen;
     std::string ipaddr, byzantine;
 
     if (vm.count("id")) {
         id = vm["id"].as<int>();
     } else {
-        std::cout << "Server ID was not set.\n";
+        std::cerr << "Server ID was not set.\n";
         exit(1);
     }
     if (vm.count("port")) {
         port = vm["port"].as<int>();
     } else {
-        std::cout << "Port was not set.\n";
+        std::cerr << "Port was not set.\n";
         exit(1);
     }
     if (vm.count("cport")) {
         cport = vm["cport"].as<int>();
     } else {
-        std::cout << "Client port was not set.\n";
+        std::cerr << "Client port was not set.\n";
         exit(1);
     }
     if (vm.count("ip")) {
         ipaddr = vm["ip"].as<std::string>();
     } else {
-        std::cout << "IP address not set.\n";
+        std::cerr << "IP address not set.\n";
         exit(1);
     }
     if (vm.count("byz")) {
         byzantine = vm["byz"].as<std::string>();
     } else {
-        std::cout << "Byzantine status not set.\n";
+        std::cerr << "Byzantine status not set.\n";
+        exit(1);
+    }
+    if (vm.count("workers")) {
+        workers = vm["workers"].as<int>();
+    } else {
+        std::cerr << "max thread count was not set.\n";
+        exit(1);
+    }
+    if (vm.count("qlen")) {
+        qlen = vm["qlen"].as<int>();
+    } else {
+        std::cerr << "max queue lenght was not set.\n";
         exit(1);
     }
 
-    return cmargs(id, ipaddr, port, cport, byzantine);
+    return cmargs(id, ipaddr, port, cport, byzantine, workers, qlen);
 }
 
 }; // namespace d_raft_server
 using namespace d_raft_server;
 
 int main(int argc, char** argv) {
-    // TODO - Read config file path from cmd line
     cmargs args = parse_args(argc, argv);
-    // service_mutex.unlock();
-
-    // if (argc < 3) usage(argc, argv);
 
     set_server_info(args);
 
@@ -568,7 +603,10 @@ int main(int argc, char** argv) {
     std::cout << "    Server ID:    " << stuff.server_id_ << std::endl;
     std::cout << "    Endpoint:     " << stuff.endpoint_ << std::endl;
     init_raft(cs_new<d_raft_state_machine>());
-    jobq.process_jobs();
+
+    jobq =
+        std::shared_ptr<job_queue<simple_job>>(new job_queue<simple_job>(replicate_request, args.workers, args.qlen));
+    jobq->process_jobs();
     loop();
 
     return 0;

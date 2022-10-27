@@ -2,9 +2,9 @@
 #include "server_data_mgr.hxx"
 #include "utils.hxx"
 #include <chrono>
+#include <csignal>
 #include <sstream>
 #include <thread>
-#include <csignal>
 
 commander::commander(json data, std::shared_ptr<server_data_mgr> mgr)
     : setting(data)
@@ -16,7 +16,7 @@ commander::commander(json data, std::shared_ptr<server_data_mgr> mgr)
     std::this_thread::sleep_for(std::chrono::milliseconds(setting["connection_wait_ms"]));
 }
 
-commander::~commander() {}
+commander::~commander() { level_output(_LWARNING_, "destroying commander"); }
 
 void commander::deploy() {
     level_output(_LINFO_, "Checking initialization...\n");

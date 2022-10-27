@@ -1,12 +1,8 @@
 #include "workload.hxx"
-#include <boost/program_options.hpp>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <tuple>
-
-using json = nlohmann::json;
-namespace po = boost::program_options;
 
 namespace nuraft {
 request::request(int ind_) {
@@ -53,6 +49,27 @@ workload::workload(std::string path) {
     resample_delays(0);
 }
 
+workload::workload(json settings) {
+    try {
+        current = 0;
+        size = settings["size"];
+        freq = settings["freq"];
+        batch_size = settings["batch_size"];
+        delay = -1;
+        batch_delay = std::vector<int>(batch_size);
+
+        std::string type_str = settings.value("type", "NULL");
+        if (std::string(type_str) == "UNIF") {
+            type = UNIF;
+        } else {
+            std::fprintf(stderr, "Cannot read %s", type_str.c_str());
+        }
+        resample_delays(0);
+    } catch (json::exception& e) {
+        std::fprintf(stderr, "Error reading workload settings from json obj:\n%s\n", settings.dump().c_str());
+        exit(1);
+    }
+}
 workload::~workload() {}
 
 bool workload::proceed(int step) {
@@ -115,35 +132,3 @@ int workload::sample_single_delay_us() {
 }
 
 } // namespace nuraft
-
-// int main(int argc, const char** argv) {
-
-//     std::string input;
-//     // std::string output;
-
-//     po::options_description desc("Allowed options");
-//     desc.add_options()("help,h",
-//                        "print usage message")("input,i", po::value(&input), "Input
-//                        file");
-
-//     po::variables_map vm;
-//     po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
-//     po::notify(vm);
-
-//     if (vm.count("help")) {
-//         std::cout << desc << "\n";
-//         return 0;
-//     }
-//     if (!vm.count("input")) {
-//         std::cerr << desc << "\n";
-//         return 1;
-//     }
-
-//     nuraft::workload w(input);
-//     for (int i = 0; i < 10; i++) {
-//         nuraft::request req(0);
-//         int time;
-//         std::tie(req, time) = w.get_next_req_us();
-//         std::printf("%5d  %5d %d\n", i, req.index, time);
-//     }
-// }

@@ -5,35 +5,45 @@
       "byzantine": "None",
       "ip": "127.0.0.1",
       "port": 23334,
-      "cport": 33334
+      "cport": 33334,
+      "workers": 1024,
+      "qlen": 300
     },
     {
       "id": 2,
       "byzantine": "None",
       "ip": "127.0.0.1",
       "port": 23335,
-      "cport": 33335
+      "cport": 33335,
+      "workers": 1024,
+      "qlen": 10000
     },
     {
       "id": 3,
       "byzantine": "None",
       "ip": "127.0.0.1",
       "port": 23336,
-      "cport": 33336
+      "cport": 33336,
+      "workers": 1024,
+      "qlen": 10000
     },
     {
       "id": 4,
       "byzantine": "None",
       "ip": "127.0.0.1",
       "port": 23337,
-      "cport": 33337
+      "cport": 33337,
+      "workers": 1024,
+      "qlen": 10000
     },
     {
       "id": 5,
       "byzantine": "None",
       "ip": "127.0.0.1",
       "port": 23338,
-      "cport": 33338
+      "cport": 33338,
+      "workers": 1024,
+      "qlen": 10000
     }
   ],
   "client": {

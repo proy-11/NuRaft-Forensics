@@ -147,7 +147,6 @@ std::shared_ptr<std::thread> req_socket_manager::listen() {
                 line += std::string(buffer + start, bytes_read - start);
             }
         }
-        level_output(_LWARNING_, "mgr #%d stopped listening\n", my_mgr_index);
     }));
 }
 
@@ -184,7 +183,6 @@ void req_socket_manager::process_reply(std::string reply, uint64_t timestamp) {
         _LERROR_, "<Server %2d> request #%d failed (%s)\n", server_id, rid, reply_data["error"].dump().c_str());
 
     if (_ISSUBSTR_(std::string(reply_data["error"]), "queue is full")) {
-        level_output(_LERROR_, "Queue is full, dropping request #%d\n", rid);
         set_status(rid, R_ERROR);
     }
 

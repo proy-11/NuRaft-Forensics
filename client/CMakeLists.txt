@@ -28,7 +28,7 @@ if(Boost_FOUND)
                     d_raft_server.cxx
                     logger.cc
                     workload.cxx
-                    job_queue.cxx
+                    job_queue.hxx
                     in_memory_log_store.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
     add_dependencies(d_raft
