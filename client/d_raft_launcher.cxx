@@ -154,7 +154,8 @@ int main(int argc, const char** argv) {
     }
 
     try {
-        std::ifstream file(std::string(meta_setting["client"]["path"]).c_str());
+        json client_setting = meta_setting["client"];
+        std::ifstream file(std::string(client_setting.at("path")).c_str());
         workload_setting = json::parse(file);
     } catch (json::exception& je) {
         level_output(_LERROR_, "Error reading workload settings: %s\n", je.what());

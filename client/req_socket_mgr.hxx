@@ -66,7 +66,7 @@ private:
     int end;
     int sock;
     int client_fd;
-    std::atomic_bool terminated;
+    std::atomic<bool> terminated;
     std::unordered_map<int, req_status> status;
     std::map<int, nuraft::request> requests;
     std::recursive_mutex mutex;

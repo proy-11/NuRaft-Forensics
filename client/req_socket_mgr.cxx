@@ -1,6 +1,7 @@
 #include "req_socket_mgr.hxx"
 #include "server_data_mgr.hxx"
 #include "utils.hxx"
+#include <climits>
 #include <thread>
 
 #define MAX_PENDING_PERIOD 5
