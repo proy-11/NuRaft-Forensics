@@ -71,6 +71,7 @@ public:
     int listener_tid;
     pthread_t listener_thread;
     std::atomic<bool> terminated;
+    std::atomic<bool> ended_listening;
     std::unordered_map<int, req_status> status;
     std::map<int, nuraft::request> requests;
     std::recursive_mutex mutex;

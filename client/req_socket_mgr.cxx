@@ -37,6 +37,7 @@ void* listening_task(void* arg) {
             line += std::string(buffer + start, bytes_read - start);
         }
     }
+    mgr->ended_listening = true;
     pthread_exit(NULL);
 }
 
@@ -47,6 +48,7 @@ req_socket_manager::req_socket_manager(std::vector<nuraft::request> requests_,
     : my_mgr_index(-1)
     , sock(-1)
     , listener_tid(-1)
+    , ended_listening(false)
     , arrive(arrive_)
     , depart(depart_)
     , server_mgr(mgr_) {
@@ -84,7 +86,7 @@ void req_socket_manager::self_connect() {
 
 void req_socket_manager::terminate() {
     terminated = true;
-    pthread_cancel(listener_thread);
+    if (!ended_listening) pthread_cancel(listener_thread);
     close(client_fd);
     close(sock);
 }
