@@ -38,6 +38,22 @@ if(Boost_FOUND)
                           ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
                           ${LIBRARIES})
 
+    add_executable(d_raft_launcher_clientless
+                    d_raft_launcher_clientless.cxx
+                    logger.cc
+                    workload.cxx
+                    job_queue.hxx
+                    utils.cxx
+                    sync_file_obj.hxx
+                    in_memory_log_store.cxx)
+    include_directories(${Boost_INCLUDE_DIRS})
+    add_dependencies(d_raft_launcher_clientless
+                    static_lib)
+    target_link_libraries(d_raft_launcher_clientless
+                        ${Boost_LIBRARIES}
+                        ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+                        ${LIBRARIES})
+      
     # add_executable(d_raft_client
     #                 d_raft_client.cxx
     #                 d_raft_scheduler.cxx

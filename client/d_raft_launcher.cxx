@@ -26,44 +26,6 @@ std::shared_ptr<sync_file_obj> depart = nullptr;
 
 int _PROG_LEVEL_ = _LINFO_;
 
-void create_server(json data) {
-    int id = data["id"];
-    char cmd[1024];
-    std::snprintf(cmd,
-                  sizeof(cmd),
-                  "%s/client/d_raft --id %d --ip %s --port %d "
-                  "--cport %d --byz %s --workers %d --qlen %d 1> server_%d.log 2> err_server_%d.log",
-                  fsys::current_path().c_str(),
-                  id,
-                  string(data["ip"]).c_str(),
-                  int(data["port"]),
-                  int(data["cport"]),
-                  string(data["byzantine"]).c_str(),
-                  int(data["workers"]),
-                  int(data["qlen"]),
-                  id,
-                  id);
-    pid_t pid = fork();
-
-    if (pid == 0) {
-        int status = std::system(cmd);
-        if (status < 0) {
-            level_output(_LERROR_, "%s\n", strerror(errno));
-            exit(errno);
-        } else {
-            if (WIFEXITED(status)) {
-                level_output(
-                    _LDEBUG_, "<Server %2d> Program returned normally, exit code %d\n", id, WEXITSTATUS(status));
-            } else {
-                level_output(_LERROR_, "<Server %2d> Program returned abnormally\n", id);
-            }
-            exit(status);
-        }
-    } else {
-        return;
-    }
-}
-
 std::mutex submit_req_mutex;
 void submit_batch(std::shared_ptr<req_socket_manager> req_mgr) { req_mgr->auto_submit(); }
 
@@ -206,7 +168,7 @@ int main(int argc, const char** argv) {
     level_output(_LINFO_, "Launching servers...\n");
 
     for (int i = 0; i < server_mgr->ns; i++) {
-        server_creators.emplace_back(create_server, meta_setting["server"][i]);
+        server_creators.emplace_back(create_server, meta_setting["server"][i], meta_setting["working_dir"]);
     }
 
     for (int i = 0; i < server_mgr->ns; i++) {

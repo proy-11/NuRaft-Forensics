@@ -24,8 +24,10 @@ limitations under the License.
 #include "test_common.h"
 
 #include <atomic>
+#include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 #include <chrono>
+#include <csignal>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -57,6 +59,10 @@ std::mutex service_mutex;
 std::mutex addpeer_mutex;
 std::unordered_map<int, std::shared_ptr<std::mutex>> write_mutex;
 std::unordered_set<int> committed_reqs;
+
+boost::filesystem::path datadir;
+
+std::atomic<bool> exit_signal(false);
 
 struct simple_job {
     simple_job(int sock_, std::string request_)
@@ -167,6 +173,35 @@ std::string escape_quote(std::string str) {
     return res;
 }
 
+json write_result() {
+    int log_height = stuff.raft_instance_->get_last_log_idx();
+    int log_term = stuff.raft_instance_->get_last_log_term();
+    int term = stuff.raft_instance_->get_term();
+    int clog_height = stuff.raft_instance_->get_committed_log_idx();
+    json obj = {{"id", stuff.server_id_},
+                {"success", true},
+                {"log_height", log_height},
+                {"log_height_committed", clog_height},
+                {"log_term", log_term},
+                {"term", term}};
+
+    try {
+        std::ofstream file((datadir / (std::string("server_") + std::to_string(stuff.server_id_) + ".json")).c_str());
+        file << std::setw(4) << obj;
+        file.close();
+    } catch (std::exception& ec) {
+        std::fprintf(stderr, "cannot write result: %s\n", ec.what());
+    }
+    return obj;
+}
+
+void exit_signal_handler(int signal) {
+    std::fprintf(stderr, "got signal %s (%d), exiting\n", strsignal(signal), signal);
+    write_result();
+    exit(0);
+    // exit_signal = true;
+}
+
 ssize_t sync_write(int sock, std::string msg) {
     ssize_t sent;
     ssize_t p = 0, total = msg.length();
@@ -205,28 +240,19 @@ bool add_server(int peer_id, std::string endpoint_to_add) {
     return true;
 }
 
-void server_list() {
-    std::vector<ptr<srv_config>> configs;
-    stuff.raft_instance_->get_srv_config_all(configs);
-
-    int leader_id = stuff.raft_instance_->get_leader();
-
-    for (auto& entry: configs) {
-        ptr<srv_config>& srv = entry;
-        std::cout << "server id " << srv->get_id() << ": " << srv->get_endpoint();
-        if (srv->get_id() == leader_id) {
-            std::cout << " (LEADER)";
-        }
-        std::cout << std::endl;
-    }
-}
-
 void loop() {
     int server_fd;
     int new_sock;
     int opt = 1;
     int addrlen = sizeof(sockaddr_in);
     sockaddr_in address;
+
+    if (stuff.cport_ < 1000) {
+        while (!exit_signal) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+        return;
+    }
 
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("socket failed");
@@ -253,7 +279,7 @@ void loop() {
         exit(EXIT_FAILURE);
     }
 
-    while (true) {
+    while (exit_signal) {
         if ((new_sock = accept(server_fd, (sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
             perror("accept");
             exit(errno);
@@ -342,9 +368,10 @@ void set_server_info(cmargs& args) {
     stuff.cport_ = args.cport;
     if (stuff.port_ < 1000) {
         std::cerr << "wrong port (should be >= 1000): " << stuff.port_ << std::endl;
+        exit(1);
     }
     if (stuff.cport_ < 1000) {
-        std::cerr << "wrong cport (should be >= 1000): " << stuff.cport_ << std::endl;
+        std::cerr << "warning: inactive cport (should be >= 1000): " << stuff.cport_ << std::endl;
     }
 
     stuff.addr_ = args.ipaddr;
@@ -464,17 +491,7 @@ void handle_message(int sock, std::string request) {
     } else if (_ISSUBSTR_(request, "addpeer")) {
         add_peer(sock, request);
     } else if (_ISSUBSTR_(request, "exit")) {
-        int log_height = stuff.raft_instance_->get_last_log_idx();
-        int log_term = stuff.raft_instance_->get_last_log_term();
-        int term = stuff.raft_instance_->get_term();
-        int clog_height = stuff.raft_instance_->get_committed_log_idx();
-        json obj = {{"id", stuff.server_id_},
-                    {"success", true},
-                    {"log_height", log_height},
-                    {"log_height_committed", clog_height},
-                    {"log_term", log_term},
-                    {"term", term},
-                    {"num_committed", committed_reqs.size()}};
+        json obj = write_result();
         sync_write(sock, obj.dump() + "\n");
         std::cout << "terminating -- info:\n" << obj.dump() << std::endl;
         exit(0);
@@ -531,7 +548,10 @@ cmargs parse_args(int argc, char** argv) {
     desc.add_options()("help", "produce help message")("id", po::value<int>(), "server id")(
         "ip", po::value<std::string>(), "IP address")("port", po::value<int>(), "port number")(
         "cport", po::value<int>(), "Client port number")("byz", po::value<std::string>(), "Byzantine status")(
-        "workers", po::value<int>(), "number of threads at max")("qlen", po::value<int>(), "max queue length");
+        "workers", po::value<int>(), "number of threads at max")("qlen", po::value<int>(), "max queue length")(
+        "datadir",
+        po::value<std::string>()->default_value(boost::filesystem::current_path().string()),
+        "data directory");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -588,9 +608,13 @@ cmargs parse_args(int argc, char** argv) {
         exit(1);
     }
 
+    if (vm.count("datadir")) {
+        datadir = vm["datadir"].as<std::string>();
+    }
+    std::cerr << "datadir set to " << boost::filesystem::absolute(datadir) << "\n";
+
     return cmargs(id, ipaddr, port, cport, byzantine, workers, qlen);
 }
-
 }; // namespace d_raft_server
 using namespace d_raft_server;
 
@@ -598,6 +622,7 @@ int main(int argc, char** argv) {
     cmargs args = parse_args(argc, argv);
 
     set_server_info(args);
+    signal(SIGINT, exit_signal_handler);
 
     std::cout << "    -- Replicated Calculator with Raft --" << std::endl;
     std::cout << "                         Version 0.1.0" << std::endl;
