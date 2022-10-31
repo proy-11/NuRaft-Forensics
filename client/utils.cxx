@@ -3,7 +3,7 @@
 #if __APPLE__
 #define TOP_CMD "/usr/bin/top -l 0 -n 1 -pid "
 #else
-#define TOP_CMD "/usr/bin/top -b -d 1 -n 1 -p "
+#define TOP_CMD "/usr/bin/top -b -d 1 -n 10000 -p "
 #endif
 
 void level_output(_levels_ level, const char* fmt, ...) {

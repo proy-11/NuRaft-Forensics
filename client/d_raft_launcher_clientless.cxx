@@ -217,6 +217,7 @@ void server_list() {
 void loop() {
     nuraft::workload load(workload_setting);
     int total_batches = 0;
+    auto time_start = now_();
 
     while (true) {
         int delay = load.get_next_batch_delay_us();
@@ -235,7 +236,22 @@ void loop() {
             }
         }
 
-        level_output(_LINFO_, "submitted batch %d\n", ++total_batches);
+        total_batches++;
+        if (total_batches % 10 == 0) {
+            uint64_t duration_total = now_() - time_start;
+            uint64_t duration_min = duration_total / 60000000000;
+            duration_total -= duration_min * (60000000000);
+            uint64_t duration_s = duration_total / 1000000000;
+            duration_total -= duration_s * 1000000000;
+            uint64_t duration_ms = duration_total / 1000000;
+
+            level_output(_LINFO_,
+                         "%02llu:%02llu.%03llu submitted batch %d\n",
+                         duration_min,
+                         duration_s,
+                         duration_ms,
+                         total_batches);
+        }
 
         std::this_thread::sleep_for(std::chrono::microseconds(delay));
     }
