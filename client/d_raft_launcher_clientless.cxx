@@ -59,6 +59,10 @@ pid_t monitor;
 fsys::path datadir;
 
 int _PROG_LEVEL_ = _LINFO_;
+int total_rejected = 0;
+int total_enqueued = 0;
+
+std::atomic<bool> ended(false);
 
 namespace d_raft_server {
 
@@ -138,7 +142,14 @@ json write_result() {
                 {"log_term", log_term},
                 {"term", term}};
 
-    level_output(_LINFO_, "J = %d, J(C'ed) = %d, T = %d, term = %d\n", log_height, clog_height, log_term, term);
+    level_output(_LINFO_,
+                 "Enqueued %d, Rejected %d, J = %d, J(C'ed) = %d, T = %d, term = %d\n",
+                 total_enqueued,
+                 total_rejected,
+                 log_height,
+                 clog_height,
+                 log_term,
+                 term);
 
     try {
         std::ofstream file((datadir / (std::string("server_") + std::to_string(stuff.server_id_) + ".json")).c_str());
@@ -151,7 +162,9 @@ json write_result() {
 }
 
 void exit_handler(int sig) {
-    std::unique_lock<std::mutex> lock(exit_mutex);
+    // std::unique_lock<std::mutex> lock(exit_mutex);
+    exit_mutex.lock();
+    ended = true;
     server_list();
 
     for (auto& pid: server_pids) {
@@ -161,7 +174,12 @@ void exit_handler(int sig) {
 
     kill(monitor, SIGINT);
     write_result();
-    exit(sig);
+
+    stuff.raft_instance_->shutdown();
+    stuff.launcher_.shutdown();
+
+    level_output(_LINFO_, "exiting\n");
+    exit(0);
 }
 
 bool add_server(int peer_id, std::string endpoint_to_add) {
@@ -198,6 +216,7 @@ void server_list() {
 
 void loop() {
     nuraft::workload load(workload_setting);
+    int total_batches = 0;
 
     while (true) {
         int delay = load.get_next_batch_delay_us();
@@ -210,8 +229,13 @@ void loop() {
         for (auto& req: requests) {
             if (!jobq->enque(req)) {
                 level_output(_LWARNING_, "req %d rejected by full queue\n", req.index);
+                total_rejected++;
+            } else {
+                total_enqueued++;
             }
         }
+
+        level_output(_LINFO_, "submitted batch %d\n", ++total_batches);
 
         std::this_thread::sleep_for(std::chrono::microseconds(delay));
     }
@@ -327,10 +351,11 @@ void handle_result(ptr<TestSuite::Timer> timer, raft_result& result, ptr<std::ex
 }
 
 void replicate_request(request req) {
+    if (ended) return;
+
     std::string req_json_str = req.to_json_str();
     const char* req_desc = req_json_str.c_str();
 
-    debug_print("req %s in service\n", req_desc);
     std::unique_lock<std::mutex> lock(service_mutex);
 
     ptr<TestSuite::Timer> timer = cs_new<TestSuite::Timer>();
@@ -341,11 +366,13 @@ void replicate_request(request req) {
 
     ptr<raft_result> ret = stuff.raft_instance_->append_entries({new_log});
 
-    debug_print("req %s finished appending\n", req_desc);
+    if (ended) return;
 
     if (!ret->get_accepted()) {
-        cmd_result_code rc = ret->get_result_code();
-        std::cout << "failed to replicate: " << rc << ", " << TestSuite::usToString(timer->getTimeUs()) << std::endl;
+        level_output(_LWARNING_,
+                     "failed to replicate (%s), %s",
+                     ret->get_result_str().c_str(),
+                     TestSuite::usToString(timer->getTimeUs()).c_str());
         debug_print("req %s not accepted, reason: %s\n", req_desc, ret->get_result_str().c_str());
         return;
     }
@@ -462,10 +489,9 @@ int main(int argc, char** argv) {
 
     monitor = create_cpu_monitor(datadir);
 
-    std::cout << "    -- Replicated Calculator with Raft --" << std::endl;
-    std::cout << "                         Version 0.1.0" << std::endl;
-    std::cout << "    Server ID:    " << stuff.server_id_ << std::endl;
-    std::cout << "    Endpoint:     " << stuff.endpoint_ << std::endl;
+    level_output(_LINFO_, "    -- Clientless Benchmarker for Raft --\n");
+    level_output(_LINFO_, "    Server ID:    %d\n", stuff.server_id_);
+    level_output(_LINFO_, "    Endpoint:     %s\n", stuff.endpoint_.c_str());
     init_raft(cs_new<d_raft_state_machine>());
 
     std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["connection_wait_ms"]));
@@ -480,10 +506,12 @@ int main(int argc, char** argv) {
 
     server_list();
 
-    std::thread([]{
+    std::thread([] {
         std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["exp_duration_ms"]));
-        level_output(_LINFO_, "experiment terminated due to expiration\n");
-        exit_handler(0);
+        if (!ended) {
+            level_output(_LINFO_, "experiment terminated due to expiration\n");
+            exit_handler(0);
+        }
     }).detach();
 
     jobq = std::shared_ptr<job_queue<request>>(

@@ -1,5 +1,11 @@
 #include "utils.hxx"
 
+#if __APPLE__
+#define TOP_CMD "/usr/bin/top -l 0 -n 1 -pid "
+#else
+#define TOP_CMD "/usr/bin/top -b -d 1 -n 1 -p "
+#endif
+
 void level_output(_levels_ level, const char* fmt, ...) {
     if (level > _PROG_LEVEL_) return;
 
@@ -140,7 +146,7 @@ pid_t create_cpu_monitor(fsys::path rootpath) {
 
         // int status = execl("/usr/bin/top", "/usr/bin/top", "-n", "1", "|", "grep", "CPU usage", (char*)NULL);
         std::stringstream ss;
-        ss << "/usr/bin/top -l 0 -n 1 -pid " << monitored << " | grep --line-buffered " << monitored;
+        ss << TOP_CMD << monitored << " | grep --line-buffered " << monitored;
         int status = execl("/bin/sh", "/bin/sh", "-c", ss.str().c_str(), (char*)NULL);
 
         close(fd_out);

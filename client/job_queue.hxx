@@ -33,17 +33,26 @@ public:
     job_queue(job_func<T> jfunc_, int max_threads, int max_qlen)
         : jfunc(jfunc_)
         , nthreads(max_threads)
-        , max_queue_length(max_qlen) {}
-    ~job_queue() {}
+        , target_nthreads(max_threads)
+        , max_queue_length(max_qlen)
+        , ended(false)
+        , looper(nullptr) {}
+    ~job_queue() {
+        ended = true;
+        cv_jobs.notify_all();
+        if (looper) looper->join();
+        std::unique_lock<std::mutex> lock(thread_allocation_lock);
+        cv_threads.wait(lock, [this]() -> bool { return nthreads >= target_nthreads; });
+        std::fprintf(stderr, "destroyed job queue\n");
+    }
 
     bool enque(T element) {
+        if (ended) return false;
         bool success = false;
         {
             std::unique_lock<std::mutex> lock(job_allocation_lock);
             if ((success = jobs.size() < max_queue_length)) {
-                debug_print("Try IN\n");
                 jobs.push(element);
-                debug_print("IN , height = %6d\n", jobs.size());
             }
         }
         if (success) {
@@ -52,50 +61,50 @@ public:
         return success;
     }
 
-    T deque() {
-        debug_print("Try OUT, waiting for mutex\n");
+    std::shared_ptr<T> deque() {
         std::unique_lock<std::mutex> lock(job_allocation_lock);
-        debug_print("Try OUT, waiting for jobs\n");
-        cv_jobs.wait(lock, [this]() -> bool { return !jobs.empty(); });
-        T result = jobs.front();
+        cv_jobs.wait(lock, [this]() -> bool { return ended || !jobs.empty(); });
+        if (ended) return nullptr;
+
+        std::shared_ptr<T> result = std::make_shared<T>(jobs.front());
         jobs.pop();
-        debug_print("OUT, height = %6d\n", jobs.size());
         return result;
     }
 
     void process_jobs() {
-        std::thread looper([this]() -> void {
-            while (true) {
-                auto pair = deque();
+        looper = std::shared_ptr<std::thread>(new std::thread([this]() -> void {
+            while (!ended) {
+                std::shared_ptr<T> pair = deque();
 
-                debug_print("Waiting for thread\n");
+                if (ended) return;
+
                 std::unique_lock<std::mutex> lock(thread_allocation_lock);
                 cv_threads.wait(lock, [this]() -> bool { return nthreads > 0; });
                 nthreads--;
 
-                debug_print("Got free thread, resource remaining = %d\n", int(nthreads));
-
-                std::thread thr(
+                std::thread(
                     [this](T element) -> void {
                         jfunc(element);
                         std::unique_lock<std::mutex> lock(thread_allocation_lock);
                         nthreads++;
                         cv_threads.notify_one();
                     },
-                    pair);
-                thr.detach();
+                    *pair)
+                    .detach();
             }
-        });
-        looper.detach();
+        }));
     }
 
 private:
     job_func<T> jfunc;
     std::atomic<int> nthreads;
+    int target_nthreads;
     int max_queue_length;
+    std::atomic<bool> ended;
     std::mutex job_allocation_lock;
     std::mutex thread_allocation_lock;
     std::condition_variable cv_jobs;
     std::condition_variable cv_threads;
     std::queue<T> jobs;
+    std::shared_ptr<std::thread> looper;
 };
