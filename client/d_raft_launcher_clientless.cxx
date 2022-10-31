@@ -480,12 +480,11 @@ int main(int argc, char** argv) {
 
     server_list();
 
-    std::thread timeout([]() -> void {
+    std::thread([]{
         std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["exp_duration_ms"]));
         level_output(_LINFO_, "experiment terminated due to expiration\n");
-        raise(SIGINT);
-    });
-    timeout.detach();
+        exit_handler(0);
+    }).detach();
 
     jobq = std::shared_ptr<job_queue<request>>(
         new job_queue<request>(replicate_request, this_setting["workers"], this_setting["qlen"]));
