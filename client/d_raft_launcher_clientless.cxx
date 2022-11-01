@@ -359,11 +359,8 @@ void handle_result(ptr<TestSuite::Timer> timer, raft_result& result, ptr<std::ex
     }
     ptr<buffer> buf = result.get();
     uint64_t ret_value = buf->get_ulong();
-    level_output(_LDEBUG_,
-                 "succeeded, %s, return value: %llu, state machine value: %lld\n",
-                 TestSuite::usToString(timer->getTimeUs()).c_str(),
-                 ret_value,
-                 get_sm()->get_current_value());
+    level_output(
+        _LDEBUG_, "succeeded, %s, return value: %llu\n", TestSuite::usToString(timer->getTimeUs()).c_str(), ret_value);
 }
 
 void replicate_request(request req) {

@@ -21,6 +21,7 @@ limitations under the License.
 
 #include <atomic>
 #include <cassert>
+#include <csignal>
 #include <mutex>
 
 #include <string.h>
@@ -62,43 +63,17 @@ public:
         // as this example doesn't do anything on pre-commit.
     }
 
-    int read_logical_snp_obj(snapshot& s,
-                             void*& user_snp_ctx,
-                             ulong obj_id,
-                             ptr<buffer>& data_out,
-                             bool& is_last_obj) {
-        ptr<snapshot_ctx> ctx = nullptr;
-        {
-            std::lock_guard<std::mutex> ll(snapshots_lock_);
-            auto entry = snapshots_.find(s.get_last_log_idx());
-            if (entry == snapshots_.end()) {
-                // Snapshot doesn't exist.
-                data_out = nullptr;
-                is_last_obj = true;
-                return 0;
-            }
-            ctx = entry->second;
-        }
+    int read_logical_snp_obj(snapshot& s, void*& user_snp_ctx, ulong obj_id, ptr<buffer>& data_out, bool& is_last_obj) {
+        // Put dummy data.
+        data_out = buffer::alloc(sizeof(int32));
+        buffer_serializer bs(data_out);
+        bs.put_i32(0);
 
-        if (obj_id == 0) {
-            // Object ID == 0: first object, put dummy data.
-            data_out = buffer::alloc(sizeof(int32));
-            buffer_serializer bs(data_out);
-            bs.put_i32(0);
-            is_last_obj = false;
-
-        } else {
-            // Object ID > 0: second object, put actual value.
-            data_out = buffer::alloc(sizeof(ulong));
-            buffer_serializer bs(data_out);
-            bs.put_u64(ctx->value_);
-            is_last_obj = true;
-        }
+        is_last_obj = true;
         return 0;
     }
 
-    void save_logical_snp_obj(
-        snapshot& s, ulong& obj_id, buffer& data, bool is_first_obj, bool is_last_obj) {
+    void save_logical_snp_obj(snapshot& s, ulong& obj_id, buffer& data, bool is_first_obj, bool is_last_obj) {
         if (obj_id == 0) {
             // Object ID == 0: it contains dummy value, create snapshot context.
             create_snapshot_internal(s);

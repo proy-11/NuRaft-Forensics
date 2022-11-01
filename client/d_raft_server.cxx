@@ -145,6 +145,7 @@ struct server_stuff {
 static server_stuff stuff;
 
 std::shared_ptr<job_queue<simple_job>> jobq;
+std::mutex exit_mutex;
 
 inline bool is_empty(std::string str) {
     return std::string(str.c_str()) == "" || str.find_first_not_of(" \0\t\n\v\f\r") == str.npos;
@@ -196,10 +197,11 @@ json write_result() {
 }
 
 void exit_signal_handler(int signal) {
+    exit_mutex.lock();
     std::fprintf(stderr, "got signal %s (%d), exiting\n", strsignal(signal), signal);
+    exit_signal = true;
     write_result();
     exit(0);
-    // exit_signal = true;
 }
 
 ssize_t sync_write(int sock, std::string msg) {
@@ -392,7 +394,7 @@ void handle_result(ptr<TestSuite::Timer> timer, raft_result& result, ptr<std::ex
     ptr<buffer> buf = result.get();
     uint64_t ret_value = buf->get_ulong();
     std::cout << "succeeded, " << TestSuite::usToString(timer->getTimeUs()) << ", return value: " << ret_value
-              << ", state machine value: " << get_sm()->get_current_value() << std::endl;
+              << std::endl;
 }
 
 void reply_check_init(int sock) { sync_write(sock, "init\n"); }
@@ -635,5 +637,6 @@ int main(int argc, char** argv) {
     jobq->process_jobs();
     loop();
 
+    exit_signal_handler(0);
     return 0;
 }
