@@ -5,44 +5,59 @@
       "byzantine": "None",
       "ip": "127.0.0.1",
       "port": 23334,
-      "cport": 33334
+      "cport": 33334,
+      "workers": 1024,
+      "qlen": 1000
     },
     {
       "id": 2,
       "byzantine": "None",
       "ip": "127.0.0.1",
       "port": 23335,
-      "cport": 33335
+      "cport": 33335,
+      "workers": 1024,
+      "qlen": 10000
     },
     {
       "id": 3,
       "byzantine": "None",
       "ip": "127.0.0.1",
       "port": 23336,
-      "cport": 33336
+      "cport": 33336,
+      "workers": 1024,
+      "qlen": 10000
     },
     {
       "id": 4,
       "byzantine": "None",
       "ip": "127.0.0.1",
       "port": 23337,
-      "cport": 33337
+      "cport": 33337,
+      "workers": 1024,
+      "qlen": 10000
     },
     {
       "id": 5,
       "byzantine": "None",
       "ip": "127.0.0.1",
       "port": 23338,
-      "cport": 33338
+      "cport": 33338,
+      "workers": 1024,
+      "qlen": 10000
     }
   ],
   "client": {
     "path": "client/workload.json"
   },
-  "connection_wait_ms": 2500,
+  "exit_retries": 5,
+  "exit_cooldown_ms": 2000,
+  "exit_retry_ms": 1000,
+  "reconnect_retry_ms": 2000,
+  "socket_wait_ms": 200,
+  "connection_wait_ms": 2000,
   "add_server_gap_ms": 500,
   "add_server_retry_ms": 1000,
-  "missing_leader_retry_ms": 1000,
-  "exp_duration_ms": 5500,
+  "submit_retry_ms": 1000,
+  "exp_duration_ms": 2000,
   "working_dir": "benchmark_results/example/"
 }

@@ -1,18 +1,17 @@
-add_executable(raft_client
-               main.cxx
-               raft_client.cxx
-               in_memory_log_store.cxx)
-add_dependencies(raft_client
-                 static_lib)
-target_link_libraries(raft_client
-                      ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
-                      ${LIBRARIES})
+# add_executable(raft_client
+#                raft_client.cxx
+#                in_memory_log_store.cxx)
+# add_dependencies(raft_client
+#                  static_lib)
+# target_link_libraries(raft_client
+#                       ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+#                       ${LIBRARIES})
 
 
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
-find_package(Boost 1.74.0 COMPONENTS program_options thread)
+find_package(Boost 1.74.0 COMPONENTS program_options thread filesystem)
 if(Boost_FOUND)
     message(STATUS "Boost found")
     include_directories(${Boost_INCLUDE_DIRS})
@@ -29,6 +28,7 @@ if(Boost_FOUND)
                     d_raft_server.cxx
                     logger.cc
                     workload.cxx
+                    job_queue.hxx
                     in_memory_log_store.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
     add_dependencies(d_raft
@@ -38,24 +38,44 @@ if(Boost_FOUND)
                           ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
                           ${LIBRARIES})
 
-    add_executable(d_raft_client
-                    d_raft_client.cxx
-                    d_raft_scheduler.cxx
+    add_executable(d_raft_launcher_clientless
+                    d_raft_launcher_clientless.cxx
+                    logger.cc
                     workload.cxx
+                    job_queue.hxx
+                    utils.cxx
+                    sync_file_obj.hxx
                     in_memory_log_store.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
-    add_dependencies(d_raft_client
-                     static_lib)
-    target_link_libraries(d_raft_client
-                          ${Boost_LIBRARIES}
-                          ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
-                          ${LIBRARIES})
+    add_dependencies(d_raft_launcher_clientless
+                    static_lib)
+    target_link_libraries(d_raft_launcher_clientless
+                        ${Boost_LIBRARIES}
+                        ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+                        ${LIBRARIES})
+      
+    # add_executable(d_raft_client
+    #                 d_raft_client.cxx
+    #                 d_raft_scheduler.cxx
+    #                 workload.cxx
+    #                 in_memory_log_store.cxx)
+    # include_directories(${Boost_INCLUDE_DIRS})
+    # add_dependencies(d_raft_client
+    #                  static_lib)
+    # target_link_libraries(d_raft_client
+    #                       ${Boost_LIBRARIES}
+    #                       ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+    #                       ${LIBRARIES})
 
     add_executable(d_raft_launcher
                     workload.cxx
                     d_raft_scheduler.cxx
                     d_raft_launcher.cxx
-                    utils.hxx)
+                    req_socket_mgr.cxx
+                    server_data_mgr.cxx
+                    utils.cxx
+                    sync_file_obj.hxx
+                    commander.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
     add_dependencies(d_raft_launcher
                      static_lib)

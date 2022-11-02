@@ -15,3 +15,5 @@ nbproject/
 *.exe
 *.ilk
 *.lib
+
+**/benchmark_results

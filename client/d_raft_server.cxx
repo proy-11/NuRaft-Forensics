@@ -17,23 +17,27 @@ limitations under the License.
 
 #include "d_raft_state_machine.hxx"
 #include "in_memory_state_mgr.hxx"
+#include "job_queue.hxx"
 #include "libnuraft/json.hpp"
 #include "logger_wrapper.hxx"
-
 #include "nuraft.hxx"
-
 #include "test_common.h"
 
-#include <boost/asio.hpp>
-#include <boost/program_options.hpp>
-
 #include <atomic>
+#include <boost/filesystem.hpp>
+#include <boost/program_options.hpp>
 #include <chrono>
+#include <csignal>
 #include <iostream>
+#include <map>
 #include <mutex>
+#include <netinet/in.h>
 #include <sstream>
+#include <sys/socket.h>
 #include <sys/wait.h>
 #include <thread>
+
+#define BUF_SIZE 65536
 
 #define _ISSUBSTR_(s1, s2) ((s1).find(s2) != std::string::npos)
 #define _ISNPOS_(p) ((p) == std::string::npos)
@@ -41,10 +45,8 @@ limitations under the License.
 using namespace nuraft;
 
 namespace po = boost::program_options;
-namespace asio = boost::asio;
 
 using json = nlohmann::json;
-using boost::asio::ip::tcp;
 
 namespace d_raft_server {
 
@@ -55,26 +57,42 @@ using raft_result = cmd_result<ptr<buffer>>;
 
 std::mutex service_mutex;
 std::mutex addpeer_mutex;
-std::mutex write_mutex;
-
-// std::atomic_int committed_req_index(-1);
-
+std::unordered_map<int, std::shared_ptr<std::mutex>> write_mutex;
 std::unordered_set<int> committed_reqs;
 
+boost::filesystem::path datadir;
+
+std::atomic<bool> exit_signal(false);
+
+struct simple_job {
+    simple_job(int sock_, std::string request_)
+        : sock(sock_)
+        , request(request_) {}
+    int sock;
+    std::string request;
+};
+
+void replicate_request(simple_job job);
+void handle_message(int sock, std::string request);
+void handle_session(int sock);
+
 struct cmargs {
-    cmargs(int id_, std::string ipaddr_, int port_, int cport_, std::string byzantine_) {
-        this->id = id_;
-        this->ipaddr = ipaddr_;
-        this->port = port_;
-        this->cport = cport_;
-        this->byzantine = byzantine_;
-    }
+    cmargs(int id_, std::string ipaddr_, int port_, int cport_, std::string byzantine_, int workers_, int qlen_)
+        : id(id_)
+        , ipaddr(ipaddr_)
+        , port(port_)
+        , cport(cport_)
+        , byzantine(byzantine_)
+        , workers(workers_)
+        , qlen(qlen_) {}
 
     int id;
     std::string ipaddr;
     int port;
     int cport;
     std::string byzantine;
+    int workers;
+    int qlen;
 };
 
 struct server_stuff {
@@ -126,26 +144,82 @@ struct server_stuff {
 };
 static server_stuff stuff;
 
-size_t sync_write(tcp::socket* psock, const asio::const_buffers_1& buf) {
-    size_t res = 0;
-    write_mutex.lock();
-    try {
-        res = asio::write(*psock, buf);
-    } catch (boost::system::system_error &error) {
-        std::cerr << error.what();
+std::shared_ptr<job_queue<simple_job>> jobq;
+std::mutex exit_mutex;
+
+inline bool is_empty(std::string str) {
+    return std::string(str.c_str()) == "" || str.find_first_not_of(" \0\t\n\v\f\r") == str.npos;
+}
+
+std::string escape_quote(std::string str) {
+    char* buf = new char[2 * str.length() + 1];
+    if (buf == NULL) {
+        return "";
     }
-    write_mutex.unlock();
+
+    size_t p = 0;
+    for (const char c: str) {
+        if (c == '"') {
+            buf[p] = '\\';
+            buf[p + 1] = '"';
+            p += 2;
+        } else {
+            buf[p] = c;
+            p += 1;
+        }
+    }
+    buf[p] = '\0';
+    std::string res(buf);
+    delete[] buf;
     return res;
 }
 
-std::string readline(tcp::socket* psock) {
-    std::string message = "";
-    char buf[1] = {'k'};
-    for (; buf[0] != '\n';) {
-        asio::read(*psock, asio::buffer(buf, 1));
-        message += buf[0];
+json write_result() {
+    int log_height = stuff.raft_instance_->get_last_log_idx();
+    int log_term = stuff.raft_instance_->get_last_log_term();
+    int term = stuff.raft_instance_->get_term();
+    int clog_height = stuff.raft_instance_->get_committed_log_idx();
+    json obj = {{"id", stuff.server_id_},
+                {"success", true},
+                {"log_height", log_height},
+                {"log_height_committed", clog_height},
+                {"log_term", log_term},
+                {"term", term}};
+
+    try {
+        std::ofstream file((datadir / (std::string("server_") + std::to_string(stuff.server_id_) + ".json")).c_str());
+        file << std::setw(4) << obj;
+        file.close();
+    } catch (std::exception& ec) {
+        std::fprintf(stderr, "cannot write result: %s\n", ec.what());
     }
-    return message;
+    return obj;
+}
+
+void exit_signal_handler(int signal) {
+    exit_mutex.lock();
+    std::fprintf(stderr, "got signal %s (%d), exiting\n", strsignal(signal), signal);
+    exit_signal = true;
+    write_result();
+    exit(0);
+}
+
+ssize_t sync_write(int sock, std::string msg) {
+    ssize_t sent;
+    ssize_t p = 0, total = msg.length();
+    const char* cmsg = msg.c_str();
+
+    std::unique_lock<std::mutex> lock(*write_mutex[sock]);
+    while (p < total) {
+        sent = send(sock, cmsg + p, total - p, MSG_NOSIGNAL);
+        if (errno || sent < 0) {
+            std::fprintf(
+                stderr, "Warning: <send> encountered errno %d (%s):\n%s\n", errno, std::strerror(errno), msg.c_str());
+            return sent;
+        }
+        p += sent;
+    }
+    return p;
 }
 
 bool add_server(int peer_id, std::string endpoint_to_add) {
@@ -168,36 +242,52 @@ bool add_server(int peer_id, std::string endpoint_to_add) {
     return true;
 }
 
-void server_list() {
-    std::vector<ptr<srv_config>> configs;
-    stuff.raft_instance_->get_srv_config_all(configs);
-
-    int leader_id = stuff.raft_instance_->get_leader();
-
-    for (auto& entry: configs) {
-        ptr<srv_config>& srv = entry;
-        std::cout << "server id " << srv->get_id() << ": " << srv->get_endpoint();
-        if (srv->get_id() == leader_id) {
-            std::cout << " (LEADER)";
-        }
-        std::cout << std::endl;
-    }
-}
-
-// bool do_cmd(const std::vector<std::string>& tokens);
-void handle_message(tcp::socket* psock, std::string request);
-void handle_session(tcp::socket* psock);
-
 void loop() {
-    // char cmd[1000];
-    // std::string prompt = "calc " + std::to_string(stuff.server_id_) + "> ";
+    int server_fd;
+    int new_sock;
+    int opt = 1;
+    int addrlen = sizeof(sockaddr_in);
+    sockaddr_in address;
 
-    asio::io_service io_service;
-    tcp::acceptor acceptor_(io_service, tcp::endpoint(tcp::v4(), stuff.cport_));
-    while (true) {
-        tcp::socket* psocket_ = new tcp::socket(io_service);
-        acceptor_.accept(*psocket_);
-        std::thread thr(handle_session, psocket_);
+    if (stuff.cport_ < 1000) {
+        while (!exit_signal) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+        return;
+    }
+
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Forcefully attaching socket to the port 8080
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(stuff.cport_);
+
+    if (bind(server_fd, (sockaddr*)&address, sizeof(address)) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(server_fd, 3) < 0) {
+        perror("listen");
+        exit(EXIT_FAILURE);
+    }
+
+    while (exit_signal) {
+        if ((new_sock = accept(server_fd, (sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
+            perror("accept");
+            exit(errno);
+        }
+        write_mutex[new_sock] = std::shared_ptr<std::mutex>(new std::mutex());
+        std::thread thr(handle_session, new_sock);
         thr.detach();
     }
 }
@@ -280,9 +370,10 @@ void set_server_info(cmargs& args) {
     stuff.cport_ = args.cport;
     if (stuff.port_ < 1000) {
         std::cerr << "wrong port (should be >= 1000): " << stuff.port_ << std::endl;
+        exit(1);
     }
     if (stuff.cport_ < 1000) {
-        std::cerr << "wrong cport (should be >= 1000): " << stuff.cport_ << std::endl;
+        std::cerr << "warning: inactive cport (should be >= 1000): " << stuff.cport_ << std::endl;
     }
 
     stuff.addr_ = args.ipaddr;
@@ -303,69 +394,57 @@ void handle_result(ptr<TestSuite::Timer> timer, raft_result& result, ptr<std::ex
     ptr<buffer> buf = result.get();
     uint64_t ret_value = buf->get_ulong();
     std::cout << "succeeded, " << TestSuite::usToString(timer->getTimeUs()) << ", return value: " << ret_value
-              << ", state machine value: " << get_sm()->get_current_value() << std::endl;
+              << std::endl;
 }
 
-void reply_check_init(tcp::socket* psock, std::string& request) { sync_write(psock, asio::buffer("init\n")); }
+void reply_check_init(int sock) { sync_write(sock, "init\n"); }
 
-void add_peer(tcp::socket* psock, std::string& request) {
-    const char *ID_PREFIX = "id=", *EP_PREFIX = "ep=";
-    size_t idpos = request.find(ID_PREFIX);
-    size_t eppos = request.find(EP_PREFIX);
+void add_peer(int sock, std::string& request) {
+    int id;
+    char ep[50] = {0};
+    int scanned = std::sscanf(request.c_str(), "addpeer id=%d ep=%s", &id, ep);
 
-    if (_ISNPOS_(idpos) || _ISNPOS_(eppos)) {
-        std::cerr << "cannot find keywords" << std::endl;
-        exit(1);
-    }
-
-    idpos += std::strlen(ID_PREFIX);
-    eppos += std::strlen(EP_PREFIX);
-
-    size_t delim;
-    for (delim = idpos; delim < request.length() && request[delim] != ' ' && request[delim] != '\n'; delim++) {
-    }
-    if (delim >= request.length()) {
+    if (scanned != 2) {
         std::cerr << "request format wrong: " << request << std::endl;
         exit(1);
     }
-    int id = std::stoi(request.substr(idpos, delim));
 
-    for (delim = eppos; delim < request.length() && request[delim] != ' ' && request[delim] != '\n'; delim++) {
-    }
-    if (delim >= request.length()) {
-        std::cerr << "request format wrong: " << request << std::endl;
-        exit(1);
-    }
-    std::string endpoint = request.substr(eppos, delim);
-
-    // std::cout << "got id = " << id << ", endpoint = " << endpoint << "\n";
-    bool add_result = add_server(id, endpoint);
-    if (add_result) {
-        sync_write(psock, asio::buffer(std::string("added ") + std::to_string(id) + "\n"));
+    if (add_server(id, ep)) {
+        sync_write(sock, std::string("added ") + std::to_string(id) + "\n");
     } else {
-        sync_write(psock, asio::buffer(std::string("cannot add ") + std::to_string(id) + "\n"));
+        sync_write(sock, std::string("cannot add ") + std::to_string(id) + "\n");
     }
 }
 
-void replicate_request(tcp::socket* psock, std::string request) {
+void replicate_request(simple_job job) {
     int rid;
+
+    debug_print("Replicating req %s\n", job.request.c_str());
+
     try {
-        json req_obj = json::parse(request);
+        json req_obj = json::parse(job.request);
         rid = req_obj["index"];
-    } catch (json::exception &ec) {
-        json reply = {{"success", false}, {"error", ec.what()}};
-        sync_write(psock, asio::buffer(reply.dump() + "\n"));
+    } catch (json::exception& ec) {
+        std::string errmsg = "{\"success\": false, \"error\": \"";
+        errmsg += escape_quote(job.request);
+        errmsg += "\"}\n";
+        sync_write(job.sock, errmsg);
+        debug_print("req %s format error\n", job.request.c_str());
         return;
     }
 
+    debug_print("req %s in service\n", job.request.c_str());
     service_mutex.lock();
 
     if (committed_reqs.find(rid) != committed_reqs.end()) {
         service_mutex.unlock();
-        json reply = {{"success", false}, {"error", "request already committed"}};
-        sync_write(psock, asio::buffer(reply.dump() + "\n"));
+        json reply = {{"rid", rid}, {"success", false}, {"error", "request already committed"}};
+        sync_write(job.sock, reply.dump() + "\n");
+        debug_print("req %s already committed\n", job.request.c_str());
         return;
     }
+
+    debug_print("req %s appending\n", job.request.c_str());
 
     ptr<TestSuite::Timer> timer = cs_new<TestSuite::Timer>();
 
@@ -377,17 +456,22 @@ void replicate_request(tcp::socket* psock, std::string request) {
 
     ptr<raft_result> ret = stuff.raft_instance_->append_entries({new_log});
 
+    debug_print("req %s finished appending\n", job.request.c_str());
+
     if (!ret->get_accepted()) {
         cmd_result_code rc = ret->get_result_code();
         std::cout << "failed to replicate: " << rc << ", " << TestSuite::usToString(timer->getTimeUs()) << std::endl;
         service_mutex.unlock();
-        json obj = {{"req", rid}, {"success", false}, {"ec", rc}, {"error", ret->get_result_str()}};
+        json obj = {{"rid", rid}, {"success", false}, {"ec", rc}, {"error", ret->get_result_str()}};
         if (rc == cmd_result_code::NOT_LEADER) {
             obj["leader"] = stuff.raft_instance_->get_leader();
         }
-        sync_write(psock, asio::buffer(obj.dump() + "\n"));
+        sync_write(job.sock, obj.dump() + "\n");
+        debug_print("req %s not accepted, reason: %s\n", job.request.c_str(), ret->get_result_str().c_str());
         return;
     }
+
+    debug_print("req %s accepted\n", job.request.c_str());
 
     ptr<std::exception> err(nullptr);
     handle_result(timer, *ret, err);
@@ -395,48 +479,69 @@ void replicate_request(tcp::socket* psock, std::string request) {
     int top_term = stuff.raft_instance_->get_last_log_term();
     service_mutex.unlock();
 
-    json obj = {{"req", rid}, {"success", true}, {"index", top_index}, {"term", top_term}};
+    json obj = {{"rid", rid}, {"success", true}, {"index", top_index}, {"term", top_term}};
     committed_reqs.insert(rid);
-    sync_write(psock, asio::buffer(obj.dump() + "\n"));
+    sync_write(job.sock, obj.dump() + "\n");
+
+    debug_print("req %s committed\n", job.request.c_str());
     return;
 }
 
-void handle_message(tcp::socket* psock, std::string request) {
+void handle_message(int sock, std::string request) {
     if (_ISSUBSTR_(request, "check")) {
-        reply_check_init(psock, request);
+        reply_check_init(sock);
     } else if (_ISSUBSTR_(request, "addpeer")) {
-        add_peer(psock, request);
+        add_peer(sock, request);
     } else if (_ISSUBSTR_(request, "exit")) {
-        int log_height = stuff.raft_instance_->get_last_log_idx();
-        int log_term = stuff.raft_instance_->get_last_log_term();
-        int term = stuff.raft_instance_->get_term();
-        int clog_height = stuff.raft_instance_->get_committed_log_idx();
-        json obj = {{"success", true},
-                    {"log_height", log_height},
-                    {"log_height_committed", clog_height},
-                    {"log_term", log_term},
-                    {"term", term}};
-        sync_write(psock, asio::buffer(obj.dump() + "\n"));
+        json obj = write_result();
+        sync_write(sock, obj.dump() + "\n");
         std::cout << "terminating -- info:\n" << obj.dump() << std::endl;
         exit(0);
     } else {
-        replicate_request(psock, request);
+        if (!jobq->enque(simple_job(sock, request))) {
+            int rid;
+            try {
+                json req_obj = json::parse(request);
+                rid = req_obj["index"];
+            } catch (json::exception& ec) {
+                std::string errmsg = "{\"success\": false, \"error\": \"";
+                errmsg += escape_quote(request);
+                errmsg += "\"}\n";
+                sync_write(sock, errmsg);
+                return;
+            }
+            json reply = {{"rid", rid}, {"success", false}, {"error", "queue is full"}};
+            sync_write(sock, reply.dump() + "\n");
+        }
     }
 }
 
-void handle_session(tcp::socket* psock) {
-    try {
-        for (;;) {
-            std::string message = readline(psock);
-            std::cout << "Got message \"" << message << "\"" << std::endl;
-
-            std::thread thr(handle_message, psock, message);
-            thr.detach();
+void handle_session(int sock) {
+    std::string line;
+    char* buffer = new char[BUF_SIZE];
+    while (true) {
+        ssize_t bytes_read = recv(sock, buffer, BUF_SIZE, 0);
+        if (bytes_read < 0) {
+            std::cerr << "recv failed with error " << std::strerror(errno) << std::endl;
+            delete[] buffer;
+            return;
         }
-    } catch (boost::wrapexcept<boost::system::system_error>&) {
-        std::cerr << "client disconnected!" << std::endl;
-        delete psock;
-        return;
+
+        int start = 0;
+        for (int i = 0; i < bytes_read; i++) {
+            if (buffer[i] == '\n') {
+                line += std::string(buffer + start, i - start);
+                if (!is_empty(line)) {
+                    std::cout << "Got message ~~ " << line << " ~~" << std::endl;
+                    handle_message(sock, line);
+                }
+                start = i + 1;
+                line.clear();
+            }
+        }
+        if (start != bytes_read) {
+            line += std::string(buffer + start, bytes_read - start);
+        }
     }
 }
 
@@ -444,7 +549,11 @@ cmargs parse_args(int argc, char** argv) {
     po::options_description desc("Allowed options");
     desc.add_options()("help", "produce help message")("id", po::value<int>(), "server id")(
         "ip", po::value<std::string>(), "IP address")("port", po::value<int>(), "port number")(
-        "cport", po::value<int>(), "Client port number")("byz", po::value<std::string>(), "Byzantine status");
+        "cport", po::value<int>(), "Client port number")("byz", po::value<std::string>(), "Byzantine status")(
+        "workers", po::value<int>(), "number of threads at max")("qlen", po::value<int>(), "max queue length")(
+        "datadir",
+        po::value<std::string>()->default_value(boost::filesystem::current_path().string()),
+        "data directory");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -455,61 +564,79 @@ cmargs parse_args(int argc, char** argv) {
         exit(0);
     }
 
-    int id, port, cport;
+    int id, port, cport, workers, qlen;
     std::string ipaddr, byzantine;
 
     if (vm.count("id")) {
         id = vm["id"].as<int>();
     } else {
-        std::cout << "Server ID was not set.\n";
+        std::cerr << "Server ID was not set.\n";
         exit(1);
     }
     if (vm.count("port")) {
         port = vm["port"].as<int>();
     } else {
-        std::cout << "Port was not set.\n";
+        std::cerr << "Port was not set.\n";
         exit(1);
     }
     if (vm.count("cport")) {
         cport = vm["cport"].as<int>();
     } else {
-        std::cout << "Client port was not set.\n";
+        std::cerr << "Client port was not set.\n";
         exit(1);
     }
     if (vm.count("ip")) {
         ipaddr = vm["ip"].as<std::string>();
     } else {
-        std::cout << "IP address not set.\n";
+        std::cerr << "IP address not set.\n";
         exit(1);
     }
     if (vm.count("byz")) {
         byzantine = vm["byz"].as<std::string>();
     } else {
-        std::cout << "Byzantine status not set.\n";
+        std::cerr << "Byzantine status not set.\n";
+        exit(1);
+    }
+    if (vm.count("workers")) {
+        workers = vm["workers"].as<int>();
+    } else {
+        std::cerr << "max thread count was not set.\n";
+        exit(1);
+    }
+    if (vm.count("qlen")) {
+        qlen = vm["qlen"].as<int>();
+    } else {
+        std::cerr << "max queue lenght was not set.\n";
         exit(1);
     }
 
-    return cmargs(id, ipaddr, port, cport, byzantine);
-}
+    if (vm.count("datadir")) {
+        datadir = vm["datadir"].as<std::string>();
+    }
+    std::cerr << "datadir set to " << boost::filesystem::absolute(datadir) << "\n";
 
+    return cmargs(id, ipaddr, port, cport, byzantine, workers, qlen);
+}
 }; // namespace d_raft_server
 using namespace d_raft_server;
 
 int main(int argc, char** argv) {
-    // TODO - Read config file path from cmd line
     cmargs args = parse_args(argc, argv);
-    // service_mutex.unlock();
-
-    // if (argc < 3) usage(argc, argv);
 
     set_server_info(args);
+    signal(SIGINT, exit_signal_handler);
 
     std::cout << "    -- Replicated Calculator with Raft --" << std::endl;
     std::cout << "                         Version 0.1.0" << std::endl;
     std::cout << "    Server ID:    " << stuff.server_id_ << std::endl;
     std::cout << "    Endpoint:     " << stuff.endpoint_ << std::endl;
     init_raft(cs_new<d_raft_state_machine>());
+
+    jobq =
+        std::shared_ptr<job_queue<simple_job>>(new job_queue<simple_job>(replicate_request, args.workers, args.qlen));
+    jobq->process_jobs();
     loop();
 
+    exit_signal_handler(0);
     return 0;
 }
