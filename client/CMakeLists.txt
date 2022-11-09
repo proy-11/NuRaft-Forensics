@@ -29,7 +29,8 @@ if(Boost_FOUND)
                     logger.cc
                     workload.cxx
                     job_queue.hxx
-                    in_memory_log_store.cxx)
+                    in_memory_log_store.cxx
+                    d_raft_byzantine_controller.cxx)
     include_directories(${Boost_INCLUDE_DIRS})
     add_dependencies(d_raft
                      static_lib)

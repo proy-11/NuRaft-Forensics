@@ -14,5 +14,6 @@ for bs in 100000 10000 1000 100 10; do
             --datadir "./data/$bs-$i"
 
         sleep 1
+        kill -9 $(ps -ef | grep -i '/usr/bin/top' | grep -v grep | awk '{print $2}')
     done
 done
