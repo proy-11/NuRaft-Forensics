@@ -22,6 +22,7 @@ limitations under the License.
 #include "logger_wrapper.hxx"
 #include "nuraft.hxx"
 #include "test_common.h"
+#include "d_raft_byzantine_controller.hxx"
 
 #include <atomic>
 #include <boost/filesystem.hpp>
@@ -146,6 +147,15 @@ static server_stuff stuff;
 
 std::shared_ptr<job_queue<simple_job>> jobq;
 std::mutex exit_mutex;
+
+std::unique_ptr<d_raft_byz_controller::byzantine_controller> byz_controller(nullptr);
+
+void start_byzantine_faults() {
+    if(byz_controller->get_byzantine_status()) {
+        std::cout << "Starting Byzantine faults" << std::endl;
+        byz_controller->create_byzantine_fault();
+    }
+}
 
 inline bool is_empty(std::string str) {
     return std::string(str.c_str()) == "" || str.find_first_not_of(" \0\t\n\v\f\r") == str.npos;
@@ -420,7 +430,9 @@ void replicate_request(simple_job job) {
     int rid;
 
     debug_print("Replicating req %s\n", job.request.c_str());
-
+    
+    start_byzantine_faults();
+    
     try {
         json req_obj = json::parse(job.request);
         rid = req_obj["index"];
@@ -623,18 +635,25 @@ using namespace d_raft_server;
 int main(int argc, char** argv) {
     cmargs args = parse_args(argc, argv);
 
+    byz_controller = std::move(
+        std::unique_ptr<d_raft_byz_controller::byzantine_controller> (
+            new d_raft_byz_controller::byzantine_controller(args.byzantine))
+    );
+
     set_server_info(args);
     signal(SIGINT, exit_signal_handler);
 
-    std::cout << "    -- Replicated Calculator with Raft --" << std::endl;
+    std::cout << "    -- Replicated Server with Raft --" << std::endl;
     std::cout << "                         Version 0.1.0" << std::endl;
     std::cout << "    Server ID:    " << stuff.server_id_ << std::endl;
     std::cout << "    Endpoint:     " << stuff.endpoint_ << std::endl;
+    std::cout << "    Byzantine status: " << byz_controller->get_byzantine_status() << std::endl;
     init_raft(cs_new<d_raft_state_machine>());
 
     jobq =
         std::shared_ptr<job_queue<simple_job>>(new job_queue<simple_job>(replicate_request, args.workers, args.qlen));
     jobq->process_jobs();
+    start_byzantine_faults();
     loop();
 
     exit_signal_handler(0);

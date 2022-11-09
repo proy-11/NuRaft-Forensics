@@ -99,7 +99,7 @@ private:
     job_func<T> jfunc;
     std::atomic<int> nthreads;
     int target_nthreads;
-    int max_queue_length;
+    size_t max_queue_length;
     std::atomic<bool> ended;
     std::mutex job_allocation_lock;
     std::mutex thread_allocation_lock;
