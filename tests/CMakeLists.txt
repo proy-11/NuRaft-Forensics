@@ -1,4 +1,11 @@
 # === Basic Raft server functionality test ===
+
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
+
+find_package(Boost 1.74.0 COMPONENTS program_options thread filesystem)
+
 add_executable(raft_server_test
                unit/raft_server_test.cxx
                unit/fake_network.cxx
@@ -33,16 +40,21 @@ target_link_libraries(asio_service_test
                       ${LIBRARIES})
 
 # === Benchmark ===
-add_executable(raft_bench
-               bench/raft_bench.cxx
-               ${EXAMPLES_SRC}/logger.cc
-               ${EXAMPLES_SRC}/in_memory_log_store.cxx)
-add_dependencies(raft_bench
-                 static_lib)
-target_link_libraries(raft_bench
-                      ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
-                      ${LIBRARIES})
 
+if(Boost_FOUND)
+    message(STATUS "tests: Boost found")
+    include_directories(${Boost_INCLUDE_DIRS})
+    add_executable(raft_bench
+                bench/raft_bench.cxx
+                ${EXAMPLES_SRC}/logger.cc
+                ${EXAMPLES_SRC}/in_memory_log_store.cxx)
+    add_dependencies(raft_bench
+                    static_lib)
+    target_link_libraries(raft_bench
+                          ${Boost_LIBRARIES}
+                          ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+                          ${LIBRARIES})
+endif()
 
 # === Other modules ===
 add_executable(buffer_test

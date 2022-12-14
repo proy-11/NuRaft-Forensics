@@ -15,7 +15,7 @@ enum WORKLOAD_TYPE {
 
 struct request {
 public:
-    request(int index = -1);
+    request(int index = -1, int req_bytes = 5);
     ~request();
 
     std::string to_json_str();
@@ -45,6 +45,7 @@ private:
     int current;
     int batch_size;
     int delay;
+    int req_bytes;
     std::vector<int> batch_delay;
     float freq;
 };

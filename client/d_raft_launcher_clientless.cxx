@@ -57,8 +57,10 @@ std::vector<pid_t> server_pids;
 
 pid_t monitor;
 fsys::path datadir;
+fsys::path keypath;
 
 int _PROG_LEVEL_ = _LINFO_;
+int _SRV_LOG_LEVEL_ = 4;
 int total_rejected = 0;
 int total_enqueued = 0;
 
@@ -261,8 +263,10 @@ void loop() {
 
 void init_raft(ptr<state_machine> sm_instance) {
     // Logger.
-    std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
-    ptr<logger_wrapper> log_wrap = cs_new<logger_wrapper>(log_file_name, 4);
+
+    std::string log_file_name = "srv" + std::to_string(stuff.server_id_) + ".log";
+    std::string log_file_path = (datadir / log_file_name).string();
+    ptr<logger_wrapper> log_wrap = cs_new<logger_wrapper>(log_file_path, _SRV_LOG_LEVEL_);
     stuff.raft_logger_ = log_wrap;
 
     // State machine.
@@ -296,6 +300,8 @@ void init_raft(ptr<state_machine> sm_instance) {
     // According to this method, `append_log` function
     // should be handled differently.
     params.return_method_ = CALL_TYPE;
+
+    params.private_key_path = keypath.string();
 
     // Initialize Raft server.
     stuff.raft_instance_ =
@@ -372,10 +378,10 @@ void replicate_request(request req) {
     std::unique_lock<std::mutex> lock(service_mutex);
 
     ptr<TestSuite::Timer> timer = cs_new<TestSuite::Timer>();
-    ptr<buffer> new_log = buffer::alloc(sizeof(int));
-    int payload = 24;
+    ptr<buffer> new_log = buffer::alloc(sizeof(int) + req.payload.size() + 1);
     buffer_serializer bs(new_log);
-    bs.put_raw(&payload, sizeof(int));
+    bs.put_raw(&req.index, sizeof(int));
+    bs.put_cstr(req.payload.c_str());
 
     ptr<raft_result> ret = stuff.raft_instance_->append_entries({new_log});
 
@@ -401,12 +407,13 @@ void parse_args(int argc, char** argv) {
     std::string config_file("");
 
     po::options_description desc("Allowed options");
-    desc.add_options()("help", "produce help message")("config-file",
-                                                       po::value<std::string>()->required(),
-                                                       "config file path")("size", po::value<int>(), "total size")(
-        "freq", po::value<float>(), "frequency")("batch-size", po::value<int>(), "batch size")(
+    desc.add_options()("help",
+                       "produce help message")("config-file", po::value<std::string>()->required(), "config file path")(
+        "size", po::value<int>(), "total size")("freq", po::value<float>(), "frequency")(
+        "batch-size", po::value<int>(), "batch size")("loglv", po::value<int>()->default_value(4), "server log level")(
         "log-level", po::value<int>()->default_value(2), "print log level")(
-        "datadir", po::value<std::string>(), "directory to save results");
+        "datadir", po::value<std::string>(), "directory to save results")(
+        "keypath", po::value<std::string>(), "path to private key");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -465,15 +472,25 @@ void parse_args(int argc, char** argv) {
         datadir = vm["datadir"].as<std::string>();
     }
 
-    if (!fsys::exists(datadir)) {
-        fsys::create_directories(fsys::absolute(datadir));
-    } else if (!fsys::is_directory(datadir)) {
+    if (vm.count("keypath")) {
+        keypath = vm["keypath"].as<std::string>();
+    }
+
+    _SRV_LOG_LEVEL_ = vm["loglv"].as<int>();
+
+    if (fsys::exists(datadir) && !fsys::is_directory(datadir)) {
         level_output(_LERROR_, "Cannot create directory %s\n", fsys::absolute(datadir).c_str());
         exit(1);
     }
 
+    if (fsys::exists(datadir)) {
+        fsys::remove_all(fsys::absolute(datadir));
+    }
+    fsys::create_directories(fsys::absolute(datadir));
+
     level_output(_LINFO_,
-                 "Using workload settings\nsize      = %10d,\nfreq      = %10.4f,\nbatchsize = %10d\n",
+                 "Using workload settings\nsize      = %10d,\nfreq      = "
+                 "%10.4f,\nbatchsize = %10d\n",
                  int(workload_setting.at("size")),
                  float(workload_setting.at("freq")),
                  int(workload_setting.at("batch_size")));
@@ -497,6 +514,7 @@ int main(int argc, char** argv) {
     for (int i = 1; i < ns; i++) {
         server_settings[i]["cport"] = -1;
         server_settings[i]["datadir"] = datadir.string();
+        server_settings[i]["loglv"] = _SRV_LOG_LEVEL_;
         server_pids.emplace_back(create_server(server_settings[i], datadir));
     }
 
@@ -505,6 +523,7 @@ int main(int argc, char** argv) {
     level_output(_LINFO_, "    -- Clientless Benchmarker for Raft --\n");
     level_output(_LINFO_, "    Server ID:    %d\n", stuff.server_id_);
     level_output(_LINFO_, "    Endpoint:     %s\n", stuff.endpoint_.c_str());
+
     init_raft(cs_new<d_raft_state_machine>());
 
     std::this_thread::sleep_for(std::chrono::milliseconds(meta_setting["connection_wait_ms"]));

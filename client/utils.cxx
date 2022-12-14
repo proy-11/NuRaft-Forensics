@@ -96,6 +96,10 @@ pid_t create_server(nlohmann::json data, fsys::path rootpath) {
                            std::to_string(int(data["qlen"])).c_str(),
                            "--datadir",
                            std::string(data["datadir"]).c_str(),
+                           "--loglv",
+                           std::to_string(int(data["loglv"])).c_str(),
+                           "--keypath",
+                           std::string(data["keypath"]).c_str(),
                            (char*)NULL);
 
         // int status = std::system(cmd);
@@ -144,7 +148,8 @@ pid_t create_cpu_monitor(fsys::path rootpath) {
             exit(errno);
         }
 
-        // int status = execl("/usr/bin/top", "/usr/bin/top", "-n", "1", "|", "grep", "CPU usage", (char*)NULL);
+        // int status = execl("/usr/bin/top", "/usr/bin/top", "-n", "1", "|", "grep", "CPU
+        // usage", (char*)NULL);
         std::stringstream ss;
         ss << TOP_CMD << monitored << " | grep --line-buffered " << monitored;
         int status = execl("/bin/sh", "/bin/sh", "-c", ss.str().c_str(), (char*)NULL);

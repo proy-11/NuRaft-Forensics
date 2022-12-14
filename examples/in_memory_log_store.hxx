@@ -35,9 +35,14 @@ public:
 
     ulong next_slot() const;
 
+    // FMARK:
+    ulong last_app_log_idx() const;
+
     ulong start_index() const;
 
     ptr<log_entry> last_entry() const;
+
+    ptr<log_entry> last_app_log_entry();
 
     ulong append(ptr<log_entry>& entry);
 
@@ -45,8 +50,7 @@ public:
 
     ptr<std::vector<ptr<log_entry>>> log_entries(ulong start, ulong end);
 
-    ptr<std::vector<ptr<log_entry>>> log_entries_ext(
-            ulong start, ulong end, int64 batch_size_hint_in_bytes = 0);
+    ptr<std::vector<ptr<log_entry>>> log_entries_ext(ulong start, ulong end, int64 batch_size_hint_in_bytes = 0);
 
     ptr<log_entry> entry_at(ulong index);
 
@@ -68,7 +72,7 @@ private:
     std::map<ulong, ptr<log_entry>> logs_;
     mutable std::mutex logs_lock_;
     std::atomic<ulong> start_idx_;
+    std::atomic<ulong> last_app_log_idx_;
 };
 
-}
-
+} // namespace nuraft

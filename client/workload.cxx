@@ -5,9 +5,10 @@
 #include <tuple>
 
 namespace nuraft {
-request::request(int ind_) {
+request::request(int ind_, int nbytes) {
+    assert(nbytes > sizeof(index));
     index = ind_;
-    payload = std::string("+1");
+    payload = std::string(nbytes - 1 - sizeof(index), 'k');
 }
 
 request::~request() {}
@@ -55,6 +56,7 @@ workload::workload(json settings) {
         size = settings["size"];
         freq = settings["freq"];
         batch_size = settings["batch_size"];
+        req_bytes = settings["req_bytes"];
         delay = -1;
         batch_delay = std::vector<int>(batch_size);
 
@@ -86,12 +88,12 @@ bool workload::proceed(int step) {
 
 bool workload::proceed_batch() { return proceed(batch_size); }
 
-request workload::get_next_req() { return request(current); }
+request workload::get_next_req() { return request(current, req_bytes); }
 
 std::vector<request> workload::get_next_batch() {
     std::vector<request> requests(0);
     for (int i = current; i < current + batch_size && i < size; i++) {
-        requests.emplace_back(i);
+        requests.emplace_back(i, req_bytes);
     }
     return requests;
 }

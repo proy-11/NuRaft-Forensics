@@ -43,6 +43,13 @@ public:
     virtual ulong next_slot() const = 0;
 
     /**
+     * FMARK:
+     *
+     * @return
+     */
+    virtual ulong last_app_log_idx() const = 0;
+
+    /**
      * The start index of the log store, at the very beginning, it must be 1.
      * However, after some compact actions, this could be anything equal to or
      * greater than or equal to one
@@ -56,6 +63,13 @@ public:
      *         value set to null and term set to zero.
      */
     virtual ptr<log_entry> last_entry() const = 0;
+
+    /**
+     * FMARK:
+     *
+     * @return
+     */
+    virtual ptr<log_entry> last_app_log_entry() = 0;
 
     /**
      * Append a log entry to store.
@@ -114,8 +128,8 @@ public:
      * @return The log entries between [start, end) and limited by the total size
      *         given by the batch_size_hint_in_bytes.
      */
-    virtual ptr<std::vector<ptr<log_entry>>> log_entries_ext(
-            ulong start, ulong end, int64 batch_size_hint_in_bytes = 0) {
+    virtual ptr<std::vector<ptr<log_entry>>>
+    log_entries_ext(ulong start, ulong end, int64 batch_size_hint_in_bytes = 0) {
         return log_entries(start, end);
     }
 
@@ -175,6 +189,6 @@ public:
     virtual bool flush() = 0;
 };
 
-}
+} // namespace nuraft
 
 #endif //_LOG_STORE_HXX_

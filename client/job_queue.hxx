@@ -30,7 +30,7 @@ template <class T> using job_func = void (*)(T);
 
 template <class T> class job_queue {
 public:
-    job_queue(job_func<T> jfunc_, int max_threads, int max_qlen)
+    job_queue(job_func<T> jfunc_, int max_threads, size_t max_qlen)
         : jfunc(jfunc_)
         , nthreads(max_threads)
         , target_nthreads(max_threads)
@@ -99,7 +99,7 @@ private:
     job_func<T> jfunc;
     std::atomic<int> nthreads;
     int target_nthreads;
-    int max_queue_length;
+    size_t max_queue_length;
     std::atomic<bool> ended;
     std::mutex job_allocation_lock;
     std::mutex thread_allocation_lock;

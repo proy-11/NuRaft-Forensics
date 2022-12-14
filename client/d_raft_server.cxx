@@ -61,6 +61,7 @@ std::unordered_map<int, std::shared_ptr<std::mutex>> write_mutex;
 std::unordered_set<int> committed_reqs;
 
 boost::filesystem::path datadir;
+boost::filesystem::path keypath;
 
 std::atomic<bool> exit_signal(false);
 
@@ -77,14 +78,22 @@ void handle_message(int sock, std::string request);
 void handle_session(int sock);
 
 struct cmargs {
-    cmargs(int id_, std::string ipaddr_, int port_, int cport_, std::string byzantine_, int workers_, int qlen_)
+    cmargs(int id_,
+           std::string ipaddr_,
+           int port_,
+           int cport_,
+           std::string byzantine_,
+           int workers_,
+           int qlen_,
+           int log_level_ = 4)
         : id(id_)
         , ipaddr(ipaddr_)
         , port(port_)
         , cport(cport_)
         , byzantine(byzantine_)
         , workers(workers_)
-        , qlen(qlen_) {}
+        , qlen(qlen_)
+        , log_level(log_level_) {}
 
     int id;
     std::string ipaddr;
@@ -93,6 +102,7 @@ struct cmargs {
     std::string byzantine;
     int workers;
     int qlen;
+    int log_level;
 };
 
 struct server_stuff {
@@ -292,10 +302,11 @@ void loop() {
     }
 }
 
-void init_raft(ptr<state_machine> sm_instance) {
+void init_raft(ptr<state_machine> sm_instance, cmargs& args) {
     // Logger.
-    std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
-    ptr<logger_wrapper> log_wrap = cs_new<logger_wrapper>(log_file_name, 4);
+    std::string log_file_name = "srv" + std::to_string(stuff.server_id_) + ".log";
+    std::string log_file_path = (datadir / log_file_name).string();
+    ptr<logger_wrapper> log_wrap = cs_new<logger_wrapper>(log_file_path, args.log_level);
     stuff.raft_logger_ = log_wrap;
 
     // State machine.
@@ -329,6 +340,8 @@ void init_raft(ptr<state_machine> sm_instance) {
     // According to this method, `append_log` function
     // should be handled differently.
     params.return_method_ = CALL_TYPE;
+
+    params.private_key_path = keypath.string();
 
     // Initialize Raft server.
     stuff.raft_instance_ =
@@ -551,9 +564,10 @@ cmargs parse_args(int argc, char** argv) {
         "ip", po::value<std::string>(), "IP address")("port", po::value<int>(), "port number")(
         "cport", po::value<int>(), "Client port number")("byz", po::value<std::string>(), "Byzantine status")(
         "workers", po::value<int>(), "number of threads at max")("qlen", po::value<int>(), "max queue length")(
+        "loglv", po::value<int>()->default_value(4), "log level")(
         "datadir",
         po::value<std::string>()->default_value(boost::filesystem::current_path().string()),
-        "data directory");
+        "data directory")("keypath", po::value<std::string>(), "path to private key");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -613,9 +627,13 @@ cmargs parse_args(int argc, char** argv) {
     if (vm.count("datadir")) {
         datadir = vm["datadir"].as<std::string>();
     }
+    if (vm.count("keypath")) {
+        keypath = vm["keypath"].as<std::string>();
+    }
+
     std::cerr << "datadir set to " << boost::filesystem::absolute(datadir) << "\n";
 
-    return cmargs(id, ipaddr, port, cport, byzantine, workers, qlen);
+    return cmargs(id, ipaddr, port, cport, byzantine, workers, qlen, vm["loglv"].as<int>());
 }
 }; // namespace d_raft_server
 using namespace d_raft_server;
@@ -630,7 +648,7 @@ int main(int argc, char** argv) {
     std::cout << "                         Version 0.1.0" << std::endl;
     std::cout << "    Server ID:    " << stuff.server_id_ << std::endl;
     std::cout << "    Endpoint:     " << stuff.endpoint_ << std::endl;
-    init_raft(cs_new<d_raft_state_machine>());
+    init_raft(cs_new<d_raft_state_machine>(), args);
 
     jobq =
         std::shared_ptr<job_queue<simple_job>>(new job_queue<simple_job>(replicate_request, args.workers, args.qlen));

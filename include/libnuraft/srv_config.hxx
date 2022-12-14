@@ -36,27 +36,30 @@ public:
     // WARNING: Please see the comment at raft_server::raft_server(...).
     const static int32 INIT_PRIORITY = 1;
 
-    srv_config(int32 id, const std::string& endpoint)
+    // FMARK: add pubkey
+    srv_config(int32 id, const std::string& endpoint, ptr<buffer> pubkey = nullptr)
         : id_(id)
         , dc_id_(0)
         , endpoint_(endpoint)
         , learner_(false)
         , priority_(INIT_PRIORITY)
-        {}
+        , public_key_(pubkey) {}
 
+    // FMARK: add pubkey
     srv_config(int32 id,
                int32 dc_id,
                const std::string& endpoint,
                const std::string& aux,
                bool learner,
-               int32 priority = INIT_PRIORITY)
+               int32 priority = INIT_PRIORITY,
+               ptr<buffer> pubkey = nullptr)
         : id_(id)
         , dc_id_(dc_id)
         , endpoint_(endpoint)
         , aux_(aux)
         , learner_(learner)
         , priority_(priority)
-        {}
+        , public_key_(pubkey) {}
 
     __nocopy__(srv_config);
 
@@ -80,6 +83,12 @@ public:
     void set_priority(const int32 new_val) { priority_ = new_val; }
 
     ptr<buffer> serialize() const;
+
+    // FMARK: get pubkey
+    ptr<buffer> get_public_key() const { return public_key_; }
+
+    // FMARK: get pubkey
+    void set_public_key(ptr<buffer> pubkey) { public_key_ = pubkey; }
 
 private:
     /**
@@ -116,6 +125,12 @@ private:
      * 0 will never be a leader.
      */
     int32 priority_;
+
+    /**
+     * @brief FMARK: pubkey
+     *
+     */
+    ptr<buffer> public_key_;
 };
 
 } // namespace nuraft

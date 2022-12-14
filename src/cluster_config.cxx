@@ -19,6 +19,7 @@ limitations under the License.
 **************************************************************************/
 
 #include "cluster_config.hxx"
+#include "tracer.hxx"
 
 namespace nuraft {
 
@@ -66,7 +67,7 @@ ptr<cluster_config> cluster_config::deserialize(buffer_serializer& bs) {
 
     int32 cnt = bs.get_i32();
     ptr<cluster_config> conf = cs_new<cluster_config>(log_idx, prev_log_idx, ec);
-    while (cnt -- > 0) {
+    while (cnt-- > 0) {
         conf->get_servers().push_back(srv_config::deserialize(bs));
     }
 
@@ -75,5 +76,4 @@ ptr<cluster_config> cluster_config::deserialize(buffer_serializer& bs) {
     return conf;
 }
 
-} // namespace nuraft;
-
+} // namespace nuraft

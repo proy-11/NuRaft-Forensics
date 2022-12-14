@@ -25,6 +25,7 @@ limitations under the License.
 #include "pp_util.hxx"
 
 #include <algorithm>
+#include <string>
 
 namespace nuraft {
 
@@ -92,8 +93,7 @@ struct raft_params {
         , locking_method_type_(dual_mutex)
         , return_method_(blocking)
         , auto_forwarding_req_timeout_(0)
-        , grace_period_of_lagging_state_machine_(0)
-        {}
+        , grace_period_of_lagging_state_machine_(0) {}
 
     /**
      * Election timeout upper bound in milliseconds
@@ -324,7 +324,6 @@ struct raft_params {
         return *this;
     }
 
-
     /**
      * Return heartbeat interval.
      * If given heartbeat interval is smaller than a specific value
@@ -333,9 +332,7 @@ struct raft_params {
      * @return Heartbeat interval in millisecond.
      */
     int max_hb_interval() const {
-        return std::max
-               ( heart_beat_interval_,
-                 election_timeout_lower_bound_ - (heart_beat_interval_ / 2) );
+        return std::max(heart_beat_interval_, election_timeout_lower_bound_ - (heart_beat_interval_ / 2));
     }
 
 public:
@@ -527,8 +524,14 @@ public:
      * not contain the latest data yet) being a leader.
      */
     int32 grace_period_of_lagging_state_machine_;
+
+    /**
+     * @brief path to private key; if non-existing, create a random one
+     *
+     */
+    std::string private_key_path;
 };
 
-}
+} // namespace nuraft
 
 #endif //_RAFT_PARAMS_HXX_
