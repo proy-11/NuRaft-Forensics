@@ -21,8 +21,8 @@ limitations under the License.
 #include "raft_server.hxx"
 
 #include "cluster_config.hxx"
-#include "cryptopp_ecdsa.hxx"
 #include "event_awaiter.h"
+#include "openssl_ecdsa.hxx"
 #include "peer.hxx"
 #include "state_machine.hxx"
 #include "state_mgr.hxx"
@@ -159,10 +159,10 @@ ptr<resp_msg> raft_server::handle_join_cluster_req(req_msg& req) {
     state_->set_term(req.get_term());
     ctx_->state_mgr_->save_state(*state_);
     reconfigure(cluster_config::deserialize(entries[0]->get_buf()));
-    p_in("leader %d's pubkey = %s", int(leader_), stringify_key(*get_srv_config(leader_)->get_public_key()).c_str());
+    p_in("leader %d's pubkey = %s", int(leader_), get_srv_config(leader_)->get_public_key()->str().c_str());
 
     resp->accept(quick_commit_index_.load() + 1);
-    resp->set_signature(public_key);
+    resp->set_signature(public_key->tobuf(), 0);
     return resp;
 }
 
@@ -170,14 +170,21 @@ void raft_server::handle_join_cluster_resp(resp_msg& resp) {
     if (srv_to_join_ && srv_to_join_ == resp.get_peer()) {
         if (resp.get_accepted()) {
             int32 pid = srv_to_join_->get_id();
-            ptr<buffer> pk = buffer::clone(*resp.get_signature());
-            p_in("new server (%d) has pubkey %s", pid, stringify_key(*pk).c_str());
-            srv_to_join_->set_public_key(pk);
-            conf_to_add_->set_public_key(pk);
 
-            p_in("new server (%d) confirms it will join, "
-                 "start syncing logs to it",
-                 srv_to_join_->get_id());
+            // FMARK: record public key
+            ptr<buffer> pk = resp.get_signature();
+            if (pk == nullptr) {
+                p_er("peer %d gave an empty public key, drop the message", pid);
+                return;
+            }
+
+            p_in("new server (%d) has pubkey %s", pid, tobase64(*pk).c_str());
+            ptr<pubkey_intf> pubkey = cs_new<pubkey_t>(*pk);
+
+            srv_to_join_->set_public_key(pubkey);
+            conf_to_add_->set_public_key(pubkey);
+
+            p_in("new server (%d) confirms it will join, start syncing logs to it", srv_to_join_->get_id());
             sync_log_to_new_srv(resp.get_next_idx());
         } else {
             p_wn("new server (%d) cannot accept the invitation, give up", srv_to_join_->get_id());
@@ -229,7 +236,13 @@ void raft_server::sync_log_to_new_srv(ulong start_idx) {
         ptr<log_entry> entry(cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
 
         // FMARK: add sig
-        entry->set_signature(get_signature(*entry->serialize_sig()));
+        if (flag_use_leader_sig()) {
+            // auto timer = cs_new<timer_t>();
+            // timer->start_timer();
+            entry->set_signature(get_signature(*entry->serialize_sig()));
+            // timer->add_record("ls.init.sync");
+            // t_->add_sess(timer);
+        }
 
         store_log_entry(entry);
 
@@ -238,7 +251,7 @@ void raft_server::sync_log_to_new_srv(ulong start_idx) {
         //     p_wn("ENTRY %lld (%d): %s",
         //          k,
         //          log_store_->entry_at(k)->get_val_type(),
-        //          stringify_key(*create_hash(log_store_->entry_at(k), k)).c_str());
+        //          tobase64(*create_hash(log_store_->entry_at(k), k)).c_str());
         // }
 
         config_changing_ = true;
@@ -469,7 +482,13 @@ void raft_server::rm_srv_from_cluster(int32 srv_id) {
     ptr<log_entry> entry(cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
 
     // FMARK: add sig
-    entry->set_signature(get_signature(*entry->serialize_sig()));
+    if (flag_use_leader_sig()) {
+        // auto timer = cs_new<timer_t>();
+        // timer->start_timer();
+        entry->set_signature(get_signature(*entry->serialize_sig()));
+        // timer->add_record("ls.init.rm");
+        // t_->add_sess(timer);
+    }
 
     store_log_entry(entry);
 

@@ -22,11 +22,11 @@ limitations under the License.
 
 #include "cluster_config.hxx"
 #include "context.hxx"
-#include "cryptopp_ecdsa.hxx"
 #include "error_code.hxx"
 #include "global_mgr.hxx"
 #include "handle_client_request.hxx"
 #include "handle_custom_notification.hxx"
+#include "openssl_ecdsa.hxx"
 #include "peer.hxx"
 #include "snapshot.hxx"
 #include "stat_mgr.hxx"
@@ -96,7 +96,9 @@ raft_server::raft_server(context* ctx, const init_options& opt)
     , ex_resp_handler_(
           (rpc_handler)std::bind(&raft_server::handle_ext_resp, this, std::placeholders::_1, std::placeholders::_2))
     , last_snapshot_(ctx->state_machine_->last_snapshot()) {
-    char temp_buf[4096];
+
+    const size_t BUFSIZE = 4096;
+    char temp_buf[BUFSIZE];
     std::string print_msg;
 
     if (opt.raft_callback_) {
@@ -203,19 +205,20 @@ raft_server::raft_server(context* ctx, const init_options& opt)
         // target_priority_ = std::max( target_priority_,
         //                              cur_srv->get_priority() );
 
-        sprintf(temp_buf,
-                "peer %d: DC ID %d, %s, %s, %d\n",
-                (int)cur_srv->get_id(),
-                (int)cur_srv->get_dc_id(),
-                cur_srv->get_endpoint().c_str(),
-                cur_srv->is_learner() ? "learner" : "voting member",
-                cur_srv->get_priority());
+        snprintf(temp_buf,
+                 BUFSIZE,
+                 "peer %d: DC ID %d, %s, %s, %d\n",
+                 (int)cur_srv->get_id(),
+                 (int)cur_srv->get_dc_id(),
+                 cur_srv->get_endpoint().c_str(),
+                 cur_srv->is_learner() ? "learner" : "voting member",
+                 cur_srv->get_priority());
         print_msg += temp_buf;
     }
 
-    sprintf(temp_buf, "my id: %d, %s\n", id_, (im_learner_) ? "learner" : "voting_member");
+    snprintf(temp_buf, BUFSIZE, "my id: %d, %s\n", id_, (im_learner_) ? "learner" : "voting_member");
     print_msg += temp_buf;
-    sprintf(temp_buf, "num peers: %d\n", (int)peers_.size());
+    snprintf(temp_buf, BUFSIZE, "num peers: %d\n", (int)peers_.size());
     print_msg += temp_buf;
     p_in(print_msg.c_str());
 
@@ -263,11 +266,17 @@ void raft_server::start_server(bool skip_initial_election_timeout) {
              params->rpc_failure_backoff_,
              params->election_timeout_lower_bound_,
              params->election_timeout_upper_bound_);
+        p_in("-1");
+
         std::this_thread::sleep_for(std::chrono::milliseconds(params->rpc_failure_backoff_));
+        p_in("0");
         restart_election_timer();
     }
+    p_in("1");
     priority_change_timer_.reset();
+    p_in("2");
     vote_init_timer_.set_duration_ms(params->grace_period_of_lagging_state_machine_);
+    p_in("3");
     vote_init_timer_.reset();
     p_db("server %d started", id_);
 }
@@ -360,18 +369,18 @@ void raft_server::apply_and_log_current_params() {
     leadership_transfer_timer_.set_duration_ms(params->leadership_transfer_min_wait_time_);
 
     // FMARK: read private key; initialize cluster config with pubkey of self
+    p_tr("loading private key from %s", params->private_key_path.c_str());
     try {
-        private_key = load_key_from_file(params->private_key_path);
-    } catch (CryptoPP::Exception& e) {
+        private_key = cs_new<seckey_t>(params->private_key_path);
+    } catch (crypto_exception& e) {
         p_er("cannot load private key from %s (%s)", params->private_key_path.c_str(), e.what());
-        private_key = generate_random_seckey();
+        private_key = cs_new<seckey_t>();
     }
-    public_key = derive_pubkey(private_key);
-    auto public_key_copy = buffer::clone(*public_key);
-    config_->get_server(get_id())->set_public_key(public_key_copy);
+    public_key = private_key->derive();
+    config_->get_server(get_id())->set_public_key(public_key);
 
-    p_in("Server private key: %s", stringify_key(*private_key).c_str());
-    p_in("Server public key: %s", stringify_key(*public_key).c_str());
+    p_in("Server private key: %s", private_key->str().c_str());
+    p_in("Server public key: %s", public_key->str().c_str());
 }
 
 raft_params raft_server::get_current_params() const { return *ctx_->get_params(); }
@@ -699,12 +708,14 @@ void raft_server::reset_peer_info() {
         ptr<buffer> new_conf_buf(my_next_config->serialize());
         ptr<log_entry> entry(cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
 
-        // FMARK: add pointer
-        // ulong prev_idx = log_store_->next_slot() - 2;
-        // entry->set_prev(create_hash(log_store_->entry_at(prev_idx), prev_idx));
-
         // FMARK: add sig
-        entry->set_signature(get_signature(*entry->serialize_sig()));
+        if (flag_use_leader_sig()) {
+            // auto timer = cs_new<timer_t>();
+            // timer->start_timer();
+            entry->set_signature(get_signature(*entry->serialize_sig()));
+            // timer->add_record("ls.init.rpi");
+            // t_->add_sess(timer);
+        }
 
         store_log_entry(entry, log_store_->next_slot() - 1);
     }
@@ -958,11 +969,14 @@ void raft_server::become_leader() {
         ptr<log_entry> entry(cs_new<log_entry>(state_->get_term(), conf_buf, log_val_type::conf));
         p_in("[BECOME LEADER] appended new config at %d\n", log_store_->next_slot());
 
-        // // FMARK: add pointer
-        // entry->set_prev(create_hash(log_store_));
-
         // FMARK: add sig
-        entry->set_signature(get_signature(*entry->serialize_sig()));
+        if (flag_use_leader_sig()) {
+            // auto timer = cs_new<timer_t>();
+            // timer->start_timer();
+            entry->set_signature(get_signature(*entry->serialize_sig()));
+            // timer->add_record("ls.init.bcl");
+            // t_->add_sess(timer);
+        }
 
         store_log_entry(entry);
         config_changing_ = true;
@@ -1446,11 +1460,14 @@ void raft_server::set_user_ctx(const std::string& ctx) {
     ptr<buffer> new_conf_buf = cloned_config->serialize();
     ptr<log_entry> entry = cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf);
 
-    // // FMARK: add pointer
-    // entry->set_prev(create_hash(log_store_));
-
     // FMARK: add sig
-    entry->set_signature(get_signature(*entry->serialize_sig()));
+    if (flag_use_leader_sig()) {
+        // auto timer = cs_new<timer_t>();
+        // timer->start_timer();
+        entry->set_signature(get_signature(*entry->serialize_sig()));
+        // timer->add_record("ls.init.sctx");
+        // t_->add_sess(timer);
+    }
 
     store_log_entry(entry);
     request_append_entries();
@@ -1573,6 +1590,7 @@ ulong raft_server::store_log_entry(ptr<log_entry>& entry, ulong index) {
 }
 
 /**
+ * FMARK:
  * @param index index of the appending point of target chain
  *
  * @return -1 on pass; index of failed entry on fail;
@@ -1601,6 +1619,91 @@ ssize_t raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong
     return (ssize_t)-1;
 }
 
+/**
+ * FMARK:
+ *
+ * @return -1 on pass; index of failed entry on fail;
+ */
+ssize_t raft_server::check_leader_sig(std::vector<ptr<log_entry>>& entries, int32 signer) {
+    auto entry = peers_.find(signer);
+    if (entry == peers_.end()) {
+        p_ft("cannot find signer %d!", signer);
+        ctx_->state_mgr_->system_exit(N22_unrecoverable_isolation);
+    }
+
+    ptr<peer> p_signer = entry->second;
+
+    for (ulong i = 0; i < (ulong)entries.size(); i++) {
+        if (entries[i]->get_val_type() != log_val_type::app_log) continue;
+        if (!p_signer->verify_signature(entries[i]->serialize_sig(), entries[i]->get_sig_ptr())) {
+            return (ssize_t)(i);
+        }
+    }
+    return (ssize_t)-1;
+}
+
+int32 raft_server::validate_commitment_certificate(ptr<certificate> cert, ptr<log_entry> entry) {
+    for (auto& it: cert->get_sigs()) {
+        if (it.first == id_) {
+            if (!public_key->verify_md(*entry->serialize_sig(), *it.second)) {
+                return it.first;
+            }
+            continue;
+        }
+        auto p = peers_.find(it.first);
+        if (p == peers_.end()) {
+            return it.first;
+        }
+        if (!p->second->verify_signature(entry->serialize_sig(), it.second)) {
+            return it.first;
+        }
+    }
+    return -1;
+}
+
+// FMARK: push new signature
+bool raft_server::push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term, ulong index) {
+    auto current_commit_index = quick_commit_index_.load();
+    if (index <= current_commit_index) {
+        p_db("received a stale signature of index %zu (current committed %zu) from peer #%d",
+             index,
+             current_commit_index,
+             pid);
+        return false;
+    }
+
+    p_db("[CC] adding new signature from peer #%d of index %zu at term %zu", pid, index, term);
+    auto it = working_certs_.find(index);
+    if (it == working_certs_.end()) {
+        auto new_cert = cs_new<certificate>(config_->get_servers().size(), term, index);
+        new_cert->insert(pid, sig);
+        new_cert->insert(id_, get_signature(*log_store_->entry_at(index)->serialize_sig()));
+        {
+            std::lock_guard<std::mutex> guard(cert_lock_);
+            working_certs_[index] = new_cert;
+        }
+        p_db("[CC] added new certificate of index %zu at term %zu", index, term);
+    } else {
+        auto cert = it->second;
+        bool flag_commit = cert->insert(pid, sig);
+        if (flag_commit) {
+            std::lock_guard<std::mutex> guard(cert_lock_);
+            commit_cert_ = cert;
+            std::vector<ulong> removers;
+            for (auto it: working_certs_) {
+                if (it.first >= index) break;
+                removers.emplace_back(it.first);
+            }
+            for (auto idx: removers) {
+                working_certs_.erase(idx);
+            }
+            p_in("[CC] certificate of index %zu at term %zu ready to commit", index, term);
+            return true;
+        }
+    }
+    return false;
+}
+
 CbReturnCode raft_server::invoke_callback(cb_func::Type type, cb_func::Param* param) {
     CbReturnCode rc = ctx_->cb_func_.call(type, param);
     return rc;
@@ -1619,5 +1722,13 @@ void raft_server::set_raft_limits(const raft_server::limits& new_limits) { raft_
 void raft_server::check_overall_status() { check_leadership_transfer(); }
 
 // FMARK: sign message
-ptr<buffer> raft_server::get_signature(buffer& msg) { return sign_message(msg, *private_key); }
+ptr<buffer> raft_server::get_signature(buffer& msg) { return private_key->sign_md(msg); }
+
+// FMARK: flag wrappers
+
+bool raft_server::flag_use_ptr() { return get_current_params().use_chain_ptr_; }
+
+bool raft_server::flag_use_leader_sig() { return get_current_params().use_leader_sig_; }
+
+bool raft_server::flag_use_cc() { return get_current_params().use_commitment_cert_; }
 } // namespace nuraft

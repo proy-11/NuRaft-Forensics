@@ -54,10 +54,10 @@ public:
     void set_term(ulong term) { term_ = term; }
 
     // FMARK: set pointer
-    void set_prev(const ptr<buffer> prev) { prev_ = prev; }
+    void set_prev(const ptr<buffer> prev) { prev_ = buffer::clone(*prev); }
 
     // FMARK: set signature
-    void set_signature(const ptr<buffer> sig) { leader_sig_ = sig; }
+    void set_signature(const ptr<buffer> sig) { leader_sig_ = buffer::clone(*sig); }
 
     log_val_type get_val_type() const { return value_type_; }
 

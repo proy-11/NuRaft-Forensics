@@ -24,6 +24,7 @@ limitations under the License.
 #include "context.hxx"
 #include "delayed_task_scheduler.hxx"
 #include "internal_timer.hxx"
+#include "key.hxx"
 #include "rpc_cli_factory.hxx"
 #include "snapshot_sync_ctx.hxx"
 #include "srv_config.hxx"
@@ -74,6 +75,11 @@ public:
         reset_ls_timer();
         reset_resp_timer();
         reset_active_timer();
+
+        // FMARK: set public key if configured
+        if (config != nullptr) {
+            set_public_key(config->get_public_key());
+        }
     }
 
     __nocopy__(peer);
@@ -244,11 +250,17 @@ public:
      *
      * @param pubkey public key
      */
-    void set_public_key(ptr<buffer> pubkey) { public_key = pubkey; }
+    void set_public_key(ptr<pubkey_intf> pubkey) {
+        if (pubkey == nullptr) {
+            return;
+        }
+        public_key = pubkey;
+    }
+
+    std::string get_public_key_str();
 
     /**
      * FMARK: Verify signature with public key
-     * TODO: Impl
      */
     bool verify_signature(ptr<buffer> msg, ptr<buffer> sig);
 
@@ -456,7 +468,8 @@ private:
     /**
      * FMARK: Public key
      */
-    ptr<buffer> public_key;
+    // ptr<buffer> public_key;
+    ptr<pubkey_intf> public_key;
 };
 
 } // namespace nuraft

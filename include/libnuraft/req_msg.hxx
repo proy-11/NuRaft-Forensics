@@ -21,6 +21,7 @@ limitations under the License.
 #ifndef _REG_MSG_HXX_
 #define _REG_MSG_HXX_
 
+#include "certificate.hxx"
 #include "log_entry.hxx"
 #include "msg_base.hxx"
 
@@ -35,7 +36,8 @@ public:
         , last_log_term_(last_log_term)
         , last_log_idx_(last_log_idx)
         , commit_idx_(commit_idx)
-        , log_entries_() {}
+        , log_entries_()
+        , cc_() {}
 
     virtual ~req_msg() __override__ {}
 
@@ -49,6 +51,10 @@ public:
     ulong get_commit_idx() const { return commit_idx_; }
 
     std::vector<ptr<log_entry>>& log_entries() { return log_entries_; }
+
+    void set_certificate(ptr<certificate> cc) { cc_ = cc; }
+
+    ptr<certificate> get_certificate() { return cc_; }
 
 private:
     // Term of last log below.
@@ -66,6 +72,9 @@ private:
 
     // Logs. Can be empty.
     std::vector<ptr<log_entry>> log_entries_;
+
+    // FMARK: certificate
+    ptr<certificate> cc_;
 };
 
 } // namespace nuraft

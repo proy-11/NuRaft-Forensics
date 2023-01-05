@@ -90,10 +90,14 @@ struct raft_params {
         , use_bg_thread_for_urgent_commit_(true)
         , exclude_snp_receiver_from_quorum_(false)
         , auto_adjust_quorum_for_small_cluster_(false)
+        , use_chain_ptr_(true)
+        , use_leader_sig_(true)
+        , use_commitment_cert_(true)
         , locking_method_type_(dual_mutex)
         , return_method_(blocking)
         , auto_forwarding_req_timeout_(0)
-        , grace_period_of_lagging_state_machine_(0) {}
+        , grace_period_of_lagging_state_machine_(0)
+        , private_key_path("") {}
 
     /**
      * Election timeout upper bound in milliseconds
@@ -495,6 +499,24 @@ public:
      * becomes offline.
      */
     bool auto_adjust_quorum_for_small_cluster_;
+
+    /**
+     * @brief FMARK: If true, turn log list into blockchain
+     *
+     */
+    bool use_chain_ptr_;
+
+    /**
+     * @brief FMARK: If true, add leader signature to every entry
+     *
+     */
+    bool use_leader_sig_;
+
+    /**
+     * @brief FMARK: If true, use cc's
+     *
+     */
+    bool use_commitment_cert_;
 
     /**
      * Choose the type of lock that will be used by user threads.

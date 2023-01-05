@@ -24,6 +24,7 @@ limitations under the License.
 #include "basic_types.hxx"
 #include "buffer.hxx"
 #include "buffer_serializer.hxx"
+#include "key.hxx"
 #include "pp_util.hxx"
 #include "ptr.hxx"
 
@@ -37,7 +38,7 @@ public:
     const static int32 INIT_PRIORITY = 1;
 
     // FMARK: add pubkey
-    srv_config(int32 id, const std::string& endpoint, ptr<buffer> pubkey = nullptr)
+    srv_config(int32 id, const std::string& endpoint, ptr<pubkey_intf> pubkey = nullptr)
         : id_(id)
         , dc_id_(0)
         , endpoint_(endpoint)
@@ -52,7 +53,7 @@ public:
                const std::string& aux,
                bool learner,
                int32 priority = INIT_PRIORITY,
-               ptr<buffer> pubkey = nullptr)
+               ptr<pubkey_intf> pubkey = nullptr)
         : id_(id)
         , dc_id_(dc_id)
         , endpoint_(endpoint)
@@ -85,10 +86,15 @@ public:
     ptr<buffer> serialize() const;
 
     // FMARK: get pubkey
-    ptr<buffer> get_public_key() const { return public_key_; }
+    ptr<pubkey_intf> get_public_key() const { return public_key_; }
 
-    // FMARK: get pubkey
-    void set_public_key(ptr<buffer> pubkey) { public_key_ = pubkey; }
+    // FMARK: set pubkey
+    void set_public_key(ptr<pubkey_intf> pubkey) {
+        if (pubkey == nullptr) {
+            return;
+        }
+        public_key_ = pubkey;
+    }
 
 private:
     /**
@@ -130,7 +136,7 @@ private:
      * @brief FMARK: pubkey
      *
      */
-    ptr<buffer> public_key_;
+    ptr<pubkey_intf> public_key_;
 };
 
 } // namespace nuraft

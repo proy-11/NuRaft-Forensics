@@ -19,6 +19,7 @@ limitations under the License.
 **************************************************************************/
 
 #include "srv_config.hxx"
+#include "openssl_ecdsa.hxx"
 
 namespace nuraft {
 
@@ -39,10 +40,11 @@ ptr<srv_config> srv_config::deserialize(buffer_serializer& bs) {
 
     // FMARK: read pubkey
     size_t keysize = bs.get_i64();
-    ptr<buffer> pubkey = nullptr;
+    ptr<pubkey_intf> pubkey;
     if (keysize > 0) {
-        pubkey = buffer::alloc(keysize);
-        bs.get_buffer(pubkey);
+        ptr<buffer> keybuf = buffer::alloc(keysize);
+        bs.get_buffer(keybuf);
+        pubkey = std::make_shared<pubkey_t>(*keybuf);
     }
     return cs_new<srv_config>(id, dc_id, endpoint, aux, is_learner, priority, pubkey);
 }
@@ -50,8 +52,10 @@ ptr<srv_config> srv_config::deserialize(buffer_serializer& bs) {
 ptr<buffer> srv_config::serialize() const {
     // FMARK: save public key
     size_t total_size = sz_int + sz_int + (endpoint_.length() + 1) + (aux_.length() + 1) + 1 + sz_int + sz_ulong;
+    ptr<buffer> keybuf;
     if (public_key_ != nullptr) {
-        total_size += public_key_->size();
+        keybuf = public_key_->tobuf();
+        total_size += keybuf->size();
     }
     ptr<buffer> buf = buffer::alloc(total_size);
     buf->put(id_);
@@ -61,8 +65,8 @@ ptr<buffer> srv_config::serialize() const {
     buf->put((byte)(learner_ ? (1) : (0)));
     buf->put(priority_);
     if (public_key_ != nullptr) {
-        buf->put((ulong)public_key_->size());
-        buf->put(*public_key_);
+        buf->put((ulong)keybuf->size());
+        buf->put(*keybuf);
     } else {
         buf->put((ulong)0);
     }

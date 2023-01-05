@@ -20,8 +20,8 @@ limitations under the License.
 
 #include "peer.hxx"
 
-#include "cryptopp_ecdsa.hxx"
 #include "debugging_options.hxx"
+#include "openssl_ecdsa.hxx"
 #include "tracer.hxx"
 
 #include <unordered_set>
@@ -238,7 +238,16 @@ void peer::shutdown() {
     hb_task_.reset();
 }
 
+// FMARK: print readable public key
+std::string peer::get_public_key_str() {
+    if (public_key == nullptr) return std::string("null");
+    return public_key->str();
+}
+
 // FMARK: verify sig
-bool peer::verify_signature(ptr<buffer> msg, ptr<buffer> sig) { return verify_signature_util(*msg, *sig, *public_key); }
+bool peer::verify_signature(ptr<buffer> msg, ptr<buffer> sig) {
+    if (msg == nullptr || sig == nullptr) return false;
+    return public_key->verify_md(*msg, *sig);
+}
 
 } // namespace nuraft

@@ -25,6 +25,7 @@ limitations under the License.
 #include "callback.hxx"
 #include "certificate.hxx"
 #include "internal_timer.hxx"
+#include "key.hxx"
 #include "log_store.hxx"
 #include "rpc_cli.hxx"
 #include "snapshot_sync_req.hxx"
@@ -620,6 +621,13 @@ public:
     // FMARK: sign message
     ptr<buffer> get_signature(buffer& msg);
 
+    // FMARK: flag functions
+    bool flag_use_ptr();
+
+    bool flag_use_leader_sig();
+
+    bool flag_use_cc();
+
 protected:
     typedef std::unordered_map<int32, ptr<peer>>::const_iterator peer_itor;
 
@@ -780,7 +788,13 @@ protected:
 
     ulong store_log_entry(ptr<log_entry>& entry, ulong index = 0);
 
+    // FMARK: crypto checks
     ssize_t match_log_entry(std::vector<ptr<log_entry>>& entries, ulong& index);
+    ssize_t check_leader_sig(std::vector<ptr<log_entry>>& entries, int32 signer);
+    int32 validate_commitment_certificate(ptr<certificate> cert, ptr<log_entry> entry);
+
+    // FMARK: certificate operations
+    bool push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term, ulong index);
 
     ptr<resp_msg> handle_out_of_log_msg(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
 
@@ -803,23 +817,23 @@ protected:
     /**
      * FMARK: Private key
      */
-    ptr<buffer> private_key;
+    ptr<seckey_intf> private_key;
 
     /**
      * FMARK: Public key
      */
-    ptr<buffer> public_key;
+    ptr<pubkey_intf> public_key;
 
     /**
      * @brief FMARK: finished cc
      *
      */
-    ptr<certificate> commit_cert;
+    ptr<certificate> commit_cert_;
 
     /**
      * @brief FMARK: working cc
      */
-    ptr<certificate> working_cert;
+    std::map<ulong, ptr<certificate>> working_certs_;
 
     /**
      * @brief lock for certificates
@@ -1134,6 +1148,12 @@ protected:
      * Logger instance.
      */
     ptr<logger> l_;
+
+    // /**
+    //  * FMARK: timer
+    //  *
+    //  */
+    // ptr<timing_mgr> t_;
 
     /**
      * (Read-only)

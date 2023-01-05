@@ -33,8 +33,7 @@ namespace asio_service_test {
 int launch_servers(const std::vector<RaftAsioPkg*>& pkgs,
                    bool enable_ssl,
                    bool use_global_asio = false,
-                   const raft_server::init_options & opt = raft_server::init_options())
-{
+                   const raft_server::init_options& opt = raft_server::init_options()) {
     size_t num_srvs = pkgs.size();
     CHK_GT(num_srvs, 0);
 
@@ -57,7 +56,7 @@ int make_group(const std::vector<RaftAsioPkg*>& pkgs) {
         RaftAsioPkg* ff = pkgs[ii];
 
         // Add to leader.
-        leader->raftServer->add_srv( *(ff->getTestMgr()->get_srv_config()) );
+        leader->raftServer->add_srv(*(ff->getTestMgr()->get_srv_config()));
 
         // Wait longer than upper timeout.
         TestSuite::sleep_sec(1);
@@ -78,12 +77,12 @@ int make_group_test() {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
@@ -103,10 +102,7 @@ int make_group_test() {
         uint64_t last_log_idx = s1.raftServer->get_last_log_idx();
         CHK_EQ(srv_id, pi.id_);
         CHK_EQ(last_log_idx, pi.last_log_idx_);
-        _msg("srv %d: %lu, responeded %.1f ms ago\n",
-             pi.id_,
-             pi.last_log_idx_,
-             pi.last_succ_resp_us_ / 1000.0);
+        _msg("srv %d: %lu, responeded %.1f ms ago\n", pi.id_, pi.last_log_idx_, pi.last_succ_resp_us_ / 1000.0);
     }
 
     // Sleep a while and get all info.
@@ -117,10 +113,7 @@ int make_group_test() {
     for (raft_server::peer_info& pi: v_pi) {
         uint64_t last_log_idx = s1.raftServer->get_last_log_idx();
         CHK_EQ(last_log_idx, pi.last_log_idx_);
-        _msg("srv %d: %lu, responeded %.1f ms ago\n",
-             pi.id_,
-             pi.last_log_idx_,
-             pi.last_succ_resp_us_ / 1000.0);
+        _msg("srv %d: %lu, responeded %.1f ms ago\n", pi.id_, pi.last_log_idx_, pi.last_succ_resp_us_ / 1000.0);
     }
 
     s1.raftServer->shutdown();
@@ -145,12 +138,12 @@ int leader_election_test() {
     std::vector<RaftAsioPkg*> pkgs = {s1, s2, s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1->raftServer->is_leader() );
+    CHK_TRUE(s1->raftServer->is_leader());
     CHK_EQ(1, s1->raftServer->get_leader());
     CHK_EQ(1, s2->raftServer->get_leader());
     CHK_EQ(1, s3->raftServer->get_leader());
@@ -170,13 +163,14 @@ int leader_election_test() {
 
     CHK_EQ(cur_leader, s1->raftServer->get_leader());
     CHK_EQ(cur_leader, s3->raftServer->get_leader());
-    CHK_FALSE( s1->raftServer->is_leader() );
+    CHK_FALSE(s1->raftServer->is_leader());
 
     // Now manually yield leadership.
     RaftAsioPkg* leader_pkg = pkgs[cur_leader - 1];
     leader_pkg->raftServer->yield_leadership();
-    TestSuite::sleep_sec(2, "yield leadership, "
-                            "leader election is happening again");
+    TestSuite::sleep_sec(2,
+                         "yield leadership, "
+                         "leader election is happening again");
 
     // New leader should have been elected.
     cur_leader = s1->raftServer->get_leader();
@@ -215,12 +209,12 @@ int ssl_test() {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers with SSL\n");
-    CHK_Z( launch_servers(pkgs, true) );
+    CHK_Z(launch_servers(pkgs, true));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
@@ -244,19 +238,23 @@ static std::unordered_map<std::string, std::string> resp_map;
 static std::mutex req_map_lock;
 static std::mutex resp_map_lock;
 
-std::string test_write_req_meta( std::atomic<size_t>* count,
-                                 const asio_service::meta_cb_params& params )
-{
+std::string test_write_req_meta(std::atomic<size_t>* count, const asio_service::meta_cb_params& params) {
     static std::mutex lock;
     std::lock_guard<std::mutex> l(lock);
 
-    char key[256];
-    sprintf(key, "%2d, %2d -> %2d, %4zu",
-            params.msg_type_, params.src_id_, params.dst_id_,
-            (size_t)params.log_idx_);
+    const size_t BUF_SIZE = 256;
+    char key[BUF_SIZE];
+    snprintf(key,
+             BUF_SIZE,
+             "%2d, %2d -> %2d, %4zu",
+             params.msg_type_,
+             params.src_id_,
+             params.dst_id_,
+             (size_t)params.log_idx_);
 
-    std::string value = "req_" + std::to_string( std::rand() );
-    {   std::lock_guard<std::mutex> l(req_map_lock);
+    std::string value = "req_" + std::to_string(std::rand());
+    {
+        std::lock_guard<std::mutex> l(req_map_lock);
         req_map[key] = value;
     }
 
@@ -268,48 +266,57 @@ std::string test_write_req_meta( std::atomic<size_t>* count,
     return value;
 }
 
-bool test_read_req_meta( std::atomic<size_t>* count,
-                         const asio_service::meta_cb_params& params,
-                         const std::string& meta )
-{
+bool test_read_req_meta(std::atomic<size_t>* count,
+                        const asio_service::meta_cb_params& params,
+                        const std::string& meta) {
     static std::mutex lock;
 
     std::lock_guard<std::mutex> l(lock);
 
-    char key[256];
-    sprintf(key, "%2d, %2d -> %2d, %4zu",
-            params.msg_type_, params.src_id_, params.dst_id_,
-            (size_t)params.log_idx_);
+    const size_t BUF_SIZE = 256;
+    char key[BUF_SIZE];
+    snprintf(key,
+             BUF_SIZE,
+             "%2d, %2d -> %2d, %4zu",
+             params.msg_type_,
+             params.src_id_,
+             params.dst_id_,
+             (size_t)params.log_idx_);
 
     if (dbg_print_ctx) {
         _msg("%10s %s %20s\n", "read req", key, meta.c_str());
     }
 
     std::string META;
-    {   std::lock_guard<std::mutex> l(req_map_lock);
+    {
+        std::lock_guard<std::mutex> l(req_map_lock);
         META = req_map[key];
     }
     if (META != meta) {
-        CHK_EQ( META, meta );
+        CHK_EQ(META, meta);
         return false;
     }
     if (count) (*count)++;
     return true;
 }
 
-std::string test_write_resp_meta( std::atomic<size_t>* count,
-                                  const asio_service::meta_cb_params& params )
-{
+std::string test_write_resp_meta(std::atomic<size_t>* count, const asio_service::meta_cb_params& params) {
     static std::mutex lock;
     std::lock_guard<std::mutex> l(lock);
 
-    char key[256];
-    sprintf(key, "%2d, %2d -> %2d, %4zu",
-            params.msg_type_, params.src_id_, params.dst_id_,
-            (size_t)params.log_idx_);
+    const size_t BUF_SIZE = 256;
+    char key[BUF_SIZE];
+    snprintf(key,
+             BUF_SIZE,
+             "%2d, %2d -> %2d, %4zu",
+             params.msg_type_,
+             params.src_id_,
+             params.dst_id_,
+             (size_t)params.log_idx_);
 
-    std::string value = "resp_" + std::to_string( std::rand() );
-    {   std::lock_guard<std::mutex> l(resp_map_lock);
+    std::string value = "resp_" + std::to_string(std::rand());
+    {
+        std::lock_guard<std::mutex> l(resp_map_lock);
         resp_map[key] = value;
     }
 
@@ -321,28 +328,33 @@ std::string test_write_resp_meta( std::atomic<size_t>* count,
     return value;
 }
 
-bool test_read_resp_meta( std::atomic<size_t>* count,
-                          const asio_service::meta_cb_params& params,
-                          const std::string& meta )
-{
+bool test_read_resp_meta(std::atomic<size_t>* count,
+                         const asio_service::meta_cb_params& params,
+                         const std::string& meta) {
     static std::mutex lock;
     std::lock_guard<std::mutex> l(lock);
 
-    char key[256];
-    sprintf(key, "%2d, %2d -> %2d, %4zu",
-            params.msg_type_, params.src_id_, params.dst_id_,
-            (size_t)params.log_idx_);
+    const size_t BUF_SIZE = 256;
+    char key[BUF_SIZE];
+    snprintf(key,
+             BUF_SIZE,
+             "%2d, %2d -> %2d, %4zu",
+             params.msg_type_,
+             params.src_id_,
+             params.dst_id_,
+             (size_t)params.log_idx_);
 
     if (dbg_print_ctx) {
         _msg("%10s %s %20s\n", "read resp", key, meta.c_str());
     }
 
     std::string META;
-    {   std::lock_guard<std::mutex> l(resp_map_lock);
+    {
+        std::lock_guard<std::mutex> l(resp_map_lock);
         META = resp_map[key];
     }
     if (META != meta) {
-        CHK_EQ( META, meta );
+        CHK_EQ(META, meta);
         return false;
     }
     if (count) (*count)++;
@@ -368,41 +380,31 @@ int message_meta_test() {
 
     _msg("launching asio-raft servers with meta callback\n");
     for (RaftAsioPkg* rr: pkgs) {
-        rr->setMetaCallback
-            ( std::bind( test_read_req_meta,
-                         &read_req_cb_count,
-                         std::placeholders::_1,
-                         std::placeholders::_2 ),
-              std::bind( test_write_req_meta,
-                         &write_req_cb_count,
-                         std::placeholders::_1 ),
-              std::bind( test_read_resp_meta,
-                         &read_resp_cb_count,
-                         std::placeholders::_1,
-                         std::placeholders::_2 ),
-              std::bind( test_write_resp_meta,
-                         &write_resp_cb_count,
-                         std::placeholders::_1 ),
-              true );
+        rr->setMetaCallback(
+            std::bind(test_read_req_meta, &read_req_cb_count, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_write_req_meta, &write_req_cb_count, std::placeholders::_1),
+            std::bind(test_read_resp_meta, &read_resp_cb_count, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_write_resp_meta, &write_resp_cb_count, std::placeholders::_1),
+            true);
     }
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
 
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
-    for (size_t ii=0; ii<10; ++ii) {
+    for (size_t ii = 0; ii < 10; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
 
     TestSuite::sleep_sec(1, "wait for replication");
@@ -412,10 +414,8 @@ int message_meta_test() {
     CHK_GT(write_req_cb_count.load(), 0);
     CHK_GT(read_resp_cb_count.load(), 0);
     CHK_GT(write_resp_cb_count.load(), 0);
-    _msg( "read req callback %zu, write req callback %zu\n",
-          read_req_cb_count.load(), write_req_cb_count.load() );
-    _msg( "read resp callback %zu, write resp callback %zu\n",
-          read_resp_cb_count.load(), write_resp_cb_count.load() );
+    _msg("read req callback %zu, write req callback %zu\n", read_req_cb_count.load(), write_req_cb_count.load());
+    _msg("read resp callback %zu, write resp callback %zu\n", read_resp_cb_count.load(), write_resp_cb_count.load());
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -426,11 +426,10 @@ int message_meta_test() {
     return 0;
 }
 
-bool test_read_meta_random_denial( std::atomic<bool>* start_denial,
-                                   const asio_service::meta_cb_params& params,
-                                   const std::string& meta )
-{
-    if ( !(start_denial->load()) ) return true;
+bool test_read_meta_random_denial(std::atomic<bool>* start_denial,
+                                  const asio_service::meta_cb_params& params,
+                                  const std::string& meta) {
+    if (!(start_denial->load())) return true;
 
     int r = std::rand();
     if (r % 25 == 0) return false;
@@ -455,43 +454,33 @@ int message_meta_random_denial_test() {
 
     _msg("launching asio-raft servers with meta callback\n");
     for (RaftAsioPkg* rr: pkgs) {
-        rr->setMetaCallback
-            ( std::bind( test_read_meta_random_denial,
-                         &start_denial,
-                         std::placeholders::_1,
-                         std::placeholders::_2 ),
-              std::bind( test_write_req_meta,
-                         &write_req_cb_count,
-                         std::placeholders::_1 ),
-              std::bind( test_read_meta_random_denial,
-                         &start_denial,
-                         std::placeholders::_1,
-                         std::placeholders::_2 ),
-              std::bind( test_write_resp_meta,
-                         &write_resp_cb_count,
-                         std::placeholders::_1 ),
-              true );
+        rr->setMetaCallback(
+            std::bind(test_read_meta_random_denial, &start_denial, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_write_req_meta, &write_req_cb_count, std::placeholders::_1),
+            std::bind(test_read_meta_random_denial, &start_denial, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_write_resp_meta, &write_resp_cb_count, std::placeholders::_1),
+            true);
     }
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
 
     start_denial = true;
 
-    for (size_t ii=0; ii<100; ++ii) {
+    for (size_t ii = 0; ii < 100; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
 
     TestSuite::sleep_sec(5, "wait for random denial");
@@ -505,22 +494,18 @@ int message_meta_random_denial_test() {
     return 0;
 }
 
-
-std::string test_write_empty_meta( std::atomic<size_t>* count,
-                                   const asio_service::meta_cb_params& params )
-{
+std::string test_write_empty_meta(std::atomic<size_t>* count, const asio_service::meta_cb_params& params) {
     if (count) (*count)++;
     return std::string();
 }
 
-bool test_read_empty_meta( std::atomic<size_t>* count,
-                           const asio_service::meta_cb_params& params,
-                           const std::string& meta )
-{
+bool test_read_empty_meta(std::atomic<size_t>* count,
+                          const asio_service::meta_cb_params& params,
+                          const std::string& meta) {
     static std::mutex lock;
     std::lock_guard<std::mutex> l(lock);
 
-    CHK_EQ( std::string(), meta );
+    CHK_EQ(std::string(), meta);
 
     if (count) (*count)++;
     return true;
@@ -545,41 +530,31 @@ int empty_meta_test(bool always_invoke_cb) {
 
     _msg("launching asio-raft servers with meta callback\n");
     for (RaftAsioPkg* rr: pkgs) {
-        rr->setMetaCallback
-            ( std::bind( test_read_empty_meta,
-                         &read_req_cb_count,
-                         std::placeholders::_1,
-                         std::placeholders::_2 ),
-              std::bind( test_write_empty_meta,
-                         &write_req_cb_count,
-                         std::placeholders::_1 ),
-              std::bind( test_read_empty_meta,
-                         &read_resp_cb_count,
-                         std::placeholders::_1,
-                         std::placeholders::_2 ),
-              std::bind( test_write_empty_meta,
-                         &write_resp_cb_count,
-                         std::placeholders::_1 ),
-              always_invoke_cb );
+        rr->setMetaCallback(
+            std::bind(test_read_empty_meta, &read_req_cb_count, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_write_empty_meta, &write_req_cb_count, std::placeholders::_1),
+            std::bind(test_read_empty_meta, &read_resp_cb_count, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_write_empty_meta, &write_resp_cb_count, std::placeholders::_1),
+            always_invoke_cb);
     }
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
 
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
-    for (size_t ii=0; ii<10; ++ii) {
+    for (size_t ii = 0; ii < 10; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
 
     TestSuite::sleep_sec(1, "wait for replication");
@@ -595,10 +570,8 @@ int empty_meta_test(bool always_invoke_cb) {
     }
     CHK_GT(write_req_cb_count, 0);
     CHK_GT(write_resp_cb_count, 0);
-    _msg( "read req callback %zu, write req callback %zu\n",
-          read_req_cb_count.load(), write_req_cb_count.load() );
-    _msg( "read resp callback %zu, write resp callback %zu\n",
-          read_resp_cb_count.load(), write_resp_cb_count.load() );
+    _msg("read req callback %zu, write req callback %zu\n", read_req_cb_count.load(), write_req_cb_count.load());
+    _msg("read resp callback %zu, write resp callback %zu\n", read_resp_cb_count.load(), write_resp_cb_count.load());
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -621,33 +594,22 @@ int response_hint_test(bool with_meta) {
     RaftAsioPkg s3(3, s3_addr);
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
-    _msg("launching asio-raft servers %s\n",
-         with_meta ? "(with meta)" : "");
+    _msg("launching asio-raft servers %s\n", with_meta ? "(with meta)" : "");
     std::atomic<size_t> read_req_cb_count(0);
     std::atomic<size_t> write_req_cb_count(0);
     std::atomic<size_t> read_resp_cb_count(0);
     std::atomic<size_t> write_resp_cb_count(0);
     for (RaftAsioPkg* ee: pkgs) {
         if (with_meta) {
-            ee->setMetaCallback
-                ( std::bind( test_read_req_meta,
-                             &read_req_cb_count,
-                             std::placeholders::_1,
-                             std::placeholders::_2 ),
-                  std::bind( test_write_req_meta,
-                             &write_req_cb_count,
-                             std::placeholders::_1 ),
-                  std::bind( test_read_resp_meta,
-                             &read_resp_cb_count,
-                             std::placeholders::_1,
-                             std::placeholders::_2 ),
-                  std::bind( test_write_resp_meta,
-                             &write_resp_cb_count,
-                             std::placeholders::_1 ),
-                  true );
+            ee->setMetaCallback(
+                std::bind(test_read_req_meta, &read_req_cb_count, std::placeholders::_1, std::placeholders::_2),
+                std::bind(test_write_req_meta, &write_req_cb_count, std::placeholders::_1),
+                std::bind(test_read_resp_meta, &read_resp_cb_count, std::placeholders::_1, std::placeholders::_2),
+                std::bind(test_write_resp_meta, &write_resp_cb_count, std::placeholders::_1),
+                true);
         }
     }
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("enable batch size hint with positive value\n");
     for (RaftAsioPkg* ee: pkgs) {
@@ -655,45 +617,45 @@ int response_hint_test(bool with_meta) {
     }
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
     const size_t NUM = 100;
-    for (size_t ii=0; ii<NUM; ++ii) {
+    for (size_t ii = 0; ii < NUM; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
 
     // State machine should be identical.
-    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
-    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2.getTestSm()->isSame(*s1.getTestSm()));
+    CHK_OK(s3.getTestSm()->isSame(*s1.getTestSm()));
 
     _msg("disable batch size hint\n");
     for (RaftAsioPkg* ee: pkgs) {
         ee->getTestSm()->set_next_batch_size_hint_in_bytes(0);
     }
 
-    for (size_t ii=0; ii<NUM; ++ii) {
+    for (size_t ii = 0; ii < NUM; ++ii) {
         std::string msg_str = "2nd_" + std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
 
     // State machine should be identical.
-    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
-    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2.getTestSm()->isSame(*s1.getTestSm()));
+    CHK_OK(s3.getTestSm()->isSame(*s1.getTestSm()));
 
     _msg("enable batch size hint with negative value\n");
     for (RaftAsioPkg* ee: pkgs) {
@@ -708,18 +670,18 @@ int response_hint_test(bool with_meta) {
     params.with_client_req_timeout(1000);
     s1.raftServer->update_params(params);
 
-    for (size_t ii=0; ii<3; ++ii) {
+    for (size_t ii = 0; ii < 3; ++ii) {
         std::string msg_str = "3rd_" + std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication but actually no replication happen");
 
     // State machine should be identical. All are not committed.
-    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
-    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2.getTestSm()->isSame(*s1.getTestSm()));
+    CHK_OK(s3.getTestSm()->isSame(*s1.getTestSm()));
 
     if (with_meta) {
         // Callback functions for meta should have been called.
@@ -727,10 +689,9 @@ int response_hint_test(bool with_meta) {
         CHK_GT(write_req_cb_count.load(), 0);
         CHK_GT(read_resp_cb_count.load(), 0);
         CHK_GT(write_resp_cb_count.load(), 0);
-        _msg( "read req callback %zu, write req callback %zu\n",
-              read_req_cb_count.load(), write_req_cb_count.load() );
-        _msg( "read resp callback %zu, write resp callback %zu\n",
-              read_resp_cb_count.load(), write_resp_cb_count.load() );
+        _msg("read req callback %zu, write req callback %zu\n", read_req_cb_count.load(), write_req_cb_count.load());
+        _msg(
+            "read resp callback %zu, write resp callback %zu\n", read_resp_cb_count.load(), write_resp_cb_count.load());
     }
 
     s1.raftServer->shutdown();
@@ -742,11 +703,8 @@ int response_hint_test(bool with_meta) {
     return 0;
 }
 
-static void async_handler(std::list<ulong>* idx_list,
-                          std::mutex* idx_list_lock,
-                          ptr<buffer>& result,
-                          ptr<std::exception>& err)
-{
+static void
+async_handler(std::list<ulong>* idx_list, std::mutex* idx_list_lock, ptr<buffer>& result, ptr<std::exception>& err) {
     result->pos(0);
     ulong idx = result->get_ulong();
     if (idx_list) {
@@ -768,10 +726,10 @@ int async_append_handler_test() {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
     // Set async.
     for (auto& entry: pkgs) {
@@ -783,23 +741,18 @@ int async_append_handler_test() {
 
     // Append messages asynchronously.
     const size_t NUM = 10;
-    std::list< ptr< cmd_result< ptr<buffer> > > > handlers;
+    std::list<ptr<cmd_result<ptr<buffer>>>> handlers;
     std::list<ulong> idx_list;
     std::mutex idx_list_lock;
-    for (size_t ii=0; ii<NUM; ++ii) {
+    for (size_t ii = 0; ii < NUM; ++ii) {
         std::string test_msg = "test" + std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
         msg->put(test_msg);
-        ptr< cmd_result< ptr<buffer> > > ret =
-            s1.raftServer->append_entries( {msg} );
+        ptr<cmd_result<ptr<buffer>>> ret = s1.raftServer->append_entries({msg});
 
-        cmd_result< ptr<buffer> >::handler_type my_handler =
-            std::bind( async_handler,
-                       &idx_list,
-                       &idx_list_lock,
-                       std::placeholders::_1,
-                       std::placeholders::_2 );
-        ret->when_ready( my_handler );
+        cmd_result<ptr<buffer>>::handler_type my_handler =
+            std::bind(async_handler, &idx_list, &idx_list_lock, std::placeholders::_1, std::placeholders::_2);
+        ret->when_ready(my_handler);
 
         handlers.push_back(ret);
     }
@@ -812,8 +765,8 @@ int async_append_handler_test() {
     }
 
     // State machine should be identical.
-    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
-    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2.getTestSm()->isSame(*s1.getTestSm()));
+    CHK_OK(s3.getTestSm()->isSame(*s1.getTestSm()));
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -837,10 +790,10 @@ int async_append_handler_with_order_inversion_test() {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
     // Set async.
     for (auto& entry: pkgs) {
@@ -852,10 +805,9 @@ int async_append_handler_with_order_inversion_test() {
 
     // Set debugging parameter to inject sleep so as to mimic the thread
     // execution order inversion.
-    debugging_options::get_instance().handle_cli_req_sleep_us_ =
-        RaftAsioPkg::HEARTBEAT_MS * 1500;
+    debugging_options::get_instance().handle_cli_req_sleep_us_ = RaftAsioPkg::HEARTBEAT_MS * 1500;
 
-    TestSuite::GcFunc gcf([](){ // Auto rollback.
+    TestSuite::GcFunc gcf([]() { // Auto rollback.
         debugging_options::get_instance().handle_cli_req_sleep_us_ = 0;
     });
 
@@ -864,11 +816,8 @@ int async_append_handler_with_order_inversion_test() {
         std::string test_msg = "test" + std::to_string(1234);
         ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
         msg->put(test_msg);
-        ptr< cmd_result< ptr<buffer> > > ret =
-            s1.raftServer->append_entries({msg});
-        ret->when_ready( [&handler_invoked]
-                         ( cmd_result< ptr<buffer> >& result,
-                           ptr<std::exception>& err ) -> int {
+        ptr<cmd_result<ptr<buffer>>> ret = s1.raftServer->append_entries({msg});
+        ret->when_ready([&handler_invoked](cmd_result<ptr<buffer>>& result, ptr<std::exception>& err) -> int {
             CHK_NONNULL(result.get());
             handler_invoked = true;
             return 0;
@@ -881,8 +830,8 @@ int async_append_handler_with_order_inversion_test() {
     CHK_TRUE(handler_invoked);
 
     // State machine should be identical.
-    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
-    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2.getTestSm()->isSame(*s1.getTestSm()));
+    CHK_OK(s3.getTestSm()->isSame(*s1.getTestSm()));
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -904,10 +853,10 @@ int auto_quorum_size_test() {
     std::vector<RaftAsioPkg*> pkgs = {&s1, s2.get()};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
     // Set custom term counter, and enable auto quorum size mode.
@@ -922,68 +871,63 @@ int auto_quorum_size_test() {
     s1.raftServer->update_params(params);
     s2->raftServer->update_params(params);
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2->raftServer->get_leader());
 
     // Replication.
-    for (size_t ii=0; ii<10; ++ii) {
+    for (size_t ii = 0; ii < 10; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
     uint64_t committed_idx = s1.raftServer->get_committed_log_idx();
 
     // State machine should be identical.
-    CHK_OK( s2->getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2->getTestSm()->isSame(*s1.getTestSm()));
 
     // Shutdown S2.
     s2->raftServer->shutdown();
     s2.reset();
 
-    TestSuite::sleep_ms( RaftAsioPkg::HEARTBEAT_MS * 30,
-                         "wait for quorum adjust" );
+    TestSuite::sleep_ms(RaftAsioPkg::HEARTBEAT_MS * 30, "wait for quorum adjust");
 
     // More replication.
-    for (size_t ii=10; ii<11; ++ii) {
+    for (size_t ii = 10; ii < 11; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
 
     // Replication should succeed: committed index should be moved forward.
     TestSuite::sleep_sec(1, "wait for replication");
-    CHK_EQ( committed_idx + 1,
-            s1.raftServer->get_committed_log_idx() );
+    CHK_EQ(committed_idx + 1, s1.raftServer->get_committed_log_idx());
 
     // Restart S2.
     _msg("launching S2 again\n");
     RaftAsioPkg s2_new(2, s2_addr);
-    CHK_Z( launch_servers({&s2_new}, false) );
+    CHK_Z(launch_servers({&s2_new}, false));
     TestSuite::sleep_sec(1, "wait for S2 ready");
-    CHK_EQ( committed_idx + 1,
-            s2_new.raftServer->get_committed_log_idx() );
+    CHK_EQ(committed_idx + 1, s2_new.raftServer->get_committed_log_idx());
 
     // More replication.
-    for (size_t ii=11; ii<12; ++ii) {
+    for (size_t ii = 11; ii < 12; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
 
     // Both of them should have the same commit number.
     TestSuite::sleep_sec(1, "wait for replication");
-    CHK_EQ( committed_idx + 2,
-            s1.raftServer->get_committed_log_idx() );
-    CHK_EQ( committed_idx + 2,
-            s2_new.raftServer->get_committed_log_idx() );
+    CHK_EQ(committed_idx + 2, s1.raftServer->get_committed_log_idx());
+    CHK_EQ(committed_idx + 2, s2_new.raftServer->get_committed_log_idx());
 
     s1.raftServer->shutdown();
     s2_new.raftServer->shutdown();
@@ -1004,10 +948,10 @@ int auto_quorum_size_election_test() {
     std::vector<RaftAsioPkg*> pkgs = {s1.get(), s2.get()};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
     // Set custom term counter, and enable auto quorum size mode.
@@ -1022,78 +966,73 @@ int auto_quorum_size_election_test() {
     s1->raftServer->update_params(params);
     s2->raftServer->update_params(params);
 
-    CHK_TRUE( s1->raftServer->is_leader() );
+    CHK_TRUE(s1->raftServer->is_leader());
     CHK_EQ(1, s1->raftServer->get_leader());
     CHK_EQ(1, s2->raftServer->get_leader());
 
     // Replication.
-    for (size_t ii=0; ii<10; ++ii) {
+    for (size_t ii = 0; ii < 10; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1->raftServer->append_entries( {msg} );
+        s1->raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
 
     // State machine should be identical.
-    CHK_OK( s2->getTestSm()->isSame( *s1->getTestSm() ) );
+    CHK_OK(s2->getTestSm()->isSame(*s1->getTestSm()));
 
     // Shutdown S1.
     s1->raftServer->shutdown();
     s1.reset();
 
     // Wait for adjust quorum and self election.
-    TestSuite::sleep_ms( RaftAsioPkg::HEARTBEAT_MS * 50,
-                         "wait for quorum adjust" );
+    TestSuite::sleep_ms(RaftAsioPkg::HEARTBEAT_MS * 50, "wait for quorum adjust");
 
     // S2 should be a leader.
-    CHK_TRUE( s2->raftServer->is_leader() );
+    CHK_TRUE(s2->raftServer->is_leader());
     CHK_EQ(2, s2->raftServer->get_leader());
     uint64_t committed_idx = s2->raftServer->get_committed_log_idx();
 
     // More replication.
-    for (size_t ii=10; ii<11; ++ii) {
+    for (size_t ii = 10; ii < 11; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s2->raftServer->append_entries( {msg} );
+        s2->raftServer->append_entries({msg});
     }
 
     // Replication should succeed: committed index should be moved forward.
     TestSuite::sleep_sec(1, "wait for replication");
-    CHK_EQ( committed_idx + 1,
-            s2->raftServer->get_committed_log_idx() );
+    CHK_EQ(committed_idx + 1, s2->raftServer->get_committed_log_idx());
 
     // Restart S1.
     _msg("launching S1 again\n");
     RaftAsioPkg s1_new(1, s1_addr);
-    CHK_Z( launch_servers({&s1_new}, false) );
+    CHK_Z(launch_servers({&s1_new}, false));
     TestSuite::sleep_sec(1, "wait for S2 ready");
-    CHK_EQ( committed_idx + 1,
-            s1_new.raftServer->get_committed_log_idx() );
+    CHK_EQ(committed_idx + 1, s1_new.raftServer->get_committed_log_idx());
 
     // S2 should remain as a leader.
-    CHK_TRUE( s2->raftServer->is_leader() );
+    CHK_TRUE(s2->raftServer->is_leader());
     CHK_EQ(2, s1_new.raftServer->get_leader());
     CHK_EQ(2, s2->raftServer->get_leader());
 
     // More replication.
-    for (size_t ii=11; ii<12; ++ii) {
+    for (size_t ii = 11; ii < 12; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s2->raftServer->append_entries( {msg} );
+        s2->raftServer->append_entries({msg});
     }
 
     // Both of them should have the same commit number.
     TestSuite::sleep_sec(1, "wait for replication");
-    CHK_EQ( committed_idx + 2,
-            s1_new.raftServer->get_committed_log_idx() );
-    CHK_EQ( committed_idx + 2,
-            s2->raftServer->get_committed_log_idx() );
+    CHK_EQ(committed_idx + 2, s1_new.raftServer->get_committed_log_idx());
+    CHK_EQ(committed_idx + 2, s2->raftServer->get_committed_log_idx());
 
     s2->raftServer->shutdown();
     s1_new.raftServer->shutdown();
@@ -1117,10 +1056,10 @@ int global_mgr_basic_test() {
     RaftAsioPkg s3(3, s3_addr);
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
-    CHK_Z( launch_servers(pkgs, false, true) );
+    CHK_Z(launch_servers(pkgs, false, true));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
     // Set async.
     for (auto& entry: pkgs) {
@@ -1130,7 +1069,7 @@ int global_mgr_basic_test() {
         pp->raftServer->update_params(param);
     }
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
@@ -1138,12 +1077,12 @@ int global_mgr_basic_test() {
 
     const size_t NUM_OP = 500;
     TestSuite::Progress prog(NUM_OP, "append op");
-    for (size_t ii=0; ii<NUM_OP; ++ii) {
+    for (size_t ii = 0; ii < NUM_OP; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
         // To utilize thread pool, have enough break time
         // between each `append_entries`. If we don't have this,
         // append_entries's response handler will trigger the
@@ -1175,12 +1114,12 @@ int global_mgr_heavy_test() {
 
     std::vector<RaftAsioPkg*> pkgs;
     for (size_t ii = 0; ii < NUM_SERVERS; ++ii) {
-        std::string addr = "127.0.0.1:" + std::to_string(20000 + (ii+1) * 10);
-        RaftAsioPkg* pkg = new RaftAsioPkg(ii+1, addr);
+        std::string addr = "127.0.0.1:" + std::to_string(20000 + (ii + 1) * 10);
+        RaftAsioPkg* pkg = new RaftAsioPkg(ii + 1, addr);
         pkgs.push_back(pkg);
     }
 
-    CHK_Z( launch_servers(pkgs, false, true) );
+    CHK_Z(launch_servers(pkgs, false, true));
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
     // Set async.
@@ -1191,7 +1130,7 @@ int global_mgr_heavy_test() {
         pp->raftServer->update_params(param);
     }
 
-    for (size_t ii=0; ii<500; ++ii) {
+    for (size_t ii = 0; ii < 500; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
@@ -1199,7 +1138,7 @@ int global_mgr_heavy_test() {
 
         for (auto& entry: pkgs) {
             RaftAsioPkg* pkg = entry;
-            pkg->raftServer->append_entries( {msg} );
+            pkg->raftServer->append_entries({msg});
         }
     }
     TestSuite::sleep_sec(1, "wait for replication");
@@ -1229,12 +1168,12 @@ int leadership_transfer_test() {
     std::vector<RaftAsioPkg*> pkgs = {s1, s2, s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1->raftServer->is_leader() );
+    CHK_TRUE(s1->raftServer->is_leader());
     CHK_EQ(1, s1->raftServer->get_leader());
     CHK_EQ(1, s2->raftServer->get_leader());
     CHK_EQ(1, s3->raftServer->get_leader());
@@ -1252,14 +1191,14 @@ int leadership_transfer_test() {
     TestSuite::sleep_sec(1, "yield leadership to S2");
 
     // Now S2 should be the leader.
-    CHK_TRUE( s2->raftServer->is_leader() );
+    CHK_TRUE(s2->raftServer->is_leader());
     CHK_EQ(2, s1->raftServer->get_leader());
     CHK_EQ(2, s2->raftServer->get_leader());
     CHK_EQ(2, s3->raftServer->get_leader());
 
     // Leadership transfer shouldn't happen.
     TestSuite::sleep_sec(1, "wait more");
-    CHK_TRUE( s2->raftServer->is_leader() );
+    CHK_TRUE(s2->raftServer->is_leader());
 
     // Now set the parameter to enable transfer.
     raft_params params = s2->raftServer->get_current_params();
@@ -1268,7 +1207,7 @@ int leadership_transfer_test() {
 
     // S1 should be the leader now.
     TestSuite::sleep_sec(1, "enable transfer and wait");
-    CHK_TRUE( s1->raftServer->is_leader() );
+    CHK_TRUE(s1->raftServer->is_leader());
     CHK_EQ(1, s1->raftServer->get_leader());
     CHK_EQ(1, s2->raftServer->get_leader());
     CHK_EQ(1, s3->raftServer->get_leader());
@@ -1286,14 +1225,14 @@ int leadership_transfer_test() {
 
     // Due to S3, transfer shouldn't happen.
     TestSuite::sleep_sec(2, "shutdown S3, set priority of S2, and wait");
-    CHK_TRUE( s1->raftServer->is_leader() );
+    CHK_TRUE(s1->raftServer->is_leader());
 
     s3 = new RaftAsioPkg(3, s3_addr);
     s3->initServer();
     TestSuite::sleep_sec(2, "restart S3");
 
     // Now leader trasnfer should happen.
-    CHK_TRUE( s2->raftServer->is_leader() );
+    CHK_TRUE(s2->raftServer->is_leader());
     CHK_EQ(2, s1->raftServer->get_leader());
     CHK_EQ(2, s2->raftServer->get_leader());
     CHK_EQ(2, s3->raftServer->get_leader());
@@ -1327,20 +1266,19 @@ int auto_forwarding_timeout_test() {
     raft_server::init_options opt;
 
     /// Make leader quite slow
-    opt.raft_callback_ = [](cb_func::Type type, cb_func::Param* param)
-                         -> cb_func::ReturnCode {
+    opt.raft_callback_ = [](cb_func::Type type, cb_func::Param* param) -> cb_func::ReturnCode {
         if (type == cb_func::Type::AppendLogs) {
             TestSuite::sleep_ms(150);
         }
         return cb_func::ReturnCode::Ok;
     };
 
-    CHK_Z( launch_servers(pkgs, false, false, opt) );
+    CHK_Z(launch_servers(pkgs, false, false, opt));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
@@ -1408,10 +1346,10 @@ int auto_forwarding_test(bool async) {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
     // Set async.
     for (auto& entry: pkgs) {
@@ -1431,14 +1369,13 @@ int auto_forwarding_test(bool async) {
     };
 
     std::mutex handlers_lock;
-    std::list< ptr< cmd_result< ptr<buffer> > > > handlers;
+    std::list<ptr<cmd_result<ptr<buffer>>>> handlers;
     auto send_msg = [&](TestSuite::ThreadArgs* t_args) -> int {
         MsgArgs* args = (MsgArgs*)t_args;
         std::string test_msg = "test" + std::to_string(args->ii);
         ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
         msg->put(test_msg);
-        ptr< cmd_result< ptr<buffer> > > ret =
-            s2.raftServer->append_entries( {msg} );
+        ptr<cmd_result<ptr<buffer>>> ret = s2.raftServer->append_entries({msg});
 
         std::lock_guard<std::mutex> l(handlers_lock);
         handlers.push_back(ret);
@@ -1465,8 +1402,8 @@ int auto_forwarding_test(bool async) {
     }
 
     // State machine should be identical.
-    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
-    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2.getTestSm()->isSame(*s1.getTestSm()));
+    CHK_OK(s3.getTestSm()->isSame(*s1.getTestSm()));
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -1490,23 +1427,23 @@ int enforced_state_machine_catchup_test() {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
-    for (size_t ii=0; ii<100; ++ii) {
+    for (size_t ii = 0; ii < 100; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
 
@@ -1532,12 +1469,12 @@ int enforced_state_machine_catchup_test() {
     TestSuite::sleep_ms(500, "restarting S3");
 
     // Before the grace period, there should be no leader.
-    CHK_FALSE( s2.raftServer->is_leader() );
-    CHK_FALSE( s3.raftServer->is_leader() );
+    CHK_FALSE(s2.raftServer->is_leader());
+    CHK_FALSE(s3.raftServer->is_leader());
 
     // After the grace period, S3 should be the leader.
     TestSuite::sleep_sec(1, "grace period");
-    CHK_TRUE( s3.raftServer->is_leader() );
+    CHK_TRUE(s3.raftServer->is_leader());
     CHK_EQ(3, s2.raftServer->get_leader());
 
     // Stop both S2 and S3 and then restart them.
@@ -1552,7 +1489,7 @@ int enforced_state_machine_catchup_test() {
     TestSuite::sleep_ms(500, "restarting S2 and S3");
 
     // Even before the grace period, S3 should be the leader.
-    CHK_TRUE( s3.raftServer->is_leader() );
+    CHK_TRUE(s3.raftServer->is_leader());
     CHK_EQ(3, s2.raftServer->get_leader());
 
     s1.raftServer->shutdown();
@@ -1577,23 +1514,23 @@ int enforced_state_machine_catchup_with_term_inc_test() {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
-    for (size_t ii=0; ii<100; ++ii) {
+    for (size_t ii = 0; ii < 100; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
 
@@ -1626,12 +1563,12 @@ int enforced_state_machine_catchup_with_term_inc_test() {
     TestSuite::sleep_ms(500, "restarting S3");
 
     // Before the grace period, there should be no leader.
-    CHK_FALSE( s2.raftServer->is_leader() );
-    CHK_FALSE( s3.raftServer->is_leader() );
+    CHK_FALSE(s2.raftServer->is_leader());
+    CHK_FALSE(s3.raftServer->is_leader());
 
     // Even after the grace period, S3 can't be the leader due to term.
     TestSuite::sleep_ms(1500, "grace period");
-    CHK_FALSE( s3.raftServer->is_leader() );
+    CHK_FALSE(s3.raftServer->is_leader());
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -1655,22 +1592,22 @@ int snapshot_read_failure_during_join_test(size_t log_sync_gap) {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group({&s1, &s2}) );
+    CHK_Z(make_group({&s1, &s2}));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
-    for (size_t ii=0; ii<100; ++ii) {
+    for (size_t ii = 0; ii < 100; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
 
@@ -1682,12 +1619,12 @@ int snapshot_read_failure_during_join_test(size_t log_sync_gap) {
     s1.getTestSm()->setSnpReadFailure(2);
 
     // Add S3.
-    s1.raftServer->add_srv( *(s3.getTestMgr()->get_srv_config()) );
+    s1.raftServer->add_srv(*(s3.getTestMgr()->get_srv_config()));
     TestSuite::sleep_sec(1, "add S3");
 
     // State machine should be identical.
-    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
-    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2.getTestSm()->isSame(*s1.getTestSm()));
+    CHK_OK(s3.getTestSm()->isSame(*s1.getTestSm()));
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -1711,12 +1648,12 @@ int snapshot_read_failure_for_lagging_server_test(size_t num_failures) {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
@@ -1728,12 +1665,12 @@ int snapshot_read_failure_for_lagging_server_test(size_t num_failures) {
     TestSuite::sleep_sec(1, "stop S3");
 
     // Replication.
-    for (size_t ii=0; ii<100; ++ii) {
+    for (size_t ii = 0; ii < 100; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
 
@@ -1745,8 +1682,8 @@ int snapshot_read_failure_for_lagging_server_test(size_t num_failures) {
     TestSuite::sleep_sec(1, "restarting S3");
 
     // State machine should be identical.
-    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
-    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2.getTestSm()->isSame(*s1.getTestSm()));
+    CHK_OK(s3.getTestSm()->isSame(*s1.getTestSm()));
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -1770,12 +1707,12 @@ int snapshot_context_timeout_normal_test() {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
@@ -1787,12 +1724,12 @@ int snapshot_context_timeout_normal_test() {
     TestSuite::sleep_sec(1, "stop S3");
 
     // Replication.
-    for (size_t ii=0; ii<100; ++ii) {
+    for (size_t ii = 0; ii < 100; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
 
@@ -1818,8 +1755,8 @@ int snapshot_context_timeout_normal_test() {
     TestSuite::sleep_sec(1, "restarting S3");
 
     // State machine should be identical.
-    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
-    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2.getTestSm()->isSame(*s1.getTestSm()));
+    CHK_OK(s3.getTestSm()->isSame(*s1.getTestSm()));
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -1843,23 +1780,23 @@ int snapshot_context_timeout_join_test() {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group( {&s1, &s2} ) );
+    CHK_Z(make_group({&s1, &s2}));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     TestSuite::sleep_sec(1, "wait for Raft group ready");
 
     // Replication.
-    for (size_t ii=0; ii<100; ++ii) {
+    for (size_t ii = 0; ii < 100; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
 
@@ -1869,7 +1806,7 @@ int snapshot_context_timeout_join_test() {
 
     // Set snapshot delay for S3 and add it to the group.
     s3.getTestSm()->setSnpDelay(100);
-    s1.raftServer->add_srv( *s3.getTestMgr()->get_srv_config() );
+    s1.raftServer->add_srv(*s3.getTestMgr()->get_srv_config());
     TestSuite::sleep_sec(1, "adding S3");
 
     // User snapshot ctx should exist.
@@ -1887,7 +1824,7 @@ int snapshot_context_timeout_join_test() {
     //   timeout checking code is not invoked in time.
     //
     //   Disabling the below code until it is addressed.
-    //CHK_Z(s1.getTestSm()->getNumOpenedUserCtxs());
+    // CHK_Z(s1.getTestSm()->getNumOpenedUserCtxs());
 
     // Clear snapshot delay for S3 and restart.
     s3.getTestSm()->setSnpDelay(0);
@@ -1896,12 +1833,12 @@ int snapshot_context_timeout_join_test() {
     TestSuite::sleep_sec(2, "wait for previous adding server to be expired");
 
     // Re-attempt adding S3.
-    s1.raftServer->add_srv( *s3.getTestMgr()->get_srv_config() );
+    s1.raftServer->add_srv(*s3.getTestMgr()->get_srv_config());
     TestSuite::sleep_sec(1, "adding S3");
 
     // State machine should be identical.
-    CHK_OK( s2.getTestSm()->isSame( *s1.getTestSm() ) );
-    CHK_OK( s3.getTestSm()->isSame( *s1.getTestSm() ) );
+    CHK_OK(s2.getTestSm()->isSame(*s1.getTestSm()));
+    CHK_OK(s3.getTestSm()->isSame(*s1.getTestSm()));
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -1925,12 +1862,12 @@ int snapshot_context_timeout_removed_server_test() {
     std::vector<RaftAsioPkg*> pkgs = {&s1, &s2, &s3};
 
     _msg("launching asio-raft servers\n");
-    CHK_Z( launch_servers(pkgs, false) );
+    CHK_Z(launch_servers(pkgs, false));
 
     _msg("organizing raft group\n");
-    CHK_Z( make_group(pkgs) );
+    CHK_Z(make_group(pkgs));
 
-    CHK_TRUE( s1.raftServer->is_leader() );
+    CHK_TRUE(s1.raftServer->is_leader());
     CHK_EQ(1, s1.raftServer->get_leader());
     CHK_EQ(1, s2.raftServer->get_leader());
     CHK_EQ(1, s3.raftServer->get_leader());
@@ -1942,12 +1879,12 @@ int snapshot_context_timeout_removed_server_test() {
     TestSuite::sleep_sec(1, "stop S3");
 
     // Replication.
-    for (size_t ii=0; ii<100; ++ii) {
+    for (size_t ii = 0; ii < 100; ++ii) {
         std::string msg_str = std::to_string(ii);
         ptr<buffer> msg = buffer::alloc(sizeof(uint32_t) + msg_str.size());
         buffer_serializer bs(msg);
         bs.put_str(msg_str);
-        s1.raftServer->append_entries( {msg} );
+        s1.raftServer->append_entries({msg});
     }
     TestSuite::sleep_sec(1, "wait for replication");
 
@@ -1964,7 +1901,7 @@ int snapshot_context_timeout_removed_server_test() {
     TestSuite::sleep_sec(1, "removing S3");
 
     // S3 shouldn't exist in the group.
-    CHK_NULL( s1.raftServer->get_srv_config(3).get() );
+    CHK_NULL(s1.raftServer->get_srv_config(3).get());
 
     // User snapshot ctx should be empty.
     CHK_Z(s1.getTestSm()->getNumOpenedUserCtxs());
@@ -1978,7 +1915,7 @@ int snapshot_context_timeout_removed_server_test() {
     return 0;
 }
 
-}  // namespace asio_service_test;
+} // namespace asio_service_test
 using namespace asio_service_test;
 
 int main(int argc, char** argv) {
@@ -1986,81 +1923,58 @@ int main(int argc, char** argv) {
 
     ts.options.printTestMessage = true;
 
-    ts.doTest( "make group test",
-               make_group_test );
+    ts.doTest("make group test", make_group_test);
 
-    ts.doTest( "leader election test",
-               leader_election_test );
+    ts.doTest("leader election test", leader_election_test);
 
 #if defined(__linux__) || defined(__APPLE__)
-    ts.doTest( "ssl test",
-               ssl_test );
+    ts.doTest("ssl test", ssl_test);
 #endif
 
-    ts.doTest( "message meta test",
-               message_meta_test );
+    ts.doTest("message meta test", message_meta_test);
 
-    ts.doTest( "empty meta test",
-               empty_meta_test,
-               TestRange<bool>( {false, true} ) );
+    ts.doTest("empty meta test", empty_meta_test, TestRange<bool>({false, true}));
 
-    ts.doTest( "message meta random denial test",
-               message_meta_random_denial_test );
+    ts.doTest("message meta random denial test", message_meta_random_denial_test);
 
-    ts.doTest( "response hint test",
-               response_hint_test,
-               TestRange<bool>( {false, true} ) );
+    ts.doTest("response hint test", response_hint_test, TestRange<bool>({false, true}));
 
-    ts.doTest( "async append handler test",
-               async_append_handler_test );
+    ts.doTest("async append handler test", async_append_handler_test);
 
-    ts.doTest( "async append handler with order inversion test",
-               async_append_handler_with_order_inversion_test );
+    ts.doTest("async append handler with order inversion test", async_append_handler_with_order_inversion_test);
 
-    ts.doTest( "auto quorum size test",
-               auto_quorum_size_test );
+    ts.doTest("auto quorum size test", auto_quorum_size_test);
 
-    ts.doTest( "auto quorum size for election test",
-               auto_quorum_size_election_test );
+    ts.doTest("auto quorum size for election test", auto_quorum_size_election_test);
 
-    ts.doTest( "global manager basic test",
-               global_mgr_basic_test );
+    ts.doTest("global manager basic test", global_mgr_basic_test);
 
-    ts.doTest( "global manager heavy test",
-               global_mgr_heavy_test );
+    ts.doTest("global manager heavy test", global_mgr_heavy_test);
 
-    ts.doTest( "leadership transfer test",
-               leadership_transfer_test );
+    ts.doTest("leadership transfer test", leadership_transfer_test);
 
-    ts.doTest( "auto forwarding timeout test",
-               auto_forwarding_timeout_test );
+    ts.doTest("auto forwarding timeout test", auto_forwarding_timeout_test);
 
-    ts.doTest( "auto forwarding test",
-               auto_forwarding_test,
-               TestRange<bool>( {false, true} ) );
+    ts.doTest("auto forwarding test", auto_forwarding_test, TestRange<bool>({false, true}));
 
-    ts.doTest( "enforced state machine catch-up test",
-               enforced_state_machine_catchup_test );
+    ts.doTest("enforced state machine catch-up test", enforced_state_machine_catchup_test);
 
-    ts.doTest( "enforced state machine catch-up with term increment test",
-               enforced_state_machine_catchup_with_term_inc_test );
+    ts.doTest("enforced state machine catch-up with term increment test",
+              enforced_state_machine_catchup_with_term_inc_test);
 
-    ts.doTest( "snapshot read failure during join test",
-               snapshot_read_failure_during_join_test,
-               TestRange<size_t>( {10, 999999} ) );
+    ts.doTest("snapshot read failure during join test",
+              snapshot_read_failure_during_join_test,
+              TestRange<size_t>({10, 999999}));
 
-    ts.doTest( "snapshot read failure for lagging server test",
-               snapshot_read_failure_for_lagging_server_test,
-               TestRange<size_t>( {1, 5} ) );
+    ts.doTest("snapshot read failure for lagging server test",
+              snapshot_read_failure_for_lagging_server_test,
+              TestRange<size_t>({1, 5}));
 
-    ts.doTest( "snapshot context timeout normal test",
-               snapshot_context_timeout_normal_test );
+    ts.doTest("snapshot context timeout normal test", snapshot_context_timeout_normal_test);
 
-    ts.doTest( "snapshot context timeout join test",
-               snapshot_context_timeout_join_test );
+    ts.doTest("snapshot context timeout join test", snapshot_context_timeout_join_test);
 
-    ts.doTest( "snapshot context timeout removed server test",
-               snapshot_context_timeout_removed_server_test );
+    ts.doTest("snapshot context timeout removed server test", snapshot_context_timeout_removed_server_test);
 
 #ifdef ENABLE_RAFT_STATS
     _msg("raft stats: ENABLED\n");
@@ -2078,4 +1992,3 @@ int main(int argc, char** argv) {
 
     return 0;
 }
-

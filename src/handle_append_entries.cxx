@@ -21,10 +21,10 @@ limitations under the License.
 #include "raft_server.hxx"
 
 #include "cluster_config.hxx"
-#include "cryptopp_ecdsa.hxx"
 #include "error_code.hxx"
 #include "event_awaiter.h"
 #include "handle_custom_notification.hxx"
+#include "openssl_ecdsa.hxx"
 #include "peer.hxx"
 #include "snapshot.hxx"
 #include "state_machine.hxx"
@@ -248,11 +248,11 @@ bool raft_server::request_append_entries(ptr<peer> p) {
         //     p_wn("SEND REQ ENTRY %lld (%d): %s (%s)",
         //          k,
         //          entries[k]->get_val_type(),
-        //          stringify_key(*create_hash(entries[k], k + msg->get_last_log_idx() + 1)).c_str(),
+        //          tobase64(*create_hash(entries[k], k + msg->get_last_log_idx() + 1)).c_str(),
         //          entries[k]->get_val_type() == log_val_type::app_log
         //              ? msg->log_entries()[k]->get_prev_ptr() == nullptr
         //                    ? "null"
-        //                    : stringify_key(*entries[k]->get_prev_ptr()).c_str()
+        //                    : tobase64(*entries[k]->get_prev_ptr()).c_str()
         //              : "");
         // }
 
@@ -457,6 +457,21 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     std::vector<ptr<log_entry>>& v = req->log_entries();
     if (log_entries) {
         v.insert(v.end(), log_entries->begin(), log_entries->end());
+        // FMARK: TODO: correctness
+        if (flag_use_cc() && commit_cert_) {
+            // ptr<timer_t> timer = cs_new<timer_t>();
+            // timer->start_timer();
+            ptr<certificate> clone_cert_;
+            {
+                std::lock_guard<std::mutex> guard(cert_lock_);
+                clone_cert_ = commit_cert_->clone();
+            }
+            p_db("[CC] attached of term %zu, index %zu", clone_cert_->get_term(), clone_cert_->get_index());
+
+            req->set_certificate(clone_cert_);
+            // timer->add_record("cc.attach");
+            // t_->add_sess(timer);
+        }
     }
     p.set_last_sent_idx(last_log_idx + 1);
 
@@ -576,40 +591,102 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         return resp;
     }
 
-    // FMARK: check chain nature
-    if (req.log_entries().size() > 0) {
+    // FMARK: check chain nature and leader sig
+    size_t log_size = req.log_entries().size();
+    // ptr<timer_t> timer = cs_new<timer_t>();
+
+    if (log_size > 0) {
         ulong log_idx = req.get_last_log_idx();
         ulong prev_idx = log_idx;
         int64_t conflict;
-        if ((conflict = match_log_entry(req.log_entries(), prev_idx)) >= 0) {
-            p_wn("deny illegal hash pointer of requests appending %zu: match failure at %zu -> %zu",
-                 log_idx,
-                 prev_idx,
-                 conflict);
 
-            p_wn("Current NUM ENTRIES = %llu", log_store_->next_slot());
-            for (size_t k = 0; k < log_store_->next_slot(); k++) {
-                p_wn("Current ENTRY %lld (%d): %s",
-                     k,
-                     log_store_->entry_at(k)->get_val_type(),
-                     stringify_key(*create_hash(log_store_->entry_at(k), k)).c_str());
-            }
+        if (flag_use_ptr()) {
+            // timer->start_timer();
+            if ((conflict = match_log_entry(req.log_entries(), prev_idx)) >= 0) {
+                p_wn("deny illegal hash pointer of requests appending %zu: match failure at %zu -> %zu",
+                     log_idx,
+                     prev_idx,
+                     conflict);
 
-            p_wn("RECV NUM ENTRIES = %llu", req.log_entries().size());
-            for (size_t k = 0; k < req.log_entries().size(); k++) {
-                p_wn("RECV REQ ENTRY %lld (%d): %s (%s)",
-                     k,
-                     req.log_entries()[k]->get_val_type(),
-                     stringify_key(*create_hash(req.log_entries()[k], k + log_idx + 1)).c_str(),
-                     req.log_entries()[k]->get_val_type() == log_val_type::app_log
-                         ? req.log_entries()[k]->get_prev_ptr() == nullptr
-                               ? "null"
-                               : stringify_key(*req.log_entries()[k]->get_prev_ptr()).c_str()
-                         : "");
+                p_wn("Current NUM ENTRIES = %llu", log_store_->next_slot());
+                for (size_t k = 0; k < log_store_->next_slot(); k++) {
+                    p_wn("Current ENTRY %lld (%d): %s",
+                         k,
+                         log_store_->entry_at(k)->get_val_type(),
+                         tobase64(*create_hash(log_store_->entry_at(k), k)).c_str());
+                }
+
+                p_wn("RECV NUM ENTRIES = %llu", log_size);
+                for (size_t k = 0; k < log_size; k++) {
+                    p_wn("RECV REQ ENTRY %lld (%d): %s (%s)",
+                         k,
+                         req.log_entries()[k]->get_val_type(),
+                         tobase64(*create_hash(req.log_entries()[k], k + log_idx + 1)).c_str(),
+                         req.log_entries()[k]->get_val_type() == log_val_type::app_log
+                             ? req.log_entries()[k]->get_prev_ptr() == nullptr
+                                   ? "null"
+                                   : tobase64(*req.log_entries()[k]->get_prev_ptr()).c_str()
+                             : "");
+                }
+
+                resp->set_result_code(cmd_result_code::BAD_CHAIN);
+                return resp;
+            } else {
+                p_db("req log idx %zu -- %zu passed pointer checks", log_idx + 1, log_idx + log_size);
             }
-            return resp;
-        } else {
-            p_db("req log idx %zu -- %zu passed pointer checks", log_idx + 1, log_idx + req.log_entries().size());
+            // timer->add_record("ptr.check");
+        }
+
+        if (flag_use_leader_sig()) {
+            // timer->start_timer();
+            if ((conflict = check_leader_sig(req.log_entries(), req.get_src())) >= 0) {
+                p_wn("deny illegal signature of requests appending %zu: item %zu", log_idx + 1 + conflict);
+                resp->set_result_code(cmd_result_code::BAD_LEADER_SIG);
+                return resp;
+            } else {
+                p_db("req log idx %zu -- %zu passed leader sig checks", log_idx + 1, log_idx + log_size);
+            }
+            // timer->add_record("ls.check");
+        }
+
+        if (flag_use_cc()) {
+            auto cc = req.get_certificate();
+            if (cc) {
+                // timer->start_timer();
+                ptr<log_entry> entry;
+                ulong idx = cc->get_index();
+                ulong ri_min = req.get_last_log_idx() + 1;
+                ulong ri_max = req.get_last_log_idx() + log_size;
+
+                if (ri_min <= idx && idx <= ri_max) {
+                    entry = req.log_entries()[idx - ri_min];
+                } else if (log_store_->next_slot() > idx) {
+                    entry = log_store_->entry_at(idx);
+                }
+
+                if (entry != nullptr) {
+                    int32 pid = validate_commitment_certificate(cc, entry);
+                    if (pid < 0) {
+                        p_db("[CC] validated CC of term %zu and index %zu", cc->get_term(), cc->get_index());
+                    } else {
+                        p_wn("[CC] CC of term %zu and index %zu has bad signature from #%d",
+                             cc->get_term(),
+                             cc->get_index(),
+                             pid);
+                        resp->set_result_code(cmd_result_code::BAD_CC);
+                        return resp;
+                    }
+                } else {
+                    p_wn("cannot find original log entry %zu -- current chain length %zu, request range %zu ~ %zu",
+                         idx,
+                         log_store_->next_slot() - 1,
+                         ri_min,
+                         ri_max);
+                    resp->set_result_code(cmd_result_code::BAD_CC);
+                    return resp;
+                }
+                // timer->add_record("cc.check");
+            }
         }
     }
 
@@ -622,7 +699,10 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
     cb_func::Param param(id_, leader_, -1, &req);
     cb_func::ReturnCode cb_ret = ctx_->cb_func_.call(cb_func::GotAppendEntryReqFromLeader, &param);
     // If callback function decided to refuse this request, return here.
-    if (cb_ret != cb_func::Ok) return resp;
+    if (cb_ret != cb_func::Ok) {
+        // t_->add_sess(timer);
+        return resp;
+    }
 
     if (req.log_entries().size() > 0) {
         // Write logs to store, start from overlapped logs
@@ -719,7 +799,10 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
             log_idx += 1;
             cnt += 1;
 
-            if (stopping_) return resp;
+            if (stopping_) {
+                // t_->add_sess(timer);
+                return resp;
+            }
         }
         p_db("[after OVWR] log_idx: %ld, count: %ld\n", log_idx, cnt);
 
@@ -742,7 +825,10 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                 state_machine_->pre_commit_ext(state_machine::ext_op_params(idx_for_entry, buf));
             }
 
-            if (stopping_) return resp;
+            if (stopping_) {
+                // t_->add_sess(timer);
+                return resp;
+            }
         }
 
         // End of batch.
@@ -811,7 +897,7 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
              (int)req.get_type(),
              req.get_term(),
              req.get_last_log_idx(),
-             req.log_entries().size(),
+             log_size,
              req.get_commit_idx(),
              state_->get_term(),
              srv_role_to_string(role_).c_str());
@@ -829,8 +915,23 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
 
     out_of_log_range_ = false;
 
-    // FMARK: TODO: add signature
-
+    // FMARK: add signature
+    if (flag_use_cc()) {
+        // timer->start_timer();
+        ssize_t k = (ssize_t)(log_size - 1);
+        for (; k >= 0; k--) {
+            if (req.log_entries()[k]->get_val_type() == log_val_type::app_log) {
+                break;
+            }
+        }
+        if (k >= 0) {
+            ulong idx = k + req.get_last_log_idx() + 1;
+            auto sig = get_signature(*req.log_entries()[k]->serialize_sig());
+            resp->set_signature(sig, idx);
+        }
+        // timer->add_record("cc.replysig");
+    }
+    // t_->add_sess(timer);
     return resp;
 }
 
@@ -892,29 +993,6 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
     if (resp.get_accepted()) {
         uint64_t prev_matched_idx = 0;
         uint64_t new_matched_idx = 0;
-
-        // FMARK: check signature from peer
-        // {
-        //     std::unique_lock<std::mutex>(cert_lock_);
-        //     uint64_t idx_temp = resp.get_next_idx() - 1;
-        //     ptr<log_entry> entry = log_store_->entry_at(idx_temp);
-        //     if (p->verify_signature(entry->serialize_sig(), resp.get_signature())) {
-        //         if (idx_temp == working_cert->get_index() && resp.get_term() == working_cert->get_term()) {
-        //             working_cert->insert(p->get_id(), buffer::clone(*resp.get_signature()));
-        //         } else {
-        //             // FMARK: handle mismatch of terms
-        //             p_wn("peer %d replied for entry (T=%llu, J=%llu) != (T=%llu, J=%llu)",
-        //                  resp.get_term(),
-        //                  idx_temp,
-        //                  working_cert->get_term(),
-        //                  working_cert->get_index());
-        //         }
-        //     } else {
-        //         // FMARK: handle invalid signature
-        //         p_er("peer %d replied with bad signature", p->get_id());
-        //         throw std::runtime_error("signature error panicing");
-        //     }
-        // }
         {
             std::lock_guard<std::mutex>(p->get_lock());
             p->set_next_log_idx(resp.get_next_idx());
@@ -929,11 +1007,37 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
         CbReturnCode rc = ctx_->cb_func_.call(cb_func::GotAppendEntryRespFromPeer, &param);
         (void)rc;
 
+        // FMARK: verify signature
+        // TODO: there needs an accurate predicate to tell whether a signature is expected
+        if (flag_use_cc() && resp.get_signature() != nullptr) {
+            // auto timer = cs_new<timer_t>();
+            // timer->start_timer();
+
+            ptr<log_entry> entry = log_store_->entry_at(resp.get_sig_index());
+            if (!p->verify_signature(entry->serialize_sig(), resp.get_signature())) {
+                p_er("peer #%d's signature on entry %d is invalid: %s",
+                     p->get_id(),
+                     resp.get_sig_index(),
+                     resp.get_signature() == nullptr ? "null" : tobase64(*resp.get_signature()).c_str());
+                return;
+            }
+
+            push_new_cert_signature(resp.get_signature(), p->get_id(), entry->get_term(), resp.get_sig_index());
+
+            // timer->add_record("cc.push");
+            // t_->add_sess(timer);
+        }
+
         // Try to commit with this response.
+        // if (flag_use_cc()) {
+        //     cert_lock_.lock();
+        // }
         ulong committed_index = get_expected_committed_log_idx();
         commit(committed_index);
+        // if (flag_use_cc()) {
+        //     cert_lock_.unlock();
+        // }
         need_to_catchup = p->clear_pending_commit() || resp.get_next_idx() < log_store_->next_slot();
-
     } else {
         ulong prev_next_log = p->get_next_log_idx();
         std::lock_guard<std::mutex> guard(p->get_lock());
@@ -1039,6 +1143,12 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
 }
 
 ulong raft_server::get_expected_committed_log_idx() {
+    // FMARK: change the rules for CC usage
+    // TODO: trigger commit of unsignable entries
+    if (flag_use_cc() && commit_cert_) {
+        return commit_cert_->get_index();
+    }
+
     std::vector<ulong> matched_indexes;
     matched_indexes.reserve(16);
 

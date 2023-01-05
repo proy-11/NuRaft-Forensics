@@ -43,6 +43,7 @@ public:
         , cb_func_(nullptr)
         , async_cb_func_(nullptr)
         , result_code_(cmd_result_code::OK)
+        , sigid_(0)
         , signature_(nullptr) {}
 
     __nocopy__(resp_msg);
@@ -64,12 +65,18 @@ public:
     void set_ctx(ptr<buffer> src) { ctx_ = src; }
 
     // FMARK: set signature
-    void set_signature(ptr<buffer> src) { signature_ = src; }
+    void set_signature(ptr<buffer> src, ulong idx) {
+        signature_ = src;
+        sigid_ = idx;
+    }
 
     ptr<buffer> get_ctx() const { return ctx_; }
 
     // FMARK: get signature
     ptr<buffer> get_signature() const { return signature_; }
+
+    // FMARK: get index of signature
+    ulong get_sig_index() const { return sigid_; }
 
     void set_peer(ptr<peer> peer) { peer_ = peer; }
 
@@ -108,6 +115,7 @@ private:
     cmd_result_code result_code_;
 
     // FMARK: sig
+    ulong sigid_;
     ptr<buffer> signature_;
 };
 

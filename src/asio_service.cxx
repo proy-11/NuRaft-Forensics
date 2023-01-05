@@ -30,6 +30,7 @@ limitations under the License.
 #include "buffer_serializer.hxx"
 #include "callback.hxx"
 #include "crc32.hxx"
+#include "openssl_ecdsa.hxx"
 #include "global_mgr.hxx"
 #include "internal_timer.hxx"
 #include "raft_server.hxx"
@@ -55,7 +56,7 @@ using namespace boost;
 #define ERROR_CODE asio::error_code
 #endif
 
-//#define SSL_LIBRARY_NOT_FOUND (1)
+// #define SSL_LIBRARY_NOT_FOUND (1)
 #ifdef SSL_LIBRARY_NOT_FOUND
 #include "mock_ssl.hxx"
 using ssl_socket = mock_ssl_socket;
@@ -112,6 +113,9 @@ using ssl_context = asio::ssl::context;
 
 // FMARK: if set, RPC message includes signature
 #define INCLUDE_SIG (0x4)
+
+// FMARK: if set, RPC message includes certificate
+#define INCLUDE_CC (0x8)
 
 // =======================
 
@@ -420,6 +424,9 @@ private:
             ulong last_idx = hdr->get_ulong();
             ulong commit_idx = hdr->get_ulong();
 
+            // // FMARK: read CC
+            // int flag_cc = hdr->get_int();
+
             if (src_id_ == -1) {
                 // It means this is the first message on this session.
                 // Invoke callback function of new connection.
@@ -457,6 +464,17 @@ private:
                     if (meta_len) {
                         meta_str = std::string((const char*)meta_raw, meta_len);
                     }
+                }
+
+                // FMARK: decode CC
+                if (flags_ & INCLUDE_CC) {
+                    size_t cc_size;
+                    const byte* cc_bytes = log_ctx->get_bytes(cc_size);
+                    ptr<buffer> cc_serial = buffer::alloc(cc_size);
+                    cc_serial->put_raw((byte*)cc_bytes, cc_size);
+                    cc_serial->pos(0);
+                    ptr<certificate> cert = certificate::deserialize(*cc_serial);
+                    req->set_certificate(cert);
                 }
 
                 while (log_ctx->size() > log_ctx->pos()) {
@@ -574,7 +592,7 @@ private:
             ptr<buffer> sig = resp->get_signature();
             if (sig != nullptr) {
                 flags |= INCLUDE_SIG;
-                resp_sig_size += sizeof(int32) + sig->size();
+                resp_sig_size += sizeof(int32) + sig->size() + sizeof(ulong);
             }
 
             size_t carried_data_size = resp_sig_size + resp_meta_size + resp_hint_size + resp_ctx_size;
@@ -603,6 +621,7 @@ private:
             // FMARK: handling signature
             if (flags & INCLUDE_SIG) {
                 bs.put_bytes(sig->data(), sig->size());
+                bs.put_u64(resp->get_sig_index());
             }
 
             // Handling meta if the flag is set.
@@ -1040,7 +1059,16 @@ public:
             }
         }
 
-        ptr<buffer> req_buf = buffer::alloc(RPC_REQ_HEADER_SIZE + meta_size + log_data_size);
+        // FMARK: get serialized CC
+        ptr<buffer> cc_serial;
+        size_t cert_size = 0;
+        if (req->get_certificate() != nullptr) {
+            flags |= INCLUDE_CC;
+            cc_serial = req->get_certificate()->serialize();
+            cert_size = sizeof(int32) + cc_serial->size();
+        }
+
+        ptr<buffer> req_buf = buffer::alloc(RPC_REQ_HEADER_SIZE + meta_size + cert_size + log_data_size);
 
         req_buf->pos(0);
         byte* req_buf_data = req_buf->data();
@@ -1055,7 +1083,7 @@ public:
         req_buf->put(req->get_last_log_term());
         req_buf->put(req->get_last_log_idx());
         req_buf->put(req->get_commit_idx());
-        req_buf->put((int32)meta_size + log_data_size);
+        req_buf->put((int32)meta_size + (int32)cert_size + log_data_size);
 
         // Calculate CRC32 on header-only.
         uint32_t crc_val = crc32_8(req_buf_data, RPC_REQ_HEADER_SIZE - CRC_FLAGS_LEN, 0);
@@ -1066,6 +1094,10 @@ public:
         // Handling meta if the flag is set.
         if (flags & INCLUDE_META) {
             req_buf->put((byte*)meta_str.data(), meta_str.size());
+        }
+
+        if (flags & INCLUDE_CC) {
+            req_buf->put(cc_serial->data(), cc_serial->size());
         }
 
         for (auto& it: log_entry_bufs) {
@@ -1344,17 +1376,21 @@ private:
         // Otherwise: buffer contains composite data.
         buffer_serializer bs(ctx_buf);
         int remaining_len = ctx_buf->size();
+
         // FMARK: read signature
         if (flags & INCLUDE_SIG) {
             size_t resp_sig_len = 0;
             void* resp_sig_raw = bs.get_bytes(resp_sig_len);
+            ulong resp_sig_idx = bs.get_u64();
 
             if (resp_sig_len > 0) {
                 ptr<buffer> sig = buffer::alloc(resp_sig_len);
                 sig->put_raw((byte*)resp_sig_raw, resp_sig_len);
-                rsp->set_signature(sig);
+                sig->pos(0);
+                rsp->set_signature(sig, resp_sig_idx);
             }
-            remaining_len -= sizeof(int32) + resp_sig_len;
+
+            remaining_len -= sizeof(int32) + resp_sig_len + sizeof(ulong);
         }
 
         // 1) Custom meta.

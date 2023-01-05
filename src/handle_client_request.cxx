@@ -22,10 +22,10 @@ limitations under the License.
 
 #include "cluster_config.hxx"
 #include "context.hxx"
-#include "cryptopp_ecdsa.hxx"
 #include "debugging_options.hxx"
 #include "error_code.hxx"
 #include "global_mgr.hxx"
+#include "openssl_ecdsa.hxx"
 #include "state_machine.hxx"
 #include "state_mgr.hxx"
 #include "tracer.hxx"
@@ -101,12 +101,22 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
         entries.at(i)->set_term(cur_term);
 
         // FMARK: add pointer
-        entries.at(i)->set_prev(create_hash(log_store_));
+        // auto timer = cs_new<timer_t>();
 
-        // p_db("Created hash %s", stringify_key(*create_hash(log_store_)).c_str());
+        if (flag_use_ptr()) {
+            // timer->start_timer();
+            entries.at(i)->set_prev(create_hash(log_store_));
+            // timer->add_record("ptr.init");
+        }
 
         // FMARK: add sig
-        entries.at(i)->set_signature(this->get_signature(*entries.at(i)->serialize_sig()));
+        if (flag_use_leader_sig()) {
+            // timer->start_timer();
+            entries.at(i)->set_signature(this->get_signature(*entries.at(i)->serialize_sig()));
+            // timer->add_record("ls.init.clireq");
+        }
+
+        // t_->add_sess(timer);
 
         ulong next_slot = store_log_entry(entries.at(i));
         p_db("append at log_idx %zu\n", next_slot);
@@ -121,16 +131,16 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
         log_store_->end_of_append_batch(last_idx - num_entries, num_entries);
         // FMARK:
 
-        // p_db("Current NUM ENTRIES = %llu", log_store_->next_slot());
+        // p_wn("Current NUM ENTRIES = %llu", log_store_->next_slot());
         // for (size_t k = 0; k < log_store_->next_slot(); k++) {
-        //     p_tr("Current ENTRY %lld (%d): %s (%s)",
+        //     p_wn("Current ENTRY %lld (%d): %s (%s)",
         //          k,
         //          log_store_->entry_at(k)->get_val_type(),
-        //          stringify_key(*create_hash(log_store_->entry_at(k), k)).c_str(),
+        //          tobase64(*create_hash(log_store_->entry_at(k), k)).c_str(),
         //          log_store_->entry_at(k)->get_val_type() == log_val_type::app_log
         //              ? log_store_->entry_at(k)->get_prev_ptr() == nullptr
         //                    ? "null"
-        //                    : stringify_key(*log_store_->entry_at(k)->get_prev_ptr()).c_str()
+        //                    : tobase64(*log_store_->entry_at(k)->get_prev_ptr()).c_str()
         //              : "");
         // }
     }

@@ -66,15 +66,19 @@ else ()
 endif ()
 
 
-FIND_PATH(LIBCRYPTOPP_INCLUDE_DIR
-        NAME cryptopp
-        HINTS $ENV{HOME}/local/include
-            /opt/local/include
-            /usr/local/include
-            /usr/include)
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
-message(STATUS "Found cryptopp: ${LIBCRYPTOPP_INCLUDE_DIR}/cryptopp")
+# FIND_PATH(
+#         LIBCRYPTOPP_INCLUDE_DIR
+#         NAME cryptopp
+#         HINTS $ENV{HOME}/local/include
+#             /opt/local/include
+#             /usr/local/include/cryptopp
+#             /usr/include
+#         PATH_SUFFIXES cryptopp
+#         )
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
+# message(STATUS "Found cryptopp: ${LIBCRYPTOPP_INCLUDE_DIR}/cryptopp")
+# set(LIBCRYPTOPP_INCLUDE_DIRS ${LIBCRYPTOPP_INCLUDE_DIR} )
+# set(LIBCRYPTOPP_LIBRARIES ${LIBCRYPTOPP_LIBRARY} )
 
 
 FIND_PATH(BOOST_INCLUDE_DIR
@@ -90,7 +94,7 @@ message(STATUS "Found boost: ${BOOST_INCLUDE_DIR}/boost")
 # === Includes ===
 include_directories(BEFORE ./)
 include_directories(BEFORE ${ASIO_INCLUDE_DIR})
-include_directories(BEFORE ${LIBCRYPTOPP_INCLUDE_DIR})
+# include_directories(BEFORE ${LIBCRYPTOPP_INCLUDE_DIR})
 include_directories(BEFORE ${BOOST_INCLUDE_DIR})
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/include)
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/include/libnuraft)
@@ -171,36 +175,38 @@ if (NOT (DISABLE_SSL GREATER 0))
 endif ()
 
 
+# set(LIBCRYPTOPP_PATH_HINT
+#     ~/Library/Frameworks
+#     /Library/Frameworks
+#     $ENV{HOME}/local/lib64
+#     $ENV{HOME}/local/lib
+#     /usr/lib
+#     /usr/lib/x86_64-linux-gnu
+#     /usr/lib64
+#     /usr/local/lib
+#     /usr/local/lib64
+#     /opt/local/lib
+#     /opt/local/lib64
+#     /opt/csw
+#     /usr/local/include/cryptopp
+#     /opt)
+# find_path(CRYPTOPP_LIBRARY_PATH
+#       NAMES libcryptopp.a
+#       PATHS ${PROJECT_SOURCE_DIR}
+#             ${DEPS_PREFIX}/lib
+#             ${DEPS_PREFIX}/lib64
+#             ${LIBCRYPTOPP_PATH_HINT}
+#     PATH_SUFFIXES cryptopp)
 
-set(LIBCRYPTOPP_PATH_HINT
-    ~/Library/Frameworks
-    /Library/Frameworks
-    $ENV{HOME}/local/lib64
-    $ENV{HOME}/local/lib
-    /usr/lib
-    /usr/lib/x86_64-linux-gnu
-    /usr/lib64
-    /usr/local/lib
-    /usr/local/lib64
-    /opt/local/lib
-    /opt/local/lib64
-    /opt/csw
-    /opt)
-find_path(CRYPTOPP_LIBRARY_PATH
-      NAMES libcryptopp.a
-      PATHS ${PROJECT_SOURCE_DIR}
-            ${DEPS_PREFIX}/lib
-            ${DEPS_PREFIX}/lib64
-            ${LIBCRYPTOPP_PATH_HINT})
+# if (NOT CRYPTOPP_LIBRARY_PATH)
+#     message(STATUS "Cryptopp not found!")
+#     set(LIBCRYPTOPP crypto)
+# else ()
+#     message(STATUS "Found cryptopp: ${CRYPTOPP_LIBRARY_PATH}/libcryptopp.a")
+#     set(LIBCRYPTOPP ${CRYPTOPP_LIBRARY_PATH}/libcryptopp.a)
+#     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lcryptopp")
+# endif ()
 
-if (NOT CRYPTOPP_LIBRARY_PATH)
-    message(STATUS "Cryptopp not found!")
-    set(LIBCRYPTOPP crypto)
-else ()
-    message(STATUS "Found cryptopp: ${CRYPTOPP_LIBRARY_PATH}/libcryptopp.a")
-    set(LIBCRYPTOPP ${CRYPTOPP_LIBRARY_PATH}/libcryptopp.a)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lcryptopp")
-endif ()
 
 # === Compiler options ===
 if (ADDRESS_SANITIZER GREATER 0)
@@ -286,7 +292,7 @@ set(RAFT_CORE
     ${ROOT_SRC}/buffer_serializer.cxx
     ${ROOT_SRC}/cluster_config.cxx
     ${ROOT_SRC}/crc32.cxx
-    ${ROOT_SRC}/cryptopp_ecdsa.cxx
+    ${ROOT_SRC}/openssl_ecdsa.cxx
     ${ROOT_SRC}/error_code.cxx
     ${ROOT_SRC}/global_mgr.cxx
     ${ROOT_SRC}/handle_append_entries.cxx

@@ -276,19 +276,20 @@ char* commander::status_table() {
     const char* fmt_header = "%6s %8s %8s %8s %14s %8s\n";
 
     size_t pos = 0;
-    pos += std::sprintf(result, fmt_header, "id", "term", "T", "J", "J(committed)", "n_req");
+    pos += std::snprintf(result, 10000, fmt_header, "id", "term", "T", "J", "J(committed)", "n_req");
     for (auto& pair: replica_status_dict.items()) {
         int id = std::stoi(pair.key());
         json obj = pair.value();
 
-        pos += std::sprintf(result + pos,
-                            fmt,
-                            id,
-                            int(obj["term"]),
-                            int(obj["log_term"]),
-                            int(obj["log_height"]),
-                            int(obj["log_height_committed"]),
-                            int(obj["num_committed"]));
+        pos += std::snprintf(result + pos,
+                             64,
+                             fmt,
+                             id,
+                             int(obj["term"]),
+                             int(obj["log_term"]),
+                             int(obj["log_height"]),
+                             int(obj["log_height_committed"]),
+                             int(obj["num_committed"]));
     }
 
     boost::filesystem::path report = setting["working_dir"];

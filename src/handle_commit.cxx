@@ -564,11 +564,15 @@ void raft_server::reconfigure(const ptr<cluster_config>& new_config) {
             srv_added, *ctx_, exec, l_);
         p->set_next_log_idx(log_store_->next_slot());
 
-        sprintf(temp_buf,
-                "add peer %d, %s, %s\n",
-                (int)srv_added->get_id(),
-                srv_added->get_endpoint().c_str(),
-                srv_added->is_learner() ? "learner" : "voting member");
+        // FMARK: print pubkey
+        p_in("adding server %d with pubkey %s", p->get_id(), p->get_public_key_str().c_str());
+
+        snprintf(temp_buf,
+                 1024,
+                 "add peer %d, %s, %s\n",
+                 (int)srv_added->get_id(),
+                 srv_added->get_endpoint().c_str(),
+                 srv_added->is_learner() ? "learner" : "voting member");
         str_buf += temp_buf;
 
         peers_.insert(std::make_pair(srv_added->get_id(), p));
@@ -661,7 +665,7 @@ void raft_server::reconfigure(const ptr<cluster_config>& new_config) {
                          pp->get_id());
                 }
                 remove_peer_from_peers(pp);
-                sprintf(temp_buf, "remove peer %d\n", srv_removed);
+                snprintf(temp_buf, 1024, "remove peer %d\n", srv_removed);
                 str_buf += temp_buf;
             }
         } else {
@@ -704,13 +708,14 @@ void raft_server::reconfigure(const ptr<cluster_config>& new_config) {
             }
         }
 
-        sprintf(temp_buf,
-                "peer %d, DC ID %d, %s, %s, %d\n",
-                (int)s_conf->get_id(),
-                (int)s_conf->get_dc_id(),
-                s_conf->get_endpoint().c_str(),
-                s_conf->is_learner() ? "learner" : "voting member",
-                s_conf->get_priority());
+        snprintf(temp_buf,
+                 1024,
+                 "peer %d, DC ID %d, %s, %s, %d\n",
+                 (int)s_conf->get_id(),
+                 (int)s_conf->get_dc_id(),
+                 s_conf->get_endpoint().c_str(),
+                 s_conf->is_learner() ? "learner" : "voting member",
+                 s_conf->get_priority());
         str_buf += temp_buf;
     }
     p_in("new configuration: log idx %ld, prev log idx %ld\n"
