@@ -136,7 +136,7 @@ class FakeClient : public rpc_client {
     friend class FakeNetwork;
 public:
     FakeClient(FakeNetwork* mother,
-               FakeNetwork* dst);
+               FakeNetwork* dst = nullptr);
 
     ~FakeClient();
 

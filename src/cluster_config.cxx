@@ -28,6 +28,9 @@ ptr<buffer> cluster_config::serialize() const {
     std::vector<ptr<buffer>> srv_buffs;
     for (cluster_config::const_srv_itor it = servers_.begin(); it != servers_.end(); ++it) {
         ptr<buffer> buf = (*it)->serialize();
+        if(!buf) {
+            return nullptr;
+        }
         srv_buffs.push_back(buf);
         sz += buf->size();
     }

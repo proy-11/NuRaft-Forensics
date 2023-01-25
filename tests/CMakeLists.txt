@@ -6,6 +6,43 @@ set(Boost_USE_STATIC_RUNTIME OFF)
 
 find_package(Boost 1.74.0 COMPONENTS program_options thread filesystem)
 
+if (NOT (DISABLE_SSL GREATER 0))
+message(STATUS "---- ENABLED SSL ----")
+    set(LIB_PATH_HINT
+        ~/Library/Frameworks
+        /Library/Frameworks
+        $ENV{HOME}/local/lib64
+        $ENV{HOME}/local/lib
+        /usr/lib
+        /usr/lib/x86_64-linux-gnu
+        /usr/lib64
+        /usr/local/lib
+        /usr/local/lib64
+        /opt/local/lib
+        /opt/local/lib64
+        /opt/csw
+        /opt)
+    find_path(OPENSSL_LIBRARY_PATH
+              NAMES libssl.a
+              PATHS ${PROJECT_SOURCE_DIR}
+                    ${DEPS_PREFIX}/lib
+                    ${DEPS_PREFIX}/lib64
+                    /opt/homebrew/opt/openssl@3/lib
+                    ${LIB_PATH_HINT})
+
+    if (NOT OPENSSL_LIBRARY_PATH)
+        message(STATUS "Use system's side OpenSSL library")
+        set(LIBSSL ssl)
+        set(LIBCRYPTO crypto)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -L/usr/lib -lssl -lcrypto")
+        message(STATUS "CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
+    else ()
+        message(STATUS "Open SSL library path: ${OPENSSL_LIBRARY_PATH}/libssl.a")
+        set(LIBSSL ${OPENSSL_LIBRARY_PATH}/libssl.a)
+        set(LIBCRYPTO ${OPENSSL_LIBRARY_PATH}/libcrypto.a)
+    endif ()
+endif ()
+
 # FIND_PATH(
 #         LIBCRYPTOPP_INCLUDE_DIR
 #         NAME cryptopp

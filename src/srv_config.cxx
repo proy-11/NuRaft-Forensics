@@ -52,12 +52,18 @@ ptr<srv_config> srv_config::deserialize(buffer_serializer& bs) {
 ptr<buffer> srv_config::serialize() const {
     // FMARK: save public key
     size_t total_size = sz_int + sz_int + (endpoint_.length() + 1) + (aux_.length() + 1) + 1 + sz_int + sz_ulong;
-    ptr<buffer> keybuf;
+    ptr<buffer> keybuf = nullptr;
     if (public_key_ != nullptr) {
         keybuf = public_key_->tobuf();
+        if(!keybuf) {
+            return nullptr;
+        }
         total_size += keybuf->size();
     }
     ptr<buffer> buf = buffer::alloc(total_size);
+    if(!buf) {
+        return nullptr;
+    }
     buf->put(id_);
     buf->put(dc_id_);
     buf->put(endpoint_);

@@ -141,6 +141,7 @@ endif ()
 
 # === OpenSSL libraries ===
 if (NOT (DISABLE_SSL GREATER 0))
+message(STATUS "----SSL ENABLED----")
     set(LIB_PATH_HINT
         ~/Library/Frameworks
         /Library/Frameworks
@@ -167,6 +168,7 @@ if (NOT (DISABLE_SSL GREATER 0))
         message(STATUS "Use system's side OpenSSL library")
         set(LIBSSL ssl)
         set(LIBCRYPTO crypto)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -L/usr/lib -lssl -lcrypto")
     else ()
         message(STATUS "Open SSL library path: ${OPENSSL_LIBRARY_PATH}/libssl.a")
         set(LIBSSL ${OPENSSL_LIBRARY_PATH}/libssl.a)

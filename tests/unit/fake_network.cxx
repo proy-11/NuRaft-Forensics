@@ -153,6 +153,9 @@ bool FakeNetwork::delieverReqTo(const std::string& endpoint,
     // conn->dstNet (endpoint): destination (sending response)
     ptr<FakeClient> conn = findClient(endpoint);
 
+    if(!conn) {
+        return false;
+    }
     // If destination is offline, make failure.
     if (!conn->isDstOnline()) return makeReqFail(endpoint, random_order);
 
@@ -186,6 +189,10 @@ bool FakeNetwork::makeReqFail(const std::string& endpoint,
     // this:                    source (sending request)
     // conn->dstNet (endpoint): destination (sending response)
     ptr<FakeClient> conn = findClient(endpoint);
+
+    if(!conn) {
+        return false;
+    }
 
     auto pkg_entry = conn->pendingReqs.begin();
     if (pkg_entry == conn->pendingReqs.end()) return false;
