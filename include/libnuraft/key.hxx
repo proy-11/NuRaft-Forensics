@@ -44,11 +44,11 @@ public:
     virtual ptr<buffer> sign_md(const buffer& msg) = 0;
 };
 
-template <class TClass, class TIntf> class key_factory {
-public:
-    static ptr<TIntf> from_buffer(const buffer& keybuf) { return TClass::frombuf(keybuf); };
-    static ptr<TIntf> from_file(const std::string& filename) { return TClass::fromfile(filename); };
-    static ptr<TIntf> generate_random() { return TClass::generate(); };
-};
+// template <class TClass, class TIntf> class key_factory {
+// public:
+//     static ptr<TIntf> from_buffer(const buffer& keybuf) { return TClass::frombuf(keybuf); };
+//     static ptr<TIntf> from_file(const std::string& filename) { return TClass::fromfile(filename); };
+//     static ptr<TIntf> generate_random() { return TClass::generate(); };
+// };
 } // namespace nuraft
 #endif

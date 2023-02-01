@@ -22,6 +22,8 @@ using std::chrono::high_resolution_clock;
 using std::chrono::microseconds;
 
 namespace nuraft {
+EVP_PKEY_CTX* new_evp_pkey_ctx();
+
 class pubkey_t : public pubkey_intf {
 public:
     pubkey_t(EVP_PKEY* key_);
@@ -38,7 +40,7 @@ private:
     EVP_PKEY* key;
 };
 
-class seckey_t : public key_factory<seckey_t, seckey_intf>, public seckey_intf {
+class seckey_t : public seckey_intf {
 public:
     seckey_t();
     seckey_t(const buffer& keybuf);

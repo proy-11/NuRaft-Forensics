@@ -266,17 +266,12 @@ void raft_server::start_server(bool skip_initial_election_timeout) {
              params->rpc_failure_backoff_,
              params->election_timeout_lower_bound_,
              params->election_timeout_upper_bound_);
-        p_in("-1");
 
         std::this_thread::sleep_for(std::chrono::milliseconds(params->rpc_failure_backoff_));
-        p_in("0");
         restart_election_timer();
     }
-    p_in("1");
     priority_change_timer_.reset();
-    p_in("2");
     vote_init_timer_.set_duration_ms(params->grace_period_of_lagging_state_machine_);
-    p_in("3");
     vote_init_timer_.reset();
     p_db("server %d started", id_);
 }

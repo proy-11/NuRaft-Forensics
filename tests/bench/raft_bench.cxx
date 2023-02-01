@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "nuraft.hxx"
 
+#include "async_worker.hxx"
 #include "latency_collector.h"
 #include "test_common.h"
 #include <boost/filesystem.hpp>
@@ -100,6 +101,7 @@ struct bench_config {
                  const std::string& _my_endpoint = "tcp://localhost:25000",
                  size_t _duration = 30,
                  int _complexity = 3,
+                 int _parallel = 1,
                  size_t _iops = 5,
                  size_t _num_threads = 1,
                  size_t _payload_size = 128,
@@ -108,6 +110,7 @@ struct bench_config {
         , my_endpoint_(_my_endpoint)
         , duration_(_duration)
         , complexity_(_complexity)
+        , parallel_(_parallel)
         , iops_(_iops)
         , num_threads_(_num_threads)
         , payload_size_(_payload_size)
@@ -117,6 +120,7 @@ struct bench_config {
     std::string my_endpoint_;
     size_t duration_;
     int complexity_;
+    int parallel_;
     size_t iops_;
     size_t num_threads_;
     size_t payload_size_;
@@ -267,11 +271,32 @@ struct worker_params : public TestSuite::ThreadArgs {
     std::mutex wg_lock_;
 };
 
+int submit_request(worker_params* args, ptr<buffer> msg) {
+    TestSuite::Timer timer;
+    msg->pos(0);
+    ptr<raft_result> ret = args->stuff_.raft_instance_->append_entries({msg});
+    global_lat.addLatency("rep", timer.getTimeUs());
+
+    CHK_TRUE(ret->get_accepted());
+    CHK_NONNULL(ret->get());
+
+    {
+        std::lock_guard<std::mutex> l(args->wg_lock_);
+        args->wg_.addNumOpsDone(1);
+    }
+    args->num_ops_done_.fetch_add(1);
+    return 0;
+}
+
+// typedef int (*job_t)(worker_params*, ptr<buffer>);
+
 int worker_func(TestSuite::ThreadArgs* _args) {
     worker_params* args = static_cast<worker_params*>(_args);
 
     ptr<buffer> msg = buffer::alloc(args->config_.payload_size_);
     msg->put((byte)0x0);
+
+    async_worker worker(args->config_.parallel_);
 
     while (!args->stop_signal_) {
         size_t num_ops = 0;
@@ -284,22 +309,10 @@ int worker_func(TestSuite::ThreadArgs* _args) {
             continue;
         }
 
-        TestSuite::Timer timer;
-
-        msg->pos(0);
-        ptr<raft_result> ret = args->stuff_.raft_instance_->append_entries({msg});
-        global_lat.addLatency("rep", timer.getTimeUs());
-
-        CHK_TRUE(ret->get_accepted());
-        CHK_NONNULL(ret->get());
-
-        {
-            std::lock_guard<std::mutex> l(args->wg_lock_);
-            args->wg_.addNumOpsDone(1);
-        }
-        args->num_ops_done_.fetch_add(1);
+        // std::thread thr(submit_request, args, msg);
+        // thr.join();
+        worker.add_job(submit_request, args, msg);
     }
-
     return 0;
 }
 
@@ -438,6 +451,8 @@ int bench_main(const bench_config& config) {
                     TestSuite::usToString(global_lat.getPercentile("rep", 99.99)).c_str());
     _msg("-----\n");
 
+    stuff.raft_instance_->shutdown();
+
     write_iops(final_ops, final_us);
     write_latency_distribution();
 
@@ -506,7 +521,7 @@ bench_config parse_config(int argc, char** argv) {
 
     ensure_dir(workdir);
 
-    if (argc < 9) usage(argc, argv);
+    if (argc < 10) usage(argc, argv);
 
     iarg++;
     size_t iops = atoi(argv[iarg]);
@@ -523,13 +538,20 @@ bench_config parse_config(int argc, char** argv) {
     }
 
     iarg++;
+    int parallel = atoi(argv[iarg]);
+    if (parallel < 1 || parallel > 10000) {
+        std::cout << "valid parallel range: 1 - 10000." << std::endl;
+        exit(0);
+    }
+
+    iarg++;
     size_t payload_size = atoi(argv[iarg]);
     if (payload_size < 1 || payload_size > 16 * 1024 * 1024) {
         std::cout << "valid payload size range: 1 byte - 16 MB." << std::endl;
         exit(0);
     }
 
-    bench_config ret(srv_id, my_endpoint, duration, complexity, iops, num_threads, payload_size, workdir);
+    bench_config ret(srv_id, my_endpoint, duration, complexity, parallel, iops, num_threads, payload_size, workdir);
 
     iarg++;
     for (int ii = iarg; ii < argc; ++ii) {

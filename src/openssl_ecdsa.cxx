@@ -12,7 +12,7 @@ const EVP_MD* (*HASH_FN)(void) = &EVP_sha256;
 const int CURVE_NID = NID_X9_62_prime256v1;
 
 namespace nuraft {
-static EVP_PKEY_CTX* new_evp_pkey_ctx() {
+EVP_PKEY_CTX* new_evp_pkey_ctx() {
     EVP_PKEY_CTX* kctx = NULL;
 
     if (!(kctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL)) || EVP_PKEY_keygen_init(kctx) <= 0
@@ -36,7 +36,7 @@ pubkey_t::pubkey_t(EVP_PKEY* key_) {
 pubkey_t::pubkey_t(const buffer& keybuf) {
     EVP_PKEY* temp = NULL;
     auto ctx = new_evp_pkey_ctx();
-    if (EVP_PKEY_keygen(ctx, &temp) <= 0) {
+    if (ctx == NULL || EVP_PKEY_keygen(ctx, &temp) <= 0) {
         throw crypto_exception("pubkey init from ctx");
     }
     const unsigned char* keydata = keybuf.data();
@@ -44,8 +44,22 @@ pubkey_t::pubkey_t(const buffer& keybuf) {
     if (key == NULL) {
         throw crypto_exception("pubkey from buffer");
     }
-    EVP_PKEY_CTX_free(ctx);
+    if (ctx != NULL) EVP_PKEY_CTX_free(ctx);
 }
+
+// pubkey_t::pubkey_t(const buffer& keybuf) {
+//     EVP_PKEY* temp = NULL;
+//     auto ctx = new_evp_pkey_ctx();
+//     if (ctx == NULL || EVP_PKEY_keygen(ctx, &temp) <= 0) {
+//         throw crypto_exception("pubkey init from ctx");
+//     }
+//     const unsigned char* keydata = keybuf.data();
+//     key = d2i_PublicKey(EVP_PKEY_EC, &temp, &keydata, keybuf.size());
+//     if (key == NULL) {
+//         throw crypto_exception("pubkey from buffer");
+//     }
+//     if (ctx != NULL) EVP_PKEY_CTX_free(ctx);
+// }
 
 pubkey_t::~pubkey_t() {
     if (key) EVP_PKEY_free(key);
@@ -98,7 +112,8 @@ ptr<pubkey_t> pubkey_t::frombuf(const buffer& keybuf) { return std::make_shared<
 
 seckey_t::seckey_t() {
     auto ctx = new_evp_pkey_ctx();
-    if (EVP_PKEY_keygen(ctx, &key) <= 0) {
+    key = NULL;
+    if (ctx == NULL || EVP_PKEY_keygen(ctx, &key) <= 0) {
         throw crypto_exception("seckey random generation");
     }
     EVP_PKEY_CTX_free(ctx);
