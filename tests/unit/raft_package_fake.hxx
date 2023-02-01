@@ -19,8 +19,11 @@ limitations under the License.
 
 #include "event_awaiter.h"
 
+#include <boost/filesystem.hpp>
+
 using namespace nuraft;
 using namespace raft_functional_common;
+using raft_result = cmd_result<ptr<buffer>>;
 
 static size_t ATTR_UNUSED COMMIT_TIME_MS = 50;
 static size_t ATTR_UNUSED COMMIT_TIMEOUT_SEC = 3;
@@ -81,6 +84,22 @@ public:
         } else {
             params = *given_params;
         }
+        params.heart_beat_interval_ = 500;
+        params.election_timeout_lower_bound_ = 1000;
+        params.election_timeout_upper_bound_ = 2000;
+        params.reserved_log_items_ = 10000000;
+        params.snapshot_distance_ = 100000;
+        params.client_req_timeout_ = 4000;
+        params.return_method_ = raft_params::blocking;
+
+        params.use_commitment_cert_  = false;
+        params.use_leader_sig_ = false;
+        params.use_chain_ptr_ = false;
+        params.snapshot_distance_ = 100000;
+        
+        std::string file = std::to_string(myId) + ".ppk";
+        params.private_key_path = file;
+
         // For deterministic test, we should not use BG thread.
         params.use_bg_thread_for_urgent_commit_ = false;
 
