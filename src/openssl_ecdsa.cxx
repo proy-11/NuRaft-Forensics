@@ -141,9 +141,6 @@ seckey_t::seckey_t(const buffer& keybuf) {
 }
 
 seckey_t::seckey_t(const std::string& filename) {
-    if(filename.empty()) {
-        return;
-    }
     BIO* bio = BIO_new_file(filename.c_str(), "r");
     if (bio == NULL || PEM_read_bio_PrivateKey(bio, &key, NULL, NULL) == NULL) {
         throw crypto_exception("seckey from file");
