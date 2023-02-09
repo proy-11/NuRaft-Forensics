@@ -30,10 +30,15 @@ pubkey_t::pubkey_t(EVP_PKEY* key_) {
     BIO* bio = BIO_new(BIO_s_mem());
     PEM_write_bio_PrivateKey(bio, key_, NULL, NULL, 0, NULL, NULL);
     key = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
-    BIO_free(bio);
+    if(bio) {
+        BIO_free(bio);
+    }
 }
 
 pubkey_t::pubkey_t(const buffer& keybuf) {
+     if(!keybuf.data()) {
+        return;
+    }
     EVP_PKEY* temp = NULL;
     auto ctx = new_evp_pkey_ctx();
     if (ctx == NULL || EVP_PKEY_keygen(ctx, &temp) <= 0) {
@@ -66,7 +71,13 @@ pubkey_t::~pubkey_t() {
 }
 
 ptr<buffer> pubkey_t::tobuf() {
+    if(!key) {
+        return nullptr;
+    }
     int size = i2d_PublicKey(key, NULL);
+    if(!size) {
+        return nullptr;
+    }
     ptr<buffer> buf = buffer::alloc(size);
     unsigned char* data = buf->data();
     buf->pos(0);
@@ -116,7 +127,9 @@ seckey_t::seckey_t() {
     if (ctx == NULL || EVP_PKEY_keygen(ctx, &key) <= 0) {
         throw crypto_exception("seckey random generation");
     }
-    EVP_PKEY_CTX_free(ctx);
+    if(ctx) {
+        EVP_PKEY_CTX_free(ctx);
+    }
 }
 
 seckey_t::seckey_t(const buffer& keybuf) {
@@ -132,7 +145,9 @@ seckey_t::seckey_t(const std::string& filename) {
     if (bio == NULL || PEM_read_bio_PrivateKey(bio, &key, NULL, NULL) == NULL) {
         throw crypto_exception("seckey from file");
     }
-    BIO_free(bio);
+    if(bio) {
+        BIO_free(bio);
+    }
 }
 
 seckey_t::~seckey_t() {
@@ -178,6 +193,9 @@ void seckey_t::tofile(const std::string& filename) {
 }
 
 ptr<pubkey_intf> seckey_t::derive() {
+    if(!key) {
+        return nullptr;
+    }
     ptr<pubkey_t> pubkey = std::make_shared<pubkey_t>(key);
     return pubkey;
 }

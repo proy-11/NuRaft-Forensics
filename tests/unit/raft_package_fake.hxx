@@ -63,7 +63,7 @@ public:
         sm = cs_new<TestSm>( fBase->getLogger() );
 
         std::string log_file_name = "./srv" + std::to_string(myId) + ".log";
-        myLogWrapper = cs_new<logger_wrapper>(log_file_name);
+        myLogWrapper = cs_new<logger_wrapper>(log_file_name, 1);
         myLog = myLogWrapper;
 
         listener = fNet;
@@ -81,6 +81,11 @@ public:
         } else {
             params = *given_params;
         }
+        params.use_commitment_cert_ = false;
+        params.use_leader_sig_ = false;
+        params.use_chain_ptr_ = false;
+        params.private_key_path = "";
+
         // For deterministic test, we should not use BG thread.
         params.use_bg_thread_for_urgent_commit_ = false;
 

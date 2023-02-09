@@ -83,7 +83,7 @@ public:
                     bool use_global_asio = false,
                     const raft_server::init_options& opt = raft_server::init_options()) {
         std::string log_file_name = "./srv" + std::to_string(myId) + ".log";
-        myLogWrapper = cs_new<logger_wrapper>(log_file_name);
+        myLogWrapper = cs_new<logger_wrapper>(log_file_name, 1);
         myLog = myLogWrapper;
 
         sMgr = cs_new<TestMgr>(myId, myEndpoint);
@@ -125,6 +125,11 @@ public:
         params.with_reserved_log_items(10);
         params.with_snapshot_enabled(5);
         params.with_client_req_timeout(10000);
+        params.use_commitment_cert_ = false;
+        params.use_leader_sig_ = false;
+        params.use_chain_ptr_ = false;
+        params.private_key_path = "";
+
         context* ctx( new context( sMgr, sm, listener, myLog,
                                    rpc_cli_factory, scheduler, params ) );
         raftServer = cs_new<raft_server>(ctx, opt);
@@ -173,6 +178,11 @@ public:
             params.with_snapshot_enabled(5);
             params.with_client_req_timeout(10000);
         }
+        params.use_commitment_cert_ = false;
+        params.use_leader_sig_ = false;
+        params.use_chain_ptr_ = false;
+        params.private_key_path = "";
+
         context* ctx( new context( sMgr, sm, listener, myLog,
                                    rpc_cli_factory, scheduler, params ) );
         raftServer = cs_new<raft_server>(ctx, opt);
