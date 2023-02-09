@@ -167,6 +167,7 @@ if (NOT (DISABLE_SSL GREATER 0))
                   PATHS ${PROJECT_SOURCE_DIR}
                         ${DEPS_PREFIX}/lib
                         ${DEPS_PREFIX}/lib64
+                        /usr/local/opt/openssl/lib
                         /opt/homebrew/opt/openssl@3/lib
                         ${LIB_PATH_HINT})
         if (NOT OPENSSL_LIBRARY_PATH)
@@ -180,38 +181,6 @@ if (NOT (DISABLE_SSL GREATER 0))
         endif ()
     endif ()
 endif()
-
-# set(LIBCRYPTOPP_PATH_HINT
-#     ~/Library/Frameworks
-#     /Library/Frameworks
-#     $ENV{HOME}/local/lib64
-#     $ENV{HOME}/local/lib
-#     /usr/lib
-#     /usr/lib/x86_64-linux-gnu
-#     /usr/lib64
-#     /usr/local/lib
-#     /usr/local/lib64
-#     /opt/local/lib
-#     /opt/local/lib64
-#     /opt/csw
-#     /usr/local/include/cryptopp
-#     /opt)
-# find_path(CRYPTOPP_LIBRARY_PATH
-#       NAMES libcryptopp.a
-#       PATHS ${PROJECT_SOURCE_DIR}
-#             ${DEPS_PREFIX}/lib
-#             ${DEPS_PREFIX}/lib64
-#             ${LIBCRYPTOPP_PATH_HINT}
-#     PATH_SUFFIXES cryptopp)
-
-# if (NOT CRYPTOPP_LIBRARY_PATH)
-#     message(STATUS "Cryptopp not found!")
-#     set(LIBCRYPTOPP crypto)
-# else ()
-#     message(STATUS "Found cryptopp: ${CRYPTOPP_LIBRARY_PATH}/libcryptopp.a")
-#     set(LIBCRYPTOPP ${CRYPTOPP_LIBRARY_PATH}/libcryptopp.a)
-#     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lcryptopp")
-# endif ()
 
 
 # === Compiler options ===
