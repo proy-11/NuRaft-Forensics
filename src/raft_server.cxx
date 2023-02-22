@@ -33,6 +33,7 @@ limitations under the License.
 #include "state_machine.hxx"
 #include "state_mgr.hxx"
 #include "tracer.hxx"
+#include "fault_types.hxx"
 
 #include <cassert>
 #include <random>
@@ -225,6 +226,8 @@ raft_server::raft_server(context* ctx, const init_options& opt)
     if (opt.start_server_in_constructor_) {
         start_server(opt.skip_initial_election_timeout_);
     }
+
+    is_under_attack_ = false;
 }
 
 void raft_server::start_server(bool skip_initial_election_timeout) {
@@ -668,6 +671,11 @@ ptr<resp_msg> raft_server::process_req(req_msg& req) {
              resp->get_accepted() ? 1 : 0,
              resp->get_term(),
              resp->get_next_idx());
+    }
+
+    if(get_is_under_attack() && is_leader_alive()) {
+        p_in("Initiating vote monopoly attack");
+        initiate_vote();
     }
 
     return resp;
@@ -1726,4 +1734,8 @@ bool raft_server::flag_use_ptr() { return get_current_params().use_chain_ptr_; }
 bool raft_server::flag_use_leader_sig() { return get_current_params().use_leader_sig_; }
 
 bool raft_server::flag_use_cc() { return get_current_params().use_commitment_cert_; }
+
+void raft_server::initiate_attack() { is_under_attack_.store(true); }
+
+bool raft_server::get_is_under_attack() { return is_under_attack_.load(); }
 } // namespace nuraft

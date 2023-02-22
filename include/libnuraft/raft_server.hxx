@@ -628,6 +628,10 @@ public:
 
     bool flag_use_cc();
 
+    void initiate_attack();
+
+    bool get_is_under_attack();
+
 protected:
     typedef std::unordered_map<int32, ptr<peer>>::const_iterator peer_itor;
 
@@ -1308,6 +1312,8 @@ protected:
      * The term when `vote_init_timer_` was reset.
      */
     std::atomic<ulong> vote_init_timer_term_;
+
+    std::atomic<bool> is_under_attack_;
 };
 
 } // namespace nuraft

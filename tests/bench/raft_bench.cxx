@@ -106,6 +106,8 @@ struct bench_config {
                  const std::string& _my_endpoint = "tcp://localhost:25000",
                  size_t _duration = 30,
                  int _complexity = 3,
+                 std::string fault = "none",
+                 size_t cluster_size = 2,
                  int _parallel = 1,
                  size_t _iops = 5,
                  size_t _num_threads = 1,
@@ -115,6 +117,8 @@ struct bench_config {
         , my_endpoint_(_my_endpoint)
         , duration_(_duration)
         , complexity_(_complexity)
+        , fault_(fault)
+        , cluster_size_(cluster_size)
         , parallel_(_parallel)
         , iops_(_iops)
         , num_threads_(_num_threads)
@@ -125,6 +129,8 @@ struct bench_config {
     std::string my_endpoint_;
     size_t duration_;
     int complexity_;
+    std::string fault_;
+    size_t cluster_size_;
     int parallel_;
     size_t iops_;
     size_t num_threads_;
@@ -163,12 +169,14 @@ struct server_stuff {
 
     // Raft server instance.
     ptr<raft_server> raft_instance_;
+    
+    ptr<fault_controller> fault_controller_;
 };
 
-int init_raft(server_stuff& stuff, int complexity) {
+int init_raft(server_stuff& stuff, int complexity, std::string fault) {
     // Create logger for this server.
     std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
-    stuff.log_wrap_ = cs_new<logger_wrapper>(log_file_name, 1);
+    stuff.log_wrap_ = cs_new<logger_wrapper>(log_file_name, 6);
     stuff.raft_logger_ = stuff.log_wrap_;
 
     // Create state manager and state machine.
@@ -220,6 +228,8 @@ int init_raft(server_stuff& stuff, int complexity) {
 
     // Listen.
     stuff.asio_listener_->listen(stuff.raft_instance_);
+
+    stuff.fault_controller_ = cs_new<fault_controller>(fault, stuff.raft_instance_);
 
     // Wait until Raft server is ready (upto 10 seconds).
     const size_t MAX_TRY = 40;
@@ -395,6 +405,15 @@ void write_latency_distribution() {
     fs.close();
 }
 
+void create_faults(server_stuff& stuff) {
+    bool is_server_faulty = stuff.fault_controller_->get_server_fault_status();
+    if(is_server_faulty) {
+        _msg("Server %d is faulty\n", stuff.server_id_);
+        stuff.fault_controller_->set_is_server_under_attack(true);
+        stuff.fault_controller_->inject_fault();
+    }
+}
+
 int bench_main(const bench_config& config) {
     server_stuff stuff;
     stuff.server_id_ = config.srv_id_;
@@ -413,10 +432,13 @@ int bench_main(const bench_config& config) {
 
     print_config(config);
 
-    CHK_Z(init_raft(stuff, config.complexity_));
+    CHK_Z(init_raft(stuff, config.complexity_, config.fault_));
     _msg("-----\n");
 
+    stuff.fault_controller_->set_cluster_size(config.cluster_size_);
+    
     if (stuff.server_id_ > 1) {
+        create_faults(stuff);
         // Follower, just sleep
         TestSuite::sleep_sec(config.duration_, "ready");
     }
@@ -424,6 +446,10 @@ int bench_main(const bench_config& config) {
     // Leader.
     CHK_Z(add_servers(stuff, config));
     _msg("-----\n");
+
+    if(stuff.server_id_ == 1) {
+        create_faults(stuff);
+    }
 
     worker_params param(config, stuff);
     std::vector<TestSuite::ThreadHolder> h_workers(config.num_threads_);
@@ -533,9 +559,19 @@ bench_config parse_config(int argc, char** argv) {
         exit(0);
     }
 
+    iarg++;
+    std::string fault = argv[iarg];
+
+    iarg++;
+    size_t cluster_size = atoi(argv[iarg]);
+    if (cluster_size < 1) {
+        std::cout << "cluster size should be greater than zero." << std::endl;
+        exit(0);
+    }
+
     if (srv_id > 1) {
         // Follower.
-        return bench_config(srv_id, my_endpoint, duration, complexity);
+        return bench_config(srv_id, my_endpoint, duration, complexity, fault, cluster_size);
     }
 
     iarg++;
@@ -578,6 +614,8 @@ bench_config parse_config(int argc, char** argv) {
                      my_endpoint,
                      duration,
                      complexity,
+                     fault,
+                     cluster_size,
                      parallel,
                      iops,
                      num_threads,

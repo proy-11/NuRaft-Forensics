@@ -50,3 +50,4 @@ limitations under the License.
 
 #include "launcher.hxx"
 
+#include "fault_controller.hxx"

@@ -485,16 +485,18 @@ void raft_server::handle_prevote_resp(resp_msg& resp) {
         }
     }
 
-    if (pre_vote_.live_ >= election_quorum_size) {
-        pre_vote_.quorum_reject_count_.fetch_add(1);
-        p_wn("[PRE-VOTE] rejected by quorum, count %zu",
-             pre_vote_.quorum_reject_count_.load());
-        if ( pre_vote_.quorum_reject_count_ >=
-                 raft_server::raft_limits_.pre_vote_rejection_limit_ ) {
-            p_ft("too many pre-vote rejections, probably this node is not "
-                 "receiving heartbeat from leader. "
-                 "we should re-establish the network connection");
-            send_reconnect_request();
+    if(!get_is_under_attack()) {
+        if (pre_vote_.live_ >= election_quorum_size) {
+            pre_vote_.quorum_reject_count_.fetch_add(1);
+            p_wn("[PRE-VOTE] rejected by quorum, count %zu",
+                pre_vote_.quorum_reject_count_.load());
+            if ( pre_vote_.quorum_reject_count_ >=
+                    raft_server::raft_limits_.pre_vote_rejection_limit_ ) {
+                p_ft("too many pre-vote rejections, probably this node is not "
+                    "receiving heartbeat from leader. "
+                    "we should re-establish the network connection");
+                send_reconnect_request();
+            }
         }
     }
 
