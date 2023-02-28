@@ -1,7 +1,0 @@
-{
-    "size": 3000,
-    "freq": 5.0,
-    "batch_size": 10,
-    "type": "UNIF",
-    "req_bytes": 4096
-}
