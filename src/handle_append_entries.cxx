@@ -82,6 +82,14 @@ void raft_server::request_append_entries() {
 }
 
 bool raft_server::request_append_entries(ptr<peer> p) {
+    if(get_is_under_attack() && fault_type_ == fault_type::send_delayed_logs_to_followers) {
+        p_in("Attack (send_delayed_logs_to_followers)\n");
+        timer_helper tt;
+        srand(time(nullptr)); 
+        int rand_num = rand() % 10 + 1;
+        tt.sleep_us(rand_num);
+    }
+
     p_tr("append entries requested for peer id: %d, next log idx: %llu", p->get_id(), p->get_next_log_idx());
     static timer_helper chk_timer(1000 * 1000);
 
@@ -240,6 +248,11 @@ bool raft_server::request_append_entries(ptr<peer> p) {
             // It means that this is not an actual recovery,
             // but just temporarily freed busy flag.
             p->reset_manual_free();
+        }
+
+        if(get_is_under_attack() && fault_type_ == fault_type::send_corrupt_logs_to_followers) {
+            p_in("Attack (send_corrupt_logs_to_followers)\n");
+            msg->log_entries().clear();
         }
 
         auto entries = msg->log_entries();
@@ -452,8 +465,31 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
         p_db("idx range: %zu-%zu", last_log_idx + 1, adjusted_end_idx - 1);
     }
 
-    ptr<req_msg> req(cs_new<req_msg>(
-        term, msg_type::append_entries_request, id_, p.get_id(), last_log_term, last_log_idx, commit_idx));
+    ptr<req_msg> req = nullptr;
+    if(get_is_under_attack() && fault_type_ == fault_type::send_invalid_request_to_followers) {
+        p_in("Attack (send_invalid_request_to_followers)\n");
+        srand(time(nullptr)); 
+        int rand_num = rand() % 29 + 1;
+        req = cs_new<req_msg>(term, msg_type(rand_num), id_, p.get_id(), last_log_term, last_log_idx, commit_idx);
+        p_in("Attack sending invalid req: %s\n", msg_type_to_string(req->get_type()).c_str());
+    } else if(get_is_under_attack() && fault_type_ == fault_type::send_diff_requests_to_diff_followers) {
+        p_in("Attack (send_diff_requests_to_diff_followers)\n");
+        if(p.get_id()%2 == 0) {
+            srand(time(nullptr)); 
+            int rand_num = rand() % 29 + 1;
+            req = cs_new<req_msg>(term, msg_type(rand_num), id_, p.get_id(), last_log_term, last_log_idx, commit_idx);
+            p_in("Attack sending diff req to diff followers, follower %d: %s\n", p.get_id(), msg_type_to_string(req->get_type()).c_str());
+        } else {
+            srand(time(nullptr)); 
+            int rand_num = rand() % 29 + 1;
+            req = cs_new<req_msg>(term, msg_type(rand_num), id_, p.get_id(), last_log_term, last_log_idx, commit_idx);
+            p_in("Attack sending diff req to diff followers, follower %d: %s\n", p.get_id(), msg_type_to_string(req->get_type()).c_str());
+        }
+
+    } else {
+        req = cs_new<req_msg>(term, msg_type::append_entries_request, id_, p.get_id(), last_log_term, last_log_idx, commit_idx);
+    }
+
     std::vector<ptr<log_entry>>& v = req->log_entries();
     if (log_entries) {
         v.insert(v.end(), log_entries->begin(), log_entries->end());

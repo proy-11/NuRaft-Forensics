@@ -69,6 +69,7 @@ void fault_controller::perform_kill_self() {
 
 void fault_controller::initiate_vote_monopoly_attack() {
     std::cout << "-----\n" << "Initiating vote monopoly attack...\n";
+    raft_server_->set_fault_type(fault_type::vote_monopoly);
     raft_server_->initiate_attack();
     while(true) {
         int leader = raft_server_->get_leader();
@@ -78,6 +79,66 @@ void fault_controller::initiate_vote_monopoly_attack() {
             break;
         }
     }
+}
+
+void fault_controller::initiate_false_commitments() {
+    std::cout << "-----\n" << "Initiating false commitments...\n";
+    raft_server_->set_fault_type(fault_type::signal_false_commitments);
+    raft_server_->initiate_attack();
+}
+
+void fault_controller::initiate_ret_invalid_resp_to_client() {
+    std::cout << "-----\n" << "Initiating return invalid response to client...\n";
+    raft_server_->set_fault_type(fault_type::ret_invalid_resp_to_client);
+    raft_server_->initiate_attack();
+}
+
+void fault_controller::initiate_drop_random_incoming_messages() {
+    std::cout << "-----\n" << "Initiating drop random incoming messages...\n";
+    raft_server_->set_fault_type(fault_type::drop_random_incoming_messages);
+    raft_server_->initiate_attack();
+}
+
+void fault_controller::initiate_corrupt_random_incoming_messages() {
+    std::cout << "-----\n" << "Initiating corrupt random incoming messages...\n";
+    raft_server_->set_fault_type(fault_type::corrupt_random_incoming_messages);
+    raft_server_->initiate_attack();
+}
+
+void fault_controller::initiate_delay_processing_of_incoming_messages() {
+    std::cout << "-----\n" << "Initiating delay processing of incoming messages...\n";
+    raft_server_->set_fault_type(fault_type::delay_processing_of_incoming_messages);
+    raft_server_->initiate_attack();
+}
+
+void fault_controller::initiate_send_delayed_logs_to_followers() {
+    std::cout << "-----\n" << "Initiating send delayed logs to followers...\n";
+    raft_server_->set_fault_type(fault_type::send_delayed_logs_to_followers);
+    raft_server_->initiate_attack();
+}
+
+void fault_controller::initiate_send_corrupt_logs_to_followers() {
+    std::cout << "-----\n" << "Initiating send corrupt logs to followers...\n";
+    raft_server_->set_fault_type(fault_type::send_corrupt_logs_to_followers);
+    raft_server_->initiate_attack();
+}
+
+void fault_controller::initiate_send_invalid_request_to_followers() {
+    std::cout << "-----\n" << "Initiating send invalid requests to followers...\n";
+    raft_server_->set_fault_type(fault_type::send_invalid_request_to_followers);
+    raft_server_->initiate_attack();
+}
+
+void fault_controller::initiate_send_diff_requests_to_diff_followers() {
+    std::cout << "-----\n" << "Initiating send diff requests to diff followers...\n";
+    raft_server_->set_fault_type(fault_type::send_diff_requests_to_diff_followers);
+    raft_server_->initiate_attack();
+}
+
+void fault_controller::initiate_follower_returns_invalid_response() {
+    std::cout << "-----\n" << "Initiating follower sends invalid response...\n";
+    raft_server_->set_fault_type(fault_type::follower_returns_invalid_response);
+    raft_server_->initiate_attack();
 }
 
 bool fault_controller::check_if_all_servers_are_added() {
@@ -115,6 +176,36 @@ void fault_controller::inject_fault() {
             break;
         case fault_type::vote_monopoly:
             initiate_vote_monopoly_attack();
+            break;
+        case fault_type::signal_false_commitments:
+            initiate_false_commitments();
+            break;
+        case fault_type::ret_invalid_resp_to_client:
+            initiate_ret_invalid_resp_to_client();
+            break;
+        case fault_type::drop_random_incoming_messages:
+            initiate_drop_random_incoming_messages();
+            break;
+        case fault_type::corrupt_random_incoming_messages:
+            initiate_corrupt_random_incoming_messages();
+            break;
+        case fault_type::delay_processing_of_incoming_messages:
+            initiate_delay_processing_of_incoming_messages();
+            break;
+        case fault_type::send_delayed_logs_to_followers:
+            initiate_send_delayed_logs_to_followers();
+            break;
+        case fault_type::send_corrupt_logs_to_followers:
+            initiate_send_corrupt_logs_to_followers();
+            break;
+        case fault_type::send_invalid_request_to_followers:
+            initiate_send_invalid_request_to_followers();
+            break;
+        case fault_type::send_diff_requests_to_diff_followers:
+            initiate_send_diff_requests_to_diff_followers();
+            break;
+        case fault_type::follower_returns_invalid_response:
+            initiate_follower_returns_invalid_response();
             break;
         default:
             break;

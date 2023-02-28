@@ -673,11 +673,22 @@ ptr<resp_msg> raft_server::process_req(req_msg& req) {
              resp->get_next_idx());
     }
 
-    if(get_is_under_attack() && is_leader_alive()) {
+    if(get_is_under_attack() && is_leader_alive() && fault_type_ == fault_type::vote_monopoly) {
         p_in("Initiating vote monopoly attack");
         initiate_vote();
     }
 
+    if (id_ != leader_ && !is_leader()) {
+        // Follower
+        if(get_is_under_attack() && get_fault_type() == fault_type::follower_returns_invalid_response) {
+            p_in("Attack (follower_returns_invalid_response)\n");
+            srand(time(nullptr)); 
+            int rand_num = rand() % 29 + 1;
+            ptr<resp_msg> resp = cs_new<resp_msg>(state_->get_term(), msg_type(rand_num), id_, req.get_src());
+            p_in("Attack sending invalid response: %s\n", msg_type_to_string(resp->get_type()).c_str());
+            return resp;
+        } 
+    }
     return resp;
 }
 
@@ -1738,4 +1749,8 @@ bool raft_server::flag_use_cc() { return get_current_params().use_commitment_cer
 void raft_server::initiate_attack() { is_under_attack_.store(true); }
 
 bool raft_server::get_is_under_attack() { return is_under_attack_.load(); }
+
+void raft_server::set_fault_type(const fault_type &f) { fault_type_ = f; }
+
+fault_type raft_server::get_fault_type() { return fault_type_; }
 } // namespace nuraft

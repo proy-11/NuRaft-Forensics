@@ -33,6 +33,7 @@ limitations under the License.
 #include "srv_role.hxx"
 #include "srv_state.hxx"
 #include "timer_task.hxx"
+#include "fault_types.hxx"
 
 #include <list>
 #include <map>
@@ -629,6 +630,10 @@ public:
     bool flag_use_cc();
 
     void initiate_attack();
+
+    void set_fault_type(const fault_type& f);
+
+    fault_type get_fault_type();
 
     bool get_is_under_attack();
 
@@ -1314,6 +1319,8 @@ protected:
     std::atomic<ulong> vote_init_timer_term_;
 
     std::atomic<bool> is_under_attack_;
+
+    fault_type fault_type_;
 };
 
 } // namespace nuraft

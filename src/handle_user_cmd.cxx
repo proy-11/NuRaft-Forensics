@@ -86,13 +86,53 @@ ptr<cmd_result<ptr<buffer>>> raft_server::append_entries(const std::vector<ptr<b
         return cs_new<cmd_result<ptr<buffer>>>(result);
     }
 
+    if(get_is_under_attack() && fault_type_ == fault_type::drop_random_incoming_messages) {
+        ptr<buffer> result = nullptr;
+        srand(time(nullptr)); 
+        int rand_num = rand() % 10 + 1;
+        if (rand_num <= 5) {
+            p_in("Attack (drop_random_incoming_messages)\n");
+            return cs_new<cmd_result<ptr<buffer>>>(result);
+        }
+    }
+
     ptr<req_msg> req = cs_new<req_msg>((ulong)0, msg_type::client_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
     for (auto it = logs.begin(); it != logs.end(); ++it) {
-        ptr<buffer> buf = *it;
-        // Just in case when user forgot to reset the position.
-        buf->pos(0);
+        ptr<buffer> buf = nullptr;
+        if(get_is_under_attack() && fault_type_ == fault_type::corrupt_random_incoming_messages) {
+            srand(time(nullptr)); 
+            int rand_num = rand() % 10 + 1;
+            if (rand_num <= 5) {
+            p_in("Attack (corrupt_random_incoming_messages)\n");
+                std::string msg = "corrupted";
+                buf = buffer::alloc(msg.size() + 1);
+                buf->put(msg);
+            } else {
+                buf = *it;
+                buf->pos(0);
+            }
+        } else {
+            buf = *it;
+            // Just in case when user forgot to reset the position.
+            buf->pos(0);
+        }
         ptr<log_entry> log(cs_new<log_entry>(0, *it, log_val_type::app_log));
         req->log_entries().push_back(log);
+    }
+
+    if(get_is_under_attack() && fault_type_ == fault_type::ret_invalid_resp_to_client) {
+        send_msg_to_leader(req);
+        p_in("Attack (ret_invalid_resp_to_client)\n");
+        ptr<buffer> result = nullptr;
+        ptr<cmd_result<ptr<buffer>>> ret = cs_new<cmd_result<ptr<buffer>>>(result);
+        srand(time(nullptr)); 
+        int rand_num = rand() % 10 + 1;
+        if (rand_num <= 3) { 
+            ret->set_result_code(cmd_result_code::BAD_REQUEST);
+        } else {
+            ret->set_result_code(cmd_result_code::TIMEOUT);
+        }
+        return ret;
     }
 
     return send_msg_to_leader(req);
@@ -109,6 +149,14 @@ ptr<cmd_result<ptr<buffer>>> raft_server::send_msg_to_leader(ptr<req_msg>& req) 
     }
 
     if (leader_id == id_) {
+        if(get_is_under_attack() && fault_type_ == fault_type::delay_processing_of_incoming_messages) {
+            p_in("Attack (delay_processing_of_incoming_messages)\n");
+            timer_helper tt;
+            srand(time(nullptr)); 
+            int rand_num = rand() % 10 + 1;
+            tt.sleep_us(rand_num);
+        }
+
         ptr<resp_msg> resp = process_req(*req);
         if (!resp) {
             p_in("server returns null");

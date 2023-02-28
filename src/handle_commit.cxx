@@ -164,6 +164,12 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
 
     p_tr("commit upto %ld, curruent idx %ld\n", quick_commit_index_.load(), sm_commit_index_.load());
 
+    if(get_is_under_attack() && fault_type_ == fault_type::signal_false_commitments) {
+        p_in("Attack (False Commitments) DONE: commit upto %ld, current idx %ld\n",
+                quick_commit_index_.load(), sm_commit_index_.load());
+        return true;
+    }
+
     ulong log_start_idx = log_store_->start_index();
     if (log_start_idx && sm_commit_index_ < log_start_idx - 1) {
         p_wn("current commit idx %llu is smaller than log start idx %llu - 1, "
