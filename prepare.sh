@@ -13,10 +13,3 @@ if [ ! -d asio ]; then
     git checkout ${ASIO_RELEASE}
     cd ..
 fi
-
-if [ ! -d json ]; then
-    git clone https://github.com/nlohmann/json.git ./json
-    cd json
-    git checkout ${JSON_RELEASE}
-    cd ..
-fi
