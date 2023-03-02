@@ -377,8 +377,8 @@ void raft_server::apply_and_log_current_params() {
     public_key = private_key->derive();
     config_->get_server(get_id())->set_public_key(public_key);
 
-    p_in("Server private key: %s", private_key->str().c_str());
-    p_in("Server public key: %s", public_key->str().c_str());
+    // p_in("Server private key: %s", private_key->str().c_str());
+    // p_in("Server public key: %s", public_key->str().c_str());
 }
 
 raft_params raft_server::get_current_params() const { return *ctx_->get_params(); }
