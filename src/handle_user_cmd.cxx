@@ -88,11 +88,14 @@ ptr<cmd_result<ptr<buffer>>> raft_server::append_entries(const std::vector<ptr<b
 
     if(get_is_under_attack() && fault_type_ == fault_type::drop_random_incoming_messages) {
         ptr<buffer> result = nullptr;
-        srand(time(nullptr)); 
+        ptr<cmd_result<ptr<buffer>>> ret = nullptr;
+        srand(time(nullptr));
         int rand_num = rand() % 10 + 1;
         if (rand_num <= 5) {
             p_in("Attack (drop_random_incoming_messages)\n");
-            return cs_new<cmd_result<ptr<buffer>>>(result);
+            ret = cs_new<cmd_result<ptr<buffer>>>(result);
+            ret->set_result_code(cmd_result_code::FAILED);
+            return ret;
         }
     }
 
@@ -100,7 +103,7 @@ ptr<cmd_result<ptr<buffer>>> raft_server::append_entries(const std::vector<ptr<b
     for (auto it = logs.begin(); it != logs.end(); ++it) {
         ptr<buffer> buf = nullptr;
         if(get_is_under_attack() && fault_type_ == fault_type::corrupt_random_incoming_messages) {
-            srand(time(nullptr)); 
+            srand(time(nullptr));
             int rand_num = rand() % 10 + 1;
             if (rand_num <= 5) {
             p_in("Attack (corrupt_random_incoming_messages)\n");
@@ -111,26 +114,60 @@ ptr<cmd_result<ptr<buffer>>> raft_server::append_entries(const std::vector<ptr<b
                 buf = *it;
                 buf->pos(0);
             }
+            ptr<log_entry> log(cs_new<log_entry>(0, buf, log_val_type::app_log));
+            req->log_entries().push_back(log);
         } else {
             buf = *it;
             // Just in case when user forgot to reset the position.
             buf->pos(0);
+            ptr<log_entry> log(cs_new<log_entry>(0, *it, log_val_type::app_log));
+            req->log_entries().push_back(log);
         }
-        ptr<log_entry> log(cs_new<log_entry>(0, *it, log_val_type::app_log));
-        req->log_entries().push_back(log);
     }
 
     if(get_is_under_attack() && fault_type_ == fault_type::ret_invalid_resp_to_client) {
-        send_msg_to_leader(req);
         p_in("Attack (ret_invalid_resp_to_client)\n");
         ptr<buffer> result = nullptr;
-        ptr<cmd_result<ptr<buffer>>> ret = cs_new<cmd_result<ptr<buffer>>>(result);
-        srand(time(nullptr)); 
-        int rand_num = rand() % 10 + 1;
-        if (rand_num <= 3) { 
+        ptr<resp_msg> resp = process_req(*req);
+        if (!resp) {
+            p_in("server returns null");
+            ptr<cmd_result<ptr<buffer>>> ret = cs_new<cmd_result<ptr<buffer>>>(result);
             ret->set_result_code(cmd_result_code::BAD_REQUEST);
-        } else {
-            ret->set_result_code(cmd_result_code::TIMEOUT);
+            return ret;
+        }
+
+        ptr<cmd_result<ptr<buffer>>> ret = nullptr;
+        if (resp->has_cb()) {
+            // Blocking mode:
+            //   If callback function exists, get new response message
+            //   from the callback function.
+            resp = resp->call_cb(resp);
+        }
+
+        if (resp->get_accepted()) {
+            result = resp->get_ctx();
+
+            if (resp->has_async_cb()) {
+                // Async handler mode (only when accepted):
+                //   Get handler (async_result) from the callback.
+                ret = resp->call_async_cb();
+            }
+        }
+        if (result) {
+            result->pos(0);
+        }
+
+        if (!ret) {
+            // In blocking mode,
+            // we already have result when we reach here.
+            ret = cs_new<cmd_result<ptr<buffer>>>(result, resp->get_accepted());
+            srand(time(nullptr));
+            int rand_num = rand() % 10 + 1;
+            if (rand_num <= 3) {
+                ret->set_result_code(cmd_result_code::TIMEOUT);
+            } else {
+                ret->set_result_code(cmd_result_code::BAD_REQUEST);
+            }
         }
         return ret;
     }
@@ -152,9 +189,9 @@ ptr<cmd_result<ptr<buffer>>> raft_server::send_msg_to_leader(ptr<req_msg>& req) 
         if(get_is_under_attack() && fault_type_ == fault_type::delay_processing_of_incoming_messages) {
             p_in("Attack (delay_processing_of_incoming_messages)\n");
             timer_helper tt;
-            srand(time(nullptr)); 
-            int rand_num = rand() % 10 + 1;
-            tt.sleep_us(rand_num);
+            srand(time(nullptr));
+            int rand_num = rand() % 100 + 1;
+            tt.sleep_ms(rand_num);
         }
 
         ptr<resp_msg> resp = process_req(*req);

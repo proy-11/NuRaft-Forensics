@@ -23,11 +23,13 @@ limitations under the License.
 #include "latency_collector.h"
 #include "test_common.h"
 #include <boost/filesystem.hpp>
+#include "json.hpp"
 
 using namespace nuraft;
 using namespace raft_functional_common;
 
 namespace fsys = boost::filesystem;
+using json = nlohmann::json;
 
 namespace raft_bench {
 
@@ -37,6 +39,7 @@ size_t global_sid;
 
 using raft_result = cmd_result<ptr<buffer>>;
 
+std::map<ulong, std::string> commit_data;
 class dummy_sm : public state_machine {
 public:
     dummy_sm()
@@ -44,6 +47,8 @@ public:
     ~dummy_sm() {}
 
     ptr<buffer> commit(const ulong log_idx, buffer& data) {
+        buffer_serializer bs(data);
+        commit_data.insert({log_idx, bs.get_cstr()});
         ptr<buffer> ret = buffer::alloc(sizeof(ulong));
         ret->put(log_idx);
         ret->pos(0);
@@ -173,6 +178,22 @@ struct server_stuff {
     ptr<fault_controller> fault_controller_;
 };
 
+struct response {
+    response()
+        : req_id_(-1)
+        , return_code_(cmd_result_code::FAILED)
+        , result_string_("")
+        , is_accepted_(false)
+        , response_time_("") {}
+
+    int req_id_;
+    cmd_result_code return_code_;
+    std::string result_string_;
+    bool is_accepted_;
+    std::string response_time_;
+};
+std::vector<response> response_list;
+
 int init_raft(server_stuff& stuff, int complexity, std::string fault) {
     // Create logger for this server.
     std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
@@ -299,8 +320,17 @@ int submit_request(worker_params* args, ptr<buffer> msg) {
     ptr<raft_result> ret = args->stuff_.raft_instance_->append_entries({msg});
     global_lat.addLatency("rep", timer.getTimeUs());
 
-    CHK_TRUE(ret->get_accepted());
-    CHK_NONNULL(ret->get());
+    response res;
+    res.response_time_ = TestSuite::getTimeString();
+    res.req_id_ = args->num_ops_done_.load();
+    res.is_accepted_ = ret->get_accepted();
+    res.return_code_ = ret->get_result_code();
+    res.result_string_ = ret->get_result_str();
+    response_list.emplace_back(res);
+
+    // CHK_TRUE(ret->get_accepted());
+    // CHK_NONNULL(ret->get());
+
 
     {
         std::lock_guard<std::mutex> l(args->wg_lock_);
@@ -414,6 +444,44 @@ void create_faults(server_stuff& stuff) {
     }
 }
 
+void write_response_result(server_stuff& stuff) {
+    json result_data;
+
+    int i = 0;
+    for(auto& it:response_list) {
+        result_data["responses"][i] = {
+                                        {"req_id", it.req_id_},
+                                        {"ret_code", int(it.return_code_)},
+                                        {"result_string", it.result_string_},
+                                        {"is_accepted", it.is_accepted_},
+                                        {"response_time", it.response_time_}
+                                    };
+        ++i;
+    }
+
+    int j = 0;
+    for(auto& it:commit_data) {
+        result_data["commit_data"][j] = {
+                                            {"commit_idx", it.first},
+                                            {"commit_data", it.second}
+                                        };
+        ++j;
+    }
+
+    result_data["log_height"] = stuff.raft_instance_->get_last_log_idx();
+    result_data["log_height_committed"] = stuff.raft_instance_->get_committed_log_idx();
+    result_data["log_term"] = stuff.raft_instance_->get_last_log_term();
+    result_data["term"] = stuff.raft_instance_->get_term();
+
+    try {
+        std::ofstream file((global_workdir / (std::string("server_response_") + std::to_string(stuff.server_id_) + ".json")).c_str());
+        file << std::setw(4) << result_data;
+        file.close();
+    } catch (std::exception& ec) {
+        _msg("cannot write result: %s\n", ec.what());
+    }
+}
+
 int bench_main(const bench_config& config) {
     server_stuff stuff;
     stuff.server_id_ = config.srv_id_;
@@ -500,10 +568,19 @@ int bench_main(const bench_config& config) {
         TestSuite::usToString(global_lat.getPercentile("rep", 99.99)).c_str());
     _msg("-----\n");
 
-    stuff.raft_instance_->shutdown();
-
     write_iops(final_ops, final_us);
     write_latency_distribution();
+    write_response_result(stuff);
+
+    _msg("Actual state machine commit index: %lu\n", stuff.sm_->last_commit_index());
+    _msg("log_height: %lu\n", stuff.raft_instance_->get_last_log_idx());
+    _msg("log_height_committed: %lu\n", stuff.raft_instance_->get_committed_log_idx());
+    _msg("log_term: %lu\n", stuff.raft_instance_->get_last_log_term());
+    _msg("term: %lu\n", stuff.raft_instance_->get_term());
+
+
+    stuff.fault_controller_->set_is_server_under_attack(false);
+    stuff.raft_instance_->shutdown();
 
     return 0;
 }

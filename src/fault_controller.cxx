@@ -43,6 +43,9 @@ bool fault_controller::get_server_fault_status() {
 
 void fault_controller::set_is_server_under_attack(bool attack) {
     is_under_attack_ = attack;
+    if(!is_under_attack_) {
+        raft_server_->stop_attack();
+    }
 }
 
 bool fault_controller::get_is_server_under_attack() {

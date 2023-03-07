@@ -165,8 +165,7 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
     p_tr("commit upto %ld, curruent idx %ld\n", quick_commit_index_.load(), sm_commit_index_.load());
 
     if(get_is_under_attack() && fault_type_ == fault_type::signal_false_commitments) {
-        p_in("Attack (False Commitments) DONE: commit upto %ld, current idx %ld\n",
-                quick_commit_index_.load(), sm_commit_index_.load());
+        p_in("Attack (False Commitments)\n");
         return true;
     }
 

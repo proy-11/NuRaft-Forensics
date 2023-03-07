@@ -83,11 +83,11 @@ void raft_server::request_append_entries() {
 
 bool raft_server::request_append_entries(ptr<peer> p) {
     if(get_is_under_attack() && fault_type_ == fault_type::send_delayed_logs_to_followers) {
-        p_in("Attack (send_delayed_logs_to_followers)\n");
         timer_helper tt;
-        srand(time(nullptr)); 
-        int rand_num = rand() % 10 + 1;
-        tt.sleep_us(rand_num);
+        srand(time(nullptr));
+        int rand_num = rand() % 100 + 1;
+        p_in("Attack (send_delayed_logs_to_followers) sleeping %d\n", rand_num);
+        tt.sleep_ms(rand_num);
     }
 
     p_tr("append entries requested for peer id: %d, next log idx: %llu", p->get_id(), p->get_next_log_idx());
@@ -468,19 +468,19 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     ptr<req_msg> req = nullptr;
     if(get_is_under_attack() && fault_type_ == fault_type::send_invalid_request_to_followers) {
         p_in("Attack (send_invalid_request_to_followers)\n");
-        srand(time(nullptr)); 
+        srand(time(nullptr));
         int rand_num = rand() % 29 + 1;
         req = cs_new<req_msg>(term, msg_type(rand_num), id_, p.get_id(), last_log_term, last_log_idx, commit_idx);
-        p_in("Attack sending invalid req: %s\n", msg_type_to_string(req->get_type()).c_str());
+        p_in("Attack sending invalid req: %s, follower %d\n", msg_type_to_string(req->get_type()).c_str(), p.get_id());
     } else if(get_is_under_attack() && fault_type_ == fault_type::send_diff_requests_to_diff_followers) {
         p_in("Attack (send_diff_requests_to_diff_followers)\n");
         if(p.get_id()%2 == 0) {
-            srand(time(nullptr)); 
+            srand(time(nullptr));
             int rand_num = rand() % 29 + 1;
             req = cs_new<req_msg>(term, msg_type(rand_num), id_, p.get_id(), last_log_term, last_log_idx, commit_idx);
             p_in("Attack sending diff req to diff followers, follower %d: %s\n", p.get_id(), msg_type_to_string(req->get_type()).c_str());
         } else {
-            srand(time(nullptr)); 
+            srand(time(nullptr));
             int rand_num = rand() % 29 + 1;
             req = cs_new<req_msg>(term, msg_type(rand_num), id_, p.get_id(), last_log_term, last_log_idx, commit_idx);
             p_in("Attack sending diff req to diff followers, follower %d: %s\n", p.get_id(), msg_type_to_string(req->get_type()).c_str());

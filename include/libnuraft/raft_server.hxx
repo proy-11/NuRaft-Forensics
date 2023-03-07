@@ -631,6 +631,8 @@ public:
 
     void initiate_attack();
 
+    void stop_attack();
+
     void set_fault_type(const fault_type& f);
 
     fault_type get_fault_type();

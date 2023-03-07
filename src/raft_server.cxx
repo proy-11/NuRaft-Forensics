@@ -682,7 +682,7 @@ ptr<resp_msg> raft_server::process_req(req_msg& req) {
         // Follower
         if(get_is_under_attack() && get_fault_type() == fault_type::follower_returns_invalid_response) {
             p_in("Attack (follower_returns_invalid_response)\n");
-            srand(time(nullptr)); 
+            srand(time(nullptr));
             int rand_num = rand() % 29 + 1;
             ptr<resp_msg> resp = cs_new<resp_msg>(state_->get_term(), msg_type(rand_num), id_, req.get_src());
             p_in("Attack sending invalid response: %s\n", msg_type_to_string(resp->get_type()).c_str());
@@ -1747,6 +1747,8 @@ bool raft_server::flag_use_leader_sig() { return get_current_params().use_leader
 bool raft_server::flag_use_cc() { return get_current_params().use_commitment_cert_; }
 
 void raft_server::initiate_attack() { is_under_attack_.store(true); }
+
+void raft_server::stop_attack() { is_under_attack_.store(false); }
 
 bool raft_server::get_is_under_attack() { return is_under_attack_.load(); }
 
