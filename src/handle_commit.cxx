@@ -565,7 +565,7 @@ void raft_server::reconfigure(const ptr<cluster_config>& new_config) {
         p->set_next_log_idx(log_store_->next_slot());
 
         // FMARK: print pubkey
-        p_in("adding server %d with pubkey %s", p->get_id(), p->get_public_key_str().c_str());
+        // p_in("adding server %d with pubkey %s", p->get_id(), p->get_public_key_str().c_str());
 
         snprintf(temp_buf,
                  1024,

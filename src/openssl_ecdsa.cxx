@@ -258,6 +258,7 @@ ptr<buffer> create_hash(const char* source) {
 }
 
 ptr<buffer> create_hash(ptr<log_entry> le_, ulong height) {
+
     ptr<buffer> serial = le_->serialize_sig();
     size_t msgsize = serial->size() + sizeof(ulong);
     ptr<buffer> msg = buffer::alloc(msgsize);
