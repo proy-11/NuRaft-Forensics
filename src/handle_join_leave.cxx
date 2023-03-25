@@ -159,7 +159,7 @@ ptr<resp_msg> raft_server::handle_join_cluster_req(req_msg& req) {
     state_->set_term(req.get_term());
     ctx_->state_mgr_->save_state(*state_);
     reconfigure(cluster_config::deserialize(entries[0]->get_buf()));
-    // p_in("leader %d's pubkey = %s", int(leader_), get_srv_config(leader_)->get_public_key()->str().c_str());
+    p_in("leader %d's pubkey = %s", int(leader_), get_srv_config(leader_)->get_public_key()->str().c_str());
 
     resp->accept(quick_commit_index_.load() + 1);
     resp->set_signature(public_key->tobuf(), 0);
