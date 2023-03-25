@@ -162,7 +162,7 @@ ptr<resp_msg> raft_server::handle_join_cluster_req(req_msg& req) {
     p_in("leader %d's pubkey = %s", int(leader_), get_srv_config(leader_)->get_public_key()->str().c_str());
 
     resp->accept(quick_commit_index_.load() + 1);
-    resp->set_signature(public_key->tobuf(), 0);
+    resp->set_signature(public_key_->tobuf(), 0);
     return resp;
 }
 
@@ -178,7 +178,7 @@ void raft_server::handle_join_cluster_resp(resp_msg& resp) {
                 return;
             }
 
-            // p_in("new server (%d) has pubkey %s", pid, tobase64(*pk).c_str());
+            p_in("new server (%d) has pubkey %s", pid, tobase64(*pk).c_str());
             ptr<pubkey_intf> pubkey = cs_new<pubkey_t>(*pk);
 
             srv_to_join_->set_public_key(pubkey);

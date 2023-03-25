@@ -323,10 +323,11 @@ void raft_server::update_params(const raft_params& new_params) {
 }
 
 void raft_server::apply_and_log_current_params() {
+    p_tr("In raft_server apply_and_log_current_params");
     ptr<raft_params> params = ctx_->get_params();
 
     // FMARK: add path to private key
-    p_in("parameters: "
+    p_in("apply_and_log_current_params(debug) : parameters: "
          "timeout %d - %d, heartbeat %d, "
          "leadership expiry %d, "
          "max batch %d, backoff %d, snapshot distance %d, "
@@ -366,16 +367,22 @@ void raft_server::apply_and_log_current_params() {
     // FMARK: read private key; initialize cluster config with pubkey of self
     p_tr("loading private key from %s", params->private_key_path.c_str());
     try {
-        private_key = cs_new<seckey_t>(params->private_key_path);
+        p_tr("Trying to load private key");
+        private_key_ = cs_new<seckey_t>(params->private_key_path);
     } catch (crypto_exception& e) {
+        p_tr("CRYPTO EXCEPTION");
         p_er("cannot load private key from %s (%s)", params->private_key_path.c_str(), e.what());
-        private_key = cs_new<seckey_t>();
+        p_tr("Creating new private key");
+        private_key_ = cs_new<seckey_t>();
+        p_tr("Finished creating new private key");
     }
-    public_key = private_key->derive();
-    config_->get_server(get_id())->set_public_key(public_key);
-
-    // p_in("Server private key: %s", private_key->str().c_str());
-    // p_in("Server public key: %s", public_key->str().c_str());
+    public_key_ = private_key_->derive();
+    config_->get_server(get_id())->set_public_key(public_key_);
+    p_tr("Private key is - ");
+    p_tr("Server private key: %s", private_key_->str().c_str());
+    p_tr("Public key is - ");
+    p_tr("Server public key: %s", public_key_->str().c_str());
+    p_tr("Finished apply_and_log_current_params");
 }
 
 raft_params raft_server::get_current_params() const { return *ctx_->get_params(); }
@@ -1647,7 +1654,7 @@ ssize_t raft_server::check_leader_sig(std::vector<ptr<log_entry>>& entries, int3
 int32 raft_server::validate_commitment_certificate(ptr<certificate> cert, ptr<log_entry> entry) {
     for (auto& it: cert->get_sigs()) {
         if (it.first == id_) {
-            if (!public_key->verify_md(*entry->serialize_sig(), *it.second)) {
+            if (!public_key_->verify_md(*entry->serialize_sig(), *it.second)) {
                 return it.first;
             }
             continue;
@@ -1724,7 +1731,7 @@ void raft_server::set_raft_limits(const raft_server::limits& new_limits) { raft_
 void raft_server::check_overall_status() { check_leadership_transfer(); }
 
 // FMARK: sign message
-ptr<buffer> raft_server::get_signature(buffer& msg) { return private_key->sign_md(msg); }
+ptr<buffer> raft_server::get_signature(buffer& msg) { return private_key_->sign_md(msg); }
 
 // FMARK: flag wrappers
 
