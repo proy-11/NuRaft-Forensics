@@ -46,6 +46,7 @@ public:
         , rpc_backoff_(ctx.get_params()->rpc_failure_backoff_)
         , max_hb_interval_(ctx.get_params()->max_hb_interval())
         , next_log_idx_(0)
+        , last_accepted_log_idx_(0)
         , next_batch_size_hint_in_bytes_(0)
         , matched_idx_(0)
         , busy_flag_(false)
@@ -124,6 +125,14 @@ public:
     ulong get_next_log_idx() const { return next_log_idx_; }
 
     void set_next_log_idx(ulong idx) { next_log_idx_ = idx; }
+
+    uint64_t get_last_accepted_log_idx() const {
+        return last_accepted_log_idx_;
+    }
+
+    void set_last_accepted_log_idx(uint64_t to) {
+        last_accepted_log_idx_ = to;
+    }
 
     int64 get_next_batch_size_hint_in_bytes() const { return next_batch_size_hint_in_bytes_; }
 
@@ -316,6 +325,11 @@ private:
      * Next log index of this server.
      */
     std::atomic<ulong> next_log_idx_;
+
+    /**
+     * The last log index accepted by this server.
+     */
+    std::atomic<uint64_t> last_accepted_log_idx_;
 
     /**
      * Hint of the next log batch size in bytes.
