@@ -828,12 +828,12 @@ protected:
     /**
      * FMARK: Private key
      */
-    ptr<seckey_intf> private_key;
+    ptr<seckey_intf> private_key_;
 
     /**
      * FMARK: Public key
      */
-    ptr<pubkey_intf> public_key;
+    ptr<pubkey_intf> public_key_;
 
     /**
      * @brief FMARK: finished cc
