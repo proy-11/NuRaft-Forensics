@@ -733,7 +733,11 @@ void raft_server::reset_peer_info() {
         if (flag_use_leader_sig()) {
             // auto timer = cs_new<timer_t>();
             // timer->start_timer();
-            entry->set_signature(get_signature(*entry->serialize_sig()));
+            ptr<buffer> buf= entry->serialize_sig();
+            if(!buf) {
+                p_in("message to sign is null");
+            }
+            entry->set_signature(get_signature(*buf));
             // timer->add_record("ls.init.rpi");
             // t_->add_sess(timer);
         }
@@ -1537,7 +1541,7 @@ raft_server::peer_info raft_server::get_peer_info(int32 srv_id) const {
     peer_info ret;
     ptr<peer> pp = entry->second;
     ret.id_ = pp->get_id();
-    ret.last_log_idx_ = pp->get_next_log_idx() - 1;
+    ret.last_log_idx_ = pp->get_last_accepted_log_idx();
     ret.last_succ_resp_us_ = pp->get_resp_timer_us();
     return ret;
 }
@@ -1551,7 +1555,7 @@ std::vector<raft_server::peer_info> raft_server::get_peer_info_all() const {
         peer_info pi;
         ptr<peer> pp = entry.second;
         pi.id_ = pp->get_id();
-        pi.last_log_idx_ = pp->get_next_log_idx() - 1;
+        pi.last_log_idx_ = pp->get_last_accepted_log_idx();
         pi.last_succ_resp_us_ = pp->get_resp_timer_us();
         ret.push_back(pi);
     }

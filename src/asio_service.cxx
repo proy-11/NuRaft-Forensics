@@ -1379,6 +1379,7 @@ private:
 
         // FMARK: read signature
         if (flags & INCLUDE_SIG) {
+            p_in("Reading signature");
             size_t resp_sig_len = 0;
             void* resp_sig_raw = bs.get_bytes(resp_sig_len);
             ulong resp_sig_idx = bs.get_u64();
