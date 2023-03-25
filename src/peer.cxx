@@ -246,7 +246,14 @@ std::string peer::get_public_key_str() {
 
 // FMARK: verify sig
 bool peer::verify_signature(ptr<buffer> msg, ptr<buffer> sig) {
-    if (msg == nullptr || sig == nullptr) return false;
+    if(!public_key) {
+        p_in("server %d pubkey is null", config_->get_id());
+        return false;
+    }
+    if (msg == nullptr || sig == nullptr) {
+        p_in("server %d, verify signature msg or sig is null", config_->get_id());
+        return false;
+    }
     return public_key->verify_md(*msg, *sig);
 }
 

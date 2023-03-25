@@ -1649,6 +1649,13 @@ ssize_t raft_server::check_leader_sig(std::vector<ptr<log_entry>>& entries, int3
 
     for (ulong i = 0; i < (ulong)entries.size(); i++) {
         if (entries[i]->get_val_type() != log_val_type::app_log) continue;
+        p_in("Verifying signature");
+        if(!entries[i]->serialize_sig()) {
+            p_in("log entry msg is null");
+        }
+        if(!entries[i]->get_sig_ptr()) {
+            p_in("log entry signature is null");
+        }
         if (!p_signer->verify_signature(entries[i]->serialize_sig(), entries[i]->get_sig_ptr())) {
             return (ssize_t)(i);
         }
