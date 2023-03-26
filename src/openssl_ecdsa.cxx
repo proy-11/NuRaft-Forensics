@@ -140,9 +140,35 @@ seckey_t::seckey_t(const buffer& keybuf) {
     }
 }
 
-seckey_t::seckey_t(const std::string& filename) {
-    BIO* bio = BIO_new_file(filename.c_str(), "r");
-    if (bio == NULL || PEM_read_bio_PrivateKey(bio, &key, NULL, NULL) == NULL) {
+// seckey_t::seckey_t(const std::string& filename) {
+//     FILE *fp = fopen(filename.c_str(), "r");
+//     if (fp == NULL) {
+//         throw crypto_exception("cannot read from file");
+//         return;
+//     }
+//     fclose(fp);
+//     BIO* bio = BIO_new_file(filename.c_str(), "r");
+//     if(bio == NULL) {
+//         throw crypto_exception("bio is null");
+//     }
+//     if (PEM_read_bio_PrivateKey(bio, &key, NULL, NULL) == NULL) {
+//         throw crypto_exception("seckey from file");
+//     }
+//     if(bio) {
+//         BIO_free(bio);
+//     }
+// }
+
+seckey_t::seckey_t(std::string priv_key) {
+    if(priv_key.empty()) {
+        throw crypto_exception("private key string is empty");
+    }
+    BIO* bio = BIO_new_mem_buf((void*)priv_key.data(), priv_key.length());
+    if(bio == NULL) {
+        throw crypto_exception("bio is null");
+    }
+    if (PEM_read_bio_PrivateKey(bio, &key, NULL, NULL) == NULL) {
+        ERR_print_errors_fp(stderr);
         throw crypto_exception("seckey from file");
     }
     if(bio) {

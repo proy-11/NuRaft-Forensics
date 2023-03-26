@@ -128,7 +128,7 @@ public:
         params.use_commitment_cert_ = false;
         params.use_leader_sig_ = false;
         params.use_chain_ptr_ = false;
-        params.private_key_path = "";
+        params.private_key = "";
 
         context* ctx( new context( sMgr, sm, listener, myLog,
                                    rpc_cli_factory, scheduler, params ) );
@@ -181,7 +181,7 @@ public:
         params.use_commitment_cert_ = false;
         params.use_leader_sig_ = false;
         params.use_chain_ptr_ = false;
-        params.private_key_path = "";
+        params.private_key = "";
 
         context* ctx( new context( sMgr, sm, listener, myLog,
                                    rpc_cli_factory, scheduler, params ) );

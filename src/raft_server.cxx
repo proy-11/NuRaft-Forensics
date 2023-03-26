@@ -339,7 +339,7 @@ void raft_server::apply_and_log_current_params() {
          "snapshot receiver %s, "
          "leadership transfer wait time %d, "
          "grace period of lagging state machine %d, "
-         "path to private key ~~%s~~",
+         "private key %s\n",
          params->election_timeout_lower_bound_,
          params->election_timeout_upper_bound_,
          params->heart_beat_interval_,
@@ -357,7 +357,7 @@ void raft_server::apply_and_log_current_params() {
          params->exclude_snp_receiver_from_quorum_ ? "EXCLUDED" : "INCLUDED",
          params->leadership_transfer_min_wait_time_,
          params->grace_period_of_lagging_state_machine_,
-         params->private_key_path.c_str());
+         params->private_key.c_str());
 
     status_check_timer_.set_duration_ms(params->heart_beat_interval_);
     status_check_timer_.reset();
@@ -365,13 +365,12 @@ void raft_server::apply_and_log_current_params() {
     leadership_transfer_timer_.set_duration_ms(params->leadership_transfer_min_wait_time_);
 
     // FMARK: read private key; initialize cluster config with pubkey of self
-    p_tr("loading private key from %s", params->private_key_path.c_str());
+    p_tr("private key %s", params->private_key.c_str());
     try {
-        p_tr("Trying to load private key");
-        private_key_ = cs_new<seckey_t>(params->private_key_path);
+        private_key_ = cs_new<seckey_t>(params->private_key);
     } catch (crypto_exception& e) {
-        p_tr("CRYPTO EXCEPTION");
-        p_er("cannot load private key from %s (%s)", params->private_key_path.c_str(), e.what());
+        p_er("CRYPTO EXCEPTION");
+        p_er("cannot load private key, exception (%s)", e.what());
         p_tr("Creating new private key");
         private_key_ = cs_new<seckey_t>();
         p_tr("Finished creating new private key");
@@ -718,6 +717,7 @@ void raft_server::reset_peer_info() {
             if(!buf) {
                 p_in("message to sign is null");
             }
+            p_in("Set sig");
             entry->set_signature(get_signature(*buf));
             // timer->add_record("ls.init.rpi");
             // t_->add_sess(timer);
@@ -979,6 +979,7 @@ void raft_server::become_leader() {
         if (flag_use_leader_sig()) {
             // auto timer = cs_new<timer_t>();
             // timer->start_timer();
+            p_in("Set sig");
             entry->set_signature(get_signature(*entry->serialize_sig()));
             // timer->add_record("ls.init.bcl");
             // t_->add_sess(timer);
@@ -1470,6 +1471,7 @@ void raft_server::set_user_ctx(const std::string& ctx) {
     if (flag_use_leader_sig()) {
         // auto timer = cs_new<timer_t>();
         // timer->start_timer();
+        p_in("Set sig");
         entry->set_signature(get_signature(*entry->serialize_sig()));
         // timer->add_record("ls.init.sctx");
         // t_->add_sess(timer);

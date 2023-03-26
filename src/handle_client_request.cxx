@@ -111,6 +111,7 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
 
         // FMARK: add sig
         if (flag_use_leader_sig()) {
+            p_in("Set sig");
             // timer->start_timer();
             entries.at(i)->set_signature(this->get_signature(*entries.at(i)->serialize_sig()));
             // timer->add_record("ls.init.clireq");

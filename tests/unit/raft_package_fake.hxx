@@ -84,7 +84,7 @@ public:
         params.use_commitment_cert_ = false;
         params.use_leader_sig_ = false;
         params.use_chain_ptr_ = false;
-        params.private_key_path = "";
+        params.private_key = "";
 
         // For deterministic test, we should not use BG thread.
         params.use_bg_thread_for_urgent_commit_ = false;
