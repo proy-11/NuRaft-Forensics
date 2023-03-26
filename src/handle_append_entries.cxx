@@ -963,6 +963,7 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         if (k >= 0) {
             ulong idx = k + req.get_last_log_idx() + 1;
             auto sig = get_signature(*req.log_entries()[k]->serialize_sig());
+            p_in("Set signature");
             resp->set_signature(sig, idx);
         }
         // timer->add_record("cc.replysig");
@@ -1046,6 +1047,9 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
 
         // FMARK: verify signature
         // TODO: there needs an accurate predicate to tell whether a signature is expected
+        if(!resp.get_signature()) {
+            p_in("resp get signature is null");
+        }
         if (flag_use_cc() && resp.get_signature() != nullptr) {
             // auto timer = cs_new<timer_t>();
             // timer->start_timer();
@@ -1058,7 +1062,7 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
                      resp.get_signature() == nullptr ? "null" : tobase64(*resp.get_signature()).c_str());
                 return;
             }
-
+            p_in("Pushing new cert signature");
             push_new_cert_signature(resp.get_signature(), p->get_id(), entry->get_term(), resp.get_sig_index());
 
             // timer->add_record("cc.push");

@@ -11,6 +11,7 @@
 #include <openssl/obj_mac.h>
 #include <openssl/pem.h>
 #include <openssl/sha.h>
+#include <openssl/err.h>
 
 #include "key.hxx"
 #include "log_entry.hxx"
@@ -44,7 +45,8 @@ class seckey_t : public seckey_intf {
 public:
     seckey_t();
     seckey_t(const buffer& keybuf);
-    seckey_t(const std::string& filename);
+    // seckey_t(const std::string& filename);
+    seckey_t(std::string priv_key);
     virtual ~seckey_t();
 
     virtual ptr<buffer> tobuf();

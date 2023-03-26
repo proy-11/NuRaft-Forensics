@@ -591,8 +591,11 @@ private:
             size_t resp_sig_size = 0;
             ptr<buffer> sig = resp->get_signature();
             if (sig != nullptr) {
+                p_in("sig is not null");
                 flags |= INCLUDE_SIG;
                 resp_sig_size += sizeof(int32) + sig->size() + sizeof(ulong);
+            } else {
+                p_in("sig is null");
             }
 
             size_t carried_data_size = resp_sig_size + resp_meta_size + resp_hint_size + resp_ctx_size;
@@ -1388,6 +1391,7 @@ private:
                 ptr<buffer> sig = buffer::alloc(resp_sig_len);
                 sig->put_raw((byte*)resp_sig_raw, resp_sig_len);
                 sig->pos(0);
+                p_in("set signature");
                 rsp->set_signature(sig, resp_sig_idx);
             }
 

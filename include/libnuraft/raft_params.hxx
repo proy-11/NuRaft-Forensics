@@ -97,7 +97,7 @@ struct raft_params {
         , return_method_(blocking)
         , auto_forwarding_req_timeout_(0)
         , grace_period_of_lagging_state_machine_(0)
-        , private_key_path("") {}
+        , private_key("") {}
 
     /**
      * Election timeout upper bound in milliseconds
@@ -548,10 +548,10 @@ public:
     int32 grace_period_of_lagging_state_machine_;
 
     /**
-     * @brief path to private key; if non-existing, create a random one
+     * @brief private key string; if non-existing, create a random one
      *
      */
-    std::string private_key_path;
+    std::string private_key;
 };
 
 } // namespace nuraft
