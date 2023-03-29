@@ -167,8 +167,8 @@ seckey_t::seckey_t(std::string priv_key) {
     if(bio == NULL) {
         throw crypto_exception("bio is null");
     }
-    if (PEM_read_bio_PrivateKey(bio, &key, NULL, NULL) == NULL) {
-        ERR_print_errors_fp(stderr);
+    key =  PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+    if ( key == NULL) {
         throw crypto_exception("seckey from file");
     }
     if(bio) {
@@ -284,6 +284,9 @@ ptr<buffer> create_hash(const char* source) {
 }
 
 ptr<buffer> create_hash(ptr<log_entry> le_, ulong height) {
+    if(!le_) {
+        return nullptr;
+    }
 
     ptr<buffer> serial = le_->serialize_sig();
     size_t msgsize = serial->size() + sizeof(ulong);
