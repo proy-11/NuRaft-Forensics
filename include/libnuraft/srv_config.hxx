@@ -89,12 +89,7 @@ public:
     ptr<pubkey_intf> get_public_key() const { return public_key_; }
 
     // FMARK: set pubkey
-    void set_public_key(ptr<pubkey_intf> pubkey) {
-        if (pubkey == nullptr) {
-            return;
-        }
-        public_key_ = pubkey;
-    }
+    void set_public_key(ptr<pubkey_intf> pubkey);
 
 private:
     /**

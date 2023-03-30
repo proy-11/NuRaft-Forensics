@@ -257,4 +257,19 @@ bool peer::verify_signature(ptr<buffer> msg, ptr<buffer> sig) {
     return public_key->verify_md(*msg, *sig);
 }
 
+/**
+* FMARK:
+ * @brief Set the public key
+ *
+ * @param pubkey public key
+ */
+void peer::set_public_key(ptr<pubkey_intf> pubkey) {
+    if (pubkey == nullptr) {
+        p_in("Peer pubkey is null");
+        return;
+    }
+    p_in("Peer pubkey - %s", pubkey);
+    public_key = pubkey;
+}
+
 } // namespace nuraft

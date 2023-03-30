@@ -259,12 +259,7 @@ public:
      *
      * @param pubkey public key
      */
-    void set_public_key(ptr<pubkey_intf> pubkey) {
-        if (pubkey == nullptr) {
-            return;
-        }
-        public_key = pubkey;
-    }
+    void set_public_key(ptr<pubkey_intf> pubkey);
 
     std::string get_public_key_str();
 
