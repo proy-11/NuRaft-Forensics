@@ -216,6 +216,31 @@ raft_server::raft_server(context* ctx, const init_options& opt)
         print_msg += temp_buf;
     }
 
+    for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
+            ptr<srv_config> serv = c_conf->get_server(it->first);
+            ptr<peer> pp = it->second;
+
+            if(pp != nullptr && serv != nullptr) {
+                try {
+                    if(!serv->get_private_key_string().empty()) {
+
+                        serv->set_private_key(cs_new<seckey_t>(serv->get_private_key_string()));
+                        p_tr("PEER Server private key: %s", serv->get_private_key()->str().c_str());
+
+                        serv->set_public_key(serv->get_private_key()->derive());
+                        p_tr("PEER Server public key: %s", serv->get_public_key()->str().c_str());
+
+                        p_tr("Setting PEER public key for server %d", serv->get_id());
+                        if(!serv->get_public_key()) {
+                            pp->set_public_key(serv->get_public_key());
+                        }
+                    }
+                } catch (crypto_exception& e) {
+                    p_er("cannot load private key, exception (%s)", e.what());
+                }
+            }
+    }
+
     snprintf(temp_buf, BUFSIZE, "my id: %d, %s\n", id_, (im_learner_) ? "learner" : "voting_member");
     print_msg += temp_buf;
     snprintf(temp_buf, BUFSIZE, "num peers: %d\n", (int)peers_.size());

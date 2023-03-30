@@ -71,10 +71,6 @@ peer::peer(ptr<srv_config>& config, const context& ctx, timer_task<int32>::execu
         if (config != nullptr) {
             set_public_key(config->get_public_key());
         }
-        std::stringstream ss;
-        ss << "PEER OBJECT " << "id" << config_->get_id()
-            << "Pub key" << config->get_public_key()->str() << " " << get_public_key_str();
-        p_in(ss.str().c_str());
     }
 
 void peer::send_req(ptr<peer> myself, ptr<req_msg>& req, rpc_handler& handler) {
