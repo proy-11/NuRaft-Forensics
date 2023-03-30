@@ -20,7 +20,7 @@ limitations under the License.
 
 #include "srv_config.hxx"
 #include "openssl_ecdsa.hxx"
-
+#include <iostream>
 namespace nuraft {
 
 ptr<srv_config> srv_config::deserialize(buffer& buf) {
@@ -72,6 +72,15 @@ ptr<buffer> srv_config::serialize() const {
     }
     buf->pos(0);
     return buf;
+}
+
+void srv_config::set_public_key(ptr<pubkey_intf> pubkey) {
+    if (pubkey == nullptr) {
+        std::cerr << "srv config setting pubkey is null";
+        return;
+    }
+    std::cerr << "srv config setting pubkey" << pubkey;
+    public_key_ = pubkey;
 }
 
 } // namespace nuraft
