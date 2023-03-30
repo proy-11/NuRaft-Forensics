@@ -1083,9 +1083,12 @@ void raft_server::check_leadership_transfer() {
     int32 successor_id = -1;
     int32 max_priority = my_priority_;
     ulong cur_commit_idx = quick_commit_index_;
+    p_in("Number of peers %d", peers_.size());
     for (auto& entry: peers_) {
         ptr<peer> peer_elem = entry.second;
         const srv_config& s_conf = peer_elem->get_config();
+        p_in("server config id %d, endpoint %d, dc id %d, priority %d, public key %d", s_conf.get_id(), 
+        s_conf.get_endpoint(), s_conf.get_dc_id(), s_conf.get_priority(), s_conf.get_public_key()->str());
         int32 cur_priority = s_conf.get_priority();
         if (cur_priority > max_priority) {
             max_priority = cur_priority;
