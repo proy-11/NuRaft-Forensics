@@ -87,6 +87,7 @@ public:
     // FMARK: serialize for signature
     ptr<buffer> serialize_sig() {
         if (!buff_) {
+            exit(0);
 #ifndef _NO_EXCEPTION
             throw std::runtime_error("serialize_sig cannot be called for a log_entry "
                                      "with nil buffer");
