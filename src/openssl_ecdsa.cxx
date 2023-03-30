@@ -160,10 +160,14 @@ seckey_t::seckey_t(const buffer& keybuf) {
 // }
 
 seckey_t::seckey_t(std::string priv_key) {
+    OpenSSL_add_all_algorithms();
+    OpenSSL_add_all_ciphers();
+    OpenSSL_add_all_digests();
+
     if(priv_key.empty()) {
         throw crypto_exception("private key string is empty");
     }
-    BIO* bio = BIO_new_mem_buf((void*)priv_key.data(), priv_key.length());
+    BIO* bio = BIO_new_mem_buf((void*)priv_key.data(), -1);
     if(bio == NULL) {
         throw crypto_exception("bio is null");
     }
