@@ -218,23 +218,43 @@ raft_server::raft_server(context* ctx, const init_options& opt)
     }
 
     for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
-            ptr<srv_config> serv = c_conf->get_server(it->first);
             ptr<peer> pp = it->second;
+            p_in("Setting key info for Peer id %d", pp->get_id());
+            ptr<srv_config> serv = nullptr; 
+            if(pp != nullptr) {
+                serv = c_conf->get_server(pp->get_id());
+            }
 
+            p_in("Reached 1");
             if(pp != nullptr && serv != nullptr) {
+                p_in("Reached 2");
                 try {
                     if(!serv->get_private_key_string().empty()) {
-
-                        serv->set_private_key(cs_new<seckey_t>(serv->get_private_key_string()));
-                        p_tr("PEER Server private key: %s", serv->get_private_key()->str().c_str());
-
-                        serv->set_public_key(serv->get_private_key()->derive());
-                        p_tr("PEER Server public key: %s", serv->get_public_key()->str().c_str());
-
-                        p_tr("Setting PEER public key for server %d", serv->get_id());
-                        if(!serv->get_public_key()) {
-                            pp->set_public_key(serv->get_public_key());
+                        p_in("Reached 3");
+                        ptr<seckey_intf> priv_key = cs_new<seckey_t>(serv->get_private_key_string());
+                        p_in("Reached 4");
+                        if(priv_key != nullptr) {
+                            p_in("Reached 5");
+                            serv->set_private_key(priv_key);
+                            p_in("Reached 6");
+                            ptr<pubkey_intf> pub_key = priv_key->derive();
+                            p_in("Reached 7");
+                            if(pub_key != nullptr) {
+                                p_in("Reached 8");
+                                serv->set_public_key(pub_key);
+                                p_in("Reached 9");
+                                pp->set_public_key(pub_key);
+                                p_in("Reached 10");
+                            }
                         }
+                        // p_tr("PEER Server private key: %s", serv->get_private_key()->str().c_str());
+                        // serv->set_public_key(serv->get_private_key()->derive());
+                        // p_tr("PEER Server public key: %s", serv->get_public_key()->str().c_str());
+
+                        // p_tr("Setting PEER public key for server %d", serv->get_id());
+                        // if(!serv->get_public_key()) {
+                            // pp->set_public_key(serv->get_public_key());
+                        // }
                     }
                 } catch (crypto_exception& e) {
                     p_er("cannot load private key, exception (%s)", e.what());
@@ -403,13 +423,16 @@ void raft_server::apply_and_log_current_params() {
         private_key_ = cs_new<seckey_t>();
         p_tr("Finished creating new private key");
     }
+    p_tr("public key derive 1");
     public_key_ = private_key_->derive();
+    p_tr("public key derive 2");
     config_->get_server(get_id())->set_public_key(public_key_);
-    p_tr("Private key is - ");
-    p_tr("Server private key: %s", private_key_->str().c_str());
-    p_tr("Public key is - ");
-    p_tr("Server public key: %s", public_key_->str().c_str());
-    p_tr("Finished apply_and_log_current_params");
+    p_tr("public key derive 3");
+    // p_tr("Private key is - ");
+    // p_tr("Server private key: %s", private_key_->str().c_str());
+    // p_tr("Public key is - ");
+    // p_tr("Server public key: %s", public_key_->str().c_str());
+    // p_tr("Finished apply_and_log_current_params");
 }
 
 raft_params raft_server::get_current_params() const { return *ctx_->get_params(); }

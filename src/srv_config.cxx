@@ -79,7 +79,7 @@ void srv_config::set_public_key(ptr<pubkey_intf> pubkey) {
         std::cerr << "srv config setting pubkey is null";
         return;
     }
-    std::cerr << "srv config setting pubkey" << pubkey->str();
+    // std::cerr << "srv config setting pubkey" << pubkey->str();
     public_key_ = pubkey;
 }
 
@@ -88,7 +88,7 @@ void srv_config::set_private_key(ptr<seckey_intf> priv_key) {
         std::cerr << "srv config setting private key is null";
         return;
     }
-    std::cerr << "srv config setting private key" << priv_key->str();
+    // std::cerr << "srv config setting private key" << priv_key->str();
     private_key_ = priv_key;
 }
 
