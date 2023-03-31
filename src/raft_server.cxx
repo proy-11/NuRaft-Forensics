@@ -39,6 +39,7 @@ limitations under the License.
 #include <random>
 #include <sstream>
 #include <thread>
+#include <iostream>
 
 namespace nuraft {
 
@@ -216,6 +217,8 @@ raft_server::raft_server(context* ctx, const init_options& opt)
                  cur_srv->get_priority());
         print_msg += temp_buf;
     }
+
+    std::cerr << "Reached 1";
 
     // for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
     //         ptr<peer> pp = it->second;
