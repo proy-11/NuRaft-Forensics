@@ -76,7 +76,7 @@ ptr<buffer> srv_config::serialize() const {
 
 void srv_config::set_public_key(ptr<pubkey_intf> pubkey) {
     if (pubkey == nullptr) {
-        std::cerr << "srv config setting pubkey is null";
+        // std::cerr << "srv config setting pubkey is null";
         return;
     }
     // std::cerr << "srv config setting pubkey" << pubkey->str();
@@ -85,7 +85,7 @@ void srv_config::set_public_key(ptr<pubkey_intf> pubkey) {
 
 void srv_config::set_private_key(ptr<seckey_intf> priv_key) {
     if (priv_key == nullptr) {
-        std::cerr << "srv config setting private key is null";
+        // std::cerr << "srv config setting private key is null";
         return;
     }
     // std::cerr << "srv config setting private key" << priv_key->str();
