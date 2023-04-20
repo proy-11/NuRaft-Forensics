@@ -218,8 +218,17 @@ raft_server::raft_server(context* ctx, const init_options& opt)
         print_msg += temp_buf;
     }
 
-    std::cerr << "Reached 1";
 
+
+   
+
+    snprintf(temp_buf, BUFSIZE, "my id: %d, %s\n", id_, (im_learner_) ? "learner" : "voting_member");
+    print_msg += temp_buf;
+    snprintf(temp_buf, BUFSIZE, "num peers: %d\n", (int)peers_.size());
+    print_msg += temp_buf;
+    p_in(print_msg.c_str());
+
+    p_in("SET PEERS START\n");
     for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
             ptr<peer> pp = it->second;
             p_in("Setting key info for Peer id %d", pp->get_id());
@@ -264,12 +273,7 @@ raft_server::raft_server(context* ctx, const init_options& opt)
                 }
             }
     }
-
-    snprintf(temp_buf, BUFSIZE, "my id: %d, %s\n", id_, (im_learner_) ? "learner" : "voting_member");
-    print_msg += temp_buf;
-    snprintf(temp_buf, BUFSIZE, "num peers: %d\n", (int)peers_.size());
-    print_msg += temp_buf;
-    p_in(print_msg.c_str());
+    p_in("SET PEERS END\n");
 
     if (opt.start_server_in_constructor_) {
         start_server(opt.skip_initial_election_timeout_);
