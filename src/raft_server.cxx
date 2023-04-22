@@ -258,9 +258,9 @@ raft_server::raft_server(context* ctx, const init_options& opt)
                                 p_in("Reached 10");
                             }
                         }
-                        // p_tr("PEER Server private key: %s", serv->get_private_key()->str().c_str());
+                        p_tr("PEER Server private key: %s", serv->get_private_key()->str().c_str());
                         // serv->set_public_key(serv->get_private_key()->derive());
-                        // p_tr("PEER Server public key: %s", serv->get_public_key()->str().c_str());
+                        p_tr("PEER Server public key: %s", serv->get_public_key()->str().c_str());
 
                         // p_tr("Setting PEER public key for server %d", serv->get_id());
                         // if(!serv->get_public_key()) {
