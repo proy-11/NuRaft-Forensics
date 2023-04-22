@@ -313,7 +313,7 @@ void peer::set_public_key(ptr<pubkey_intf> pubkey) {
         p_in("Peer pubkey is null");
         return;
     }
-    p_in("Peer pubkey - %s", pubkey);
+    p_in("Peer pubkey - %s", pubkey->str());
     public_key = pubkey;
 }
 
