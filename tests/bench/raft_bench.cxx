@@ -55,18 +55,13 @@ public:
 
     void rollback(const ulong log_idx, buffer& data) {}
     void save_snapshot_data(snapshot& s, const ulong offset, buffer& data) {}
-    void save_logical_snp_obj(
-        snapshot& s, ulong& obj_id, buffer& data, bool is_first_obj, bool is_last_obj) {
+    void save_logical_snp_obj(snapshot& s, ulong& obj_id, buffer& data, bool is_first_obj, bool is_last_obj) {
         obj_id++;
     }
     bool apply_snapshot(snapshot& s) { return true; }
     int read_snapshot_data(snapshot& s, const ulong offset, buffer& data) { return 0; }
 
-    int read_logical_snp_obj(snapshot& s,
-                             void*& user_snp_ctx,
-                             ulong obj_id,
-                             ptr<buffer>& data_out,
-                             bool& is_last_obj) {
+    int read_logical_snp_obj(snapshot& s, void*& user_snp_ctx, ulong obj_id, ptr<buffer>& data_out, bool& is_last_obj) {
         is_last_obj = true;
         data_out = buffer::alloc(sizeof(ulong));
         data_out->put(obj_id);
@@ -180,8 +175,7 @@ int init_raft(server_stuff& stuff, int complexity) {
     asio_opt.thread_pool_size_ = 32;
     stuff.asio_svc_ = cs_new<asio_service>(asio_opt, stuff.raft_logger_);
 
-    stuff.asio_listener_ =
-        stuff.asio_svc_->create_rpc_listener(stuff.port_, stuff.raft_logger_);
+    stuff.asio_listener_ = stuff.asio_svc_->create_rpc_listener(stuff.port_, stuff.raft_logger_);
     if (stuff.asio_listener_ == nullptr) {
         stuff.raft_logger_->err("asio listener failed to init\n");
     }
@@ -209,13 +203,8 @@ int init_raft(server_stuff& stuff, int complexity) {
         params.use_chain_ptr_ = false;
     }
 
-    context* ctx = new context(stuff.smgr_,
-                               stuff.sm_,
-                               stuff.asio_listener_,
-                               stuff.raft_logger_,
-                               rpc_cli_factory,
-                               scheduler,
-                               params);
+    context* ctx = new context(
+        stuff.smgr_, stuff.sm_, stuff.asio_listener_, stuff.raft_logger_, rpc_cli_factory, scheduler, params);
     stuff.raft_instance_ = cs_new<raft_server>(ctx);
 
     // Listen.
@@ -243,8 +232,7 @@ int add_servers(server_stuff& stuff, const bench_config& config) {
         int server_id_to_add = ii + 2;
         _msg("add server %d ", server_id_to_add);
 
-        srv_config srv_conf_to_add(
-            server_id_to_add, 1, config.endpoints_[ii], std::string(), false, 50);
+        srv_config srv_conf_to_add(server_id_to_add, 1, config.endpoints_[ii], std::string(), false, 50);
         ptr<raft_result> ret = stuff.raft_instance_->add_srv(srv_conf_to_add);
         if (!ret->get_accepted()) {
             _msg(" .. failed");
@@ -353,15 +341,13 @@ void ensure_dir(std::string directory) {
     if (!fsys::exists(directory)) {
         fsys::create_directories(fsys::absolute(directory));
     } else if (!fsys::is_directory(directory)) {
-        fprintf(
-            stderr, "Cannot create directory %s\n", fsys::absolute(directory).c_str());
+        fprintf(stderr, "Cannot create directory %s\n", fsys::absolute(directory).c_str());
         exit(1);
     }
 }
 
 void write_iops(uint64_t total_ops, uint64_t total_us) {
-    fsys::path filename =
-        global_workdir / fsys::path("iops_" + std::to_string(global_sid) + ".json");
+    fsys::path filename = global_workdir / fsys::path("iops_" + std::to_string(global_sid) + ".json");
     std::ofstream fs;
     fs.open(filename.string());
     if (!fs.good()) return;
@@ -374,9 +360,7 @@ void write_iops(uint64_t total_ops, uint64_t total_us) {
 }
 
 void write_latency_distribution() {
-    fsys::path filename =
-        global_workdir
-        / fsys::path("raft_latency_" + std::to_string(global_sid) + ".json");
+    fsys::path filename = global_workdir / fsys::path("raft_latency_" + std::to_string(global_sid) + ".json");
     std::ofstream fs;
     fs.open(filename.string());
     if (!fs.good()) return;
@@ -385,8 +369,7 @@ void write_latency_distribution() {
     fs << "    \"mean\": " << global_lat.getAvgLatency("rep") << "," << std::endl;
 
     for (size_t ii = 0; ii <= 99; ++ii) {
-        fs << "    \"" << ii << "\": " << global_lat.getPercentile("rep", ii) << ","
-           << std::endl;
+        fs << "    \"" << ii << "\": " << global_lat.getPercentile("rep", ii) << "," << std::endl;
     }
     fs << "    \"99.9\": " << global_lat.getPercentile("rep", 99.9) << ",\n";
     fs << "    \"99.99\": " << global_lat.getPercentile("rep", 99.99) << ",\n";
@@ -461,17 +444,15 @@ int bench_main(const bench_config& config) {
     }
 
     _msg("-----\n");
-    TestSuite::_msg(
-        "%15s%10s%10s%10s%10s%10s\n", "OP", "p50", "p95", "p99", "p99.9", "p99.99");
+    TestSuite::_msg("%15s%10s%10s%10s%10s%10s\n", "OP", "p50", "p95", "p99", "p99.9", "p99.99");
 
-    TestSuite::_msg(
-        "%15s%10s%10s%10s%10s%10s\n",
-        "replication",
-        TestSuite::usToString(global_lat.getPercentile("rep", 50)).c_str(),
-        TestSuite::usToString(global_lat.getPercentile("rep", 95)).c_str(),
-        TestSuite::usToString(global_lat.getPercentile("rep", 99)).c_str(),
-        TestSuite::usToString(global_lat.getPercentile("rep", 99.9)).c_str(),
-        TestSuite::usToString(global_lat.getPercentile("rep", 99.99)).c_str());
+    TestSuite::_msg("%15s%10s%10s%10s%10s%10s\n",
+                    "replication",
+                    TestSuite::usToString(global_lat.getPercentile("rep", 50)).c_str(),
+                    TestSuite::usToString(global_lat.getPercentile("rep", 95)).c_str(),
+                    TestSuite::usToString(global_lat.getPercentile("rep", 99)).c_str(),
+                    TestSuite::usToString(global_lat.getPercentile("rep", 99.9)).c_str(),
+                    TestSuite::usToString(global_lat.getPercentile("rep", 99.99)).c_str());
     _msg("-----\n");
 
     stuff.raft_instance_->shutdown();
@@ -574,15 +555,7 @@ bench_config parse_config(int argc, char** argv) {
         exit(0);
     }
 
-    bench_config ret(srv_id,
-                     my_endpoint,
-                     duration,
-                     complexity,
-                     parallel,
-                     iops,
-                     num_threads,
-                     payload_size,
-                     workdir);
+    bench_config ret(srv_id, my_endpoint, duration, complexity, parallel, iops, num_threads, payload_size, workdir);
 
     iarg++;
     for (int ii = iarg; ii < argc; ++ii) {

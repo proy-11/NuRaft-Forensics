@@ -4,8 +4,7 @@
 #include <string>
 
 #if __WORDSIZE == 32
-static void
-replace_all(std::string& s, const std::string& search, const std::string& target) {
+static void replace_all(std::string& s, const std::string& search, const std::string& target) {
     size_t index = 0;
     while (true) {
         index = s.find(search, index);

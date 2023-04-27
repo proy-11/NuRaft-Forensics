@@ -27,7 +27,7 @@ limitations under the License.
 namespace nuraft {
 
 class delayed_task_scheduler {
-__interface_body__(delayed_task_scheduler);
+    __interface_body__(delayed_task_scheduler);
 
 public:
     virtual void schedule(ptr<delayed_task>& task, int32 milliseconds) = 0;
@@ -41,6 +41,6 @@ private:
     virtual void cancel_impl(ptr<delayed_task>& task) = 0;
 };
 
-}
+} // namespace nuraft
 
 #endif //_DELAYED_TASK_SCHEDULER_HXX_

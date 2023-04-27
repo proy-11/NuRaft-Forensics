@@ -85,8 +85,7 @@ void ArgumentParser::parse_args(int argc, const char** argv) {
             }
         } else {
             if (!waiting) {
-                std::fprintf(
-                    stderr, "Argument \"%s\" has no correspondence\n", argument.c_str());
+                std::fprintf(stderr, "Argument \"%s\" has no correspondence\n", argument.c_str());
                 exit(_ERR_FLAG_DOUBLE_SET);
             }
             waiting = false;
@@ -113,10 +112,8 @@ void ArgumentParser::print_help(const char* prog) {
     std::printf(format, "-h", "--help", "Print helpers");
     for (auto& alias: helpers) {
         auto alias_str = std::string("-") + std::string(1, alias.first);
-        std::printf(format,
-                    alias_str.c_str(),
-                    (std::string("--") + aliases[alias.first]).c_str(),
-                    alias.second.c_str());
+        std::printf(
+            format, alias_str.c_str(), (std::string("--") + aliases[alias.first]).c_str(), alias.second.c_str());
     }
     std::printf("\n");
 }

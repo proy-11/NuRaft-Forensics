@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
+
 # find_package(Boost 1.74.0 COMPONENTS asio filesystem)
 project(NuRaft VERSION 1.0.0 LANGUAGES CXX)
 
@@ -9,31 +10,31 @@ set(CMAKE_USE_PTHREADS_INIT 1)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 
 # === Build type (default: RelWithDebInfo, O2) ===========
-if (NOT CMAKE_BUILD_TYPE)
+if(NOT CMAKE_BUILD_TYPE)
     set(DEFAULT_BUILD_TYPE "RelWithDebInfo")
-    #set(DEFAULT_BUILD_TYPE "Debug")
 
+    # set(DEFAULT_BUILD_TYPE "Debug")
     set(BUILD_TYPE_OPTIONS
         "Choose the type of build, "
         "options are: Debug Release RelWithDebInfo MinSizeRel.")
     set(CMAKE_BUILD_TYPE ${DEFAULT_BUILD_TYPE}
         CACHE ${BUILD_TYPE_OPTIONS} FORCE)
     message(STATUS "Build type is not given, use default.")
-endif ()
+endif()
+
 message(STATUS "Build type: " ${CMAKE_BUILD_TYPE})
 message(STATUS "Build Install Prefix : " ${CMAKE_INSTALL_PREFIX})
 
 set(BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
-if (CODE_COVERAGE GREATER 0)
+if(CODE_COVERAGE GREATER 0)
     set(CMAKE_BUILD_TYPE "Debug")
     include(cmake/CodeCoverage.cmake)
     message(STATUS "---- CODE COVERAGE DETECTION MODE ----")
 endif()
 
-
 # === Find ASIO ===
-if (BOOST_INCLUDE_PATH AND BOOST_LIBRARY_PATH)
+if(BOOST_INCLUDE_PATH AND BOOST_LIBRARY_PATH)
     # If Boost path (both include and library) is given,
     # use Boost's ASIO.
     message(STATUS "Boost include path: " ${BOOST_INCLUDE_PATH})
@@ -45,48 +46,44 @@ if (BOOST_INCLUDE_PATH AND BOOST_LIBRARY_PATH)
     set(LIBBOOST_SYSTEM "${BOOST_LIBRARY_PATH}/libboost_system.a")
 
     include_directories(BEFORE ./)
-else ()
+else()
     # If not, ASIO standalone mode.
     FIND_PATH(ASIO_INCLUDE_DIR
-              NAME asio.hpp
-              HINTS ${PROJECT_SOURCE_DIR}/asio/asio/include
-                    $ENV{HOME}/local/include
-                    /opt/local/include
-                    /usr/local/include
-                    /usr/include)
+        NAME asio.hpp
+        HINTS ${PROJECT_SOURCE_DIR}/asio/asio/include
+        $ENV{HOME}/local/include
+        /opt/local/include
+        /usr/local/include
+        /usr/include)
 
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DASIO_STANDALONE -lboost_system")
+endif()
 
-endif ()
-
-if (NOT ASIO_INCLUDE_DIR)
+if(NOT ASIO_INCLUDE_DIR)
     message(FATAL_ERROR "Can't find ASIO header files")
-else ()
+else()
     message(STATUS "ASIO include path: " ${ASIO_INCLUDE_DIR})
-endif ()
-
+endif()
 
 # FIND_PATH(
-#         LIBCRYPTOPP_INCLUDE_DIR
-#         NAME cryptopp
-#         HINTS $ENV{HOME}/local/include
-#             /opt/local/include
-#             /usr/local/include/cryptopp
-#             /usr/include
-#         PATH_SUFFIXES cryptopp
-#         )
+# LIBCRYPTOPP_INCLUDE_DIR
+# NAME cryptopp
+# HINTS $ENV{HOME}/local/include
+# /opt/local/include
+# /usr/local/include/cryptopp
+# /usr/include
+# PATH_SUFFIXES cryptopp
+# )
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
 # message(STATUS "Found cryptopp: ${LIBCRYPTOPP_INCLUDE_DIR}/cryptopp")
 # set(LIBCRYPTOPP_INCLUDE_DIRS ${LIBCRYPTOPP_INCLUDE_DIR} )
 # set(LIBCRYPTOPP_LIBRARIES ${LIBCRYPTOPP_LIBRARY} )
-
-
 FIND_PATH(BOOST_INCLUDE_DIR
-        NAME boost
-        HINTS $ENV{HOME}/local/include
-            /opt/local/include
-            /usr/local/include
-            /usr/include)
+    NAME boost
+    HINTS $ENV{HOME}/local/include
+    /opt/local/include
+    /usr/local/include
+    /usr/include)
 
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lb")
 message(STATUS "Found boost: ${BOOST_INCLUDE_DIR}/boost")
@@ -94,6 +91,7 @@ message(STATUS "Found boost: ${BOOST_INCLUDE_DIR}/boost")
 # === Includes ===
 include_directories(BEFORE ./)
 include_directories(BEFORE ${ASIO_INCLUDE_DIR})
+
 # include_directories(BEFORE ${LIBCRYPTOPP_INCLUDE_DIR})
 include_directories(BEFORE ${BOOST_INCLUDE_DIR})
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/include)
@@ -104,49 +102,50 @@ include_directories(BEFORE ${PROJECT_SOURCE_DIR}/examples/echo)
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/src)
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/tests)
 include_directories(BEFORE ${PROJECT_SOURCE_DIR}/tests/unit)
-if (DEPS_PREFIX)
+
+if(DEPS_PREFIX)
     message(STATUS "deps prefix: " ${DEPS_PREFIX})
     include_directories(AFTER ${DEPS_PREFIX}/include)
 else()
     message(STATUS "deps prefix is not given")
 endif()
 
-
 # === Compiler flags ===
-if (NOT WIN32)
+if(NOT WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-pessimizing-move")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
-    if (APPLE)
+
+    if(APPLE)
         include_directories(BEFORE /opt/homebrew/opt/openssl@3/include)
         link_directories(/opt/homebrew/opt/openssl@3/lib)
     else()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
-    endif ()
+    endif()
 
-else ()
+else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd5045 /wd4571 /wd4774 /wd4820 /wd5039 /wd4626 /wd4625 /wd5026 /wd5027 /wd4623 /wd4996 /wd4530 /wd4267 /wd4244 /W3")
     message(STATUS "---- WIN32 ----")
     set(DISABLE_SSL 1)
-endif ()
+endif()
 
 # === Disable SSL ===
-if (DISABLE_SSL GREATER 0)
+if(DISABLE_SSL GREATER 0)
     add_definitions(-DSSL_LIBRARY_NOT_FOUND=1)
     message(STATUS "---- DISABLED SSL ----")
-endif ()
+endif()
 
 # === OpenSSL libraries ===
-if (NOT (DISABLE_SSL GREATER 0))
-    if (OPENSSL_LIBRARY_PATH AND OPENSSL_INCLUDE_PATH)
+if(NOT(DISABLE_SSL GREATER 0))
+    if(OPENSSL_LIBRARY_PATH AND OPENSSL_INCLUDE_PATH)
         message(STATUS "Pre-defined SSL library path: ${OPENSSL_LIBRARY_PATH}/libssl.a")
         message(STATUS "Pre-defined SSL include path: ${OPENSSL_INCLUDE_PATH}")
         include_directories(BEFORE ${OPENSSL_INCLUDE_PATH})
         set(LIBSSL ${OPENSSL_LIBRARY_PATH}/libssl.a)
         set(LIBCRYPTO ${OPENSSL_LIBRARY_PATH}/libcrypto.a)
-    else ()
+    else()
         set(LIB_PATH_HINT
             /usr/local/lib
             /usr/local/lib64
@@ -162,39 +161,39 @@ if (NOT (DISABLE_SSL GREATER 0))
             /opt/csw
             /opt)
         find_path(OPENSSL_LIBRARY_PATH
-                  NAMES libssl.a
-                  PATHS ${PROJECT_SOURCE_DIR}
-                        ${DEPS_PREFIX}/lib
-                        ${DEPS_PREFIX}/lib64
-                        /usr/local/opt/openssl/lib
-                        /opt/homebrew/opt/openssl@3/lib
-                        ${LIB_PATH_HINT})
-        if (NOT OPENSSL_LIBRARY_PATH)
+            NAMES libssl.a
+            PATHS ${PROJECT_SOURCE_DIR}
+            ${DEPS_PREFIX}/lib
+            ${DEPS_PREFIX}/lib64
+            /usr/local/opt/openssl/lib
+            /opt/homebrew/opt/openssl@3/lib
+            ${LIB_PATH_HINT})
+
+        if(NOT OPENSSL_LIBRARY_PATH)
             message(STATUS "Use system's side OpenSSL library")
             set(LIBSSL ssl)
             set(LIBCRYPTO crypto)
-        else ()
+        else()
             message(STATUS "Open SSL library path: ${OPENSSL_LIBRARY_PATH}/libssl.a")
             set(LIBSSL ${OPENSSL_LIBRARY_PATH}/libssl.a)
             set(LIBCRYPTO ${OPENSSL_LIBRARY_PATH}/libcrypto.a)
-        endif ()
-    endif ()
+        endif()
+    endif()
 endif()
 
-
 # === Compiler options ===
-if (ADDRESS_SANITIZER GREATER 0)
+if(ADDRESS_SANITIZER GREATER 0)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fuse-ld=gold")
     message(STATUS "---- ADDRESS SANITIZER IS ON ----")
 endif()
 
-if (THREAD_SANITIZER GREATER 0)
+if(THREAD_SANITIZER GREATER 0)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread -fuse-ld=gold")
     add_definitions(-DSUPPRESS_TSAN_FALSE_ALARMS=1)
     message(STATUS "---- THREAD SANITIZER IS ON ----")
 endif()
 
-if (CODE_COVERAGE GREATER 0)
+if(CODE_COVERAGE GREATER 0)
     APPEND_COVERAGE_COMPILER_FLAGS()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-inline")
     set(COVERAGE_EXCLUDES
@@ -205,22 +204,23 @@ if (CODE_COVERAGE GREATER 0)
     )
 endif()
 
-if ( (TESTSUITE_NO_COLOR GREATER 0) OR (WIN32) )
+if((TESTSUITE_NO_COLOR GREATER 0) OR(WIN32))
     add_definitions(-DTESTSUITE_NO_COLOR=1)
     add_definitions(-DLOGGER_NO_COLOR=1)
     message(STATUS "---- NO ANSI COLOR ----")
 endif()
 
-if (ENABLE_RAFT_STATS GREATER 0)
+if(ENABLE_RAFT_STATS GREATER 0)
     add_definitions(-DENABLE_RAFT_STATS=1)
     message(STATUS "---- ENABLED RAFT STATS ----")
 endif()
 
 # === Other shared libraries ===
-if (NOT WIN32)
+if(NOT WIN32)
     set(LIBDL dl)
     set(LIBZ z)
 endif()
+
 set(LIBRARIES
     ${LIBSSL}
     ${LIBCRYPTO}
@@ -229,18 +229,18 @@ set(LIBRARIES
     ${LIBDL}
     ${LIBZ})
 
-
 # === Paths ===
 set(ROOT_SRC ${PROJECT_SOURCE_DIR}/src)
 set(EXAMPLES_SRC ${PROJECT_SOURCE_DIR}/examples)
 
 # === Copy script files ===
 file(COPY ${PROJECT_SOURCE_DIR}/scripts/test/runtests.sh
-     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 # === Generate dummy self-signed cert and key for testing ===
 add_custom_target(build_ssl_key)
-if (NOT (DISABLE_SSL GREATER 0))
+
+if(NOT(DISABLE_SSL GREATER 0))
     add_custom_command(
         TARGET build_ssl_key
         PRE_BUILD
@@ -256,7 +256,7 @@ if (NOT (DISABLE_SSL GREATER 0))
         -out ${CMAKE_CURRENT_BINARY_DIR}/cert.pem
         2> /dev/null
     )
-endif ()
+endif()
 
 # === Source files ===
 set(RAFT_CORE
@@ -285,7 +285,7 @@ set(RAFT_CORE
     ${ROOT_SRC}/snapshot_sync_req.cxx
     ${ROOT_SRC}/srv_config.cxx
     ${ROOT_SRC}/stat_mgr.cxx
-    )
+)
 add_library(RAFT_CORE_OBJ OBJECT ${RAFT_CORE})
 
 set(STATIC_LIB_SRC
@@ -299,15 +299,17 @@ set_target_properties(static_lib PROPERTIES OUTPUT_NAME ${LIBRARY_NAME} CLEAN_DI
 
 add_library(shared_lib SHARED ${STATIC_LIB_SRC})
 set_target_properties(shared_lib PROPERTIES OUTPUT_NAME ${LIBRARY_NAME} CLEAN_DIRECT_OUTPUT 1)
-if (APPLE)
-    target_link_libraries(shared_lib ${LIBRARIES})
-endif ()
 
-if (WIN32)
+if(APPLE)
+    target_link_libraries(shared_lib ${LIBRARIES})
+endif()
+
+if(WIN32)
     set(LIBRARY_OUTPUT_NAME "${LIBRARY_NAME}.lib")
-else ()
+else()
     set(LIBRARY_OUTPUT_NAME "lib${LIBRARY_NAME}.a")
-endif ()
+endif()
+
 message(STATUS "Output library file name: ${LIBRARY_OUTPUT_NAME}")
 
 # === Examples ===
@@ -316,8 +318,7 @@ add_subdirectory("${PROJECT_SOURCE_DIR}/examples")
 # === Tests ===
 add_subdirectory("${PROJECT_SOURCE_DIR}/tests")
 
-
-if (CODE_COVERAGE GREATER 0)
+if(CODE_COVERAGE GREATER 0)
     set(CODE_COVERAGE_DEPS
         raft_server_test
         failure_test
@@ -337,10 +338,7 @@ if (CODE_COVERAGE GREATER 0)
     )
 endif()
 
-
 # === Install Targets ===
 install(TARGETS static_lib ARCHIVE DESTINATION lib)
 install(TARGETS shared_lib LIBRARY DESTINATION lib)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/libnuraft DESTINATION include)
-
-

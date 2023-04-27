@@ -32,6 +32,6 @@ public:
     virtual ptr<rpc_client> create_client(const std::string& endpoint) = 0;
 };
 
-}
+} // namespace nuraft
 
 #endif
