@@ -28,7 +28,7 @@ Latency
 <img src="figures/raft_latency.png" width="700">
 
 | Percentile   | Latency (us) |
-|--------------|--------------|
+| ------------ | ------------ |
 | 50%-tile     | 187          |
 | 99%-tile     | 478          |
 | 99.9%-tile   | 649          |

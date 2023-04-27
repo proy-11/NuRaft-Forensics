@@ -87,5 +87,4 @@ private:
     ptr<raft_server> raft_instance_;
 };
 
-}
-
+} // namespace nuraft

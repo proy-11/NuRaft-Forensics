@@ -35,8 +35,7 @@ public:
         : cancelled_(false)
         , impl_ctx_(nilptr)
         , impl_ctx_del_()
-        , type_(type)
-        {}
+        , type_(type) {}
 
     virtual ~delayed_task() {
         if (impl_ctx_ != nilptr) {
@@ -55,26 +54,18 @@ public:
         }
     }
 
-    void cancel() {
-        cancelled_.store(true);
-    }
+    void cancel() { cancelled_.store(true); }
 
-    void reset() {
-        cancelled_.store(false);
-    }
+    void reset() { cancelled_.store(false); }
 
-    void* get_impl_context() const {
-        return impl_ctx_;
-    }
+    void* get_impl_context() const { return impl_ctx_; }
 
     void set_impl_context(void* ctx, std::function<void(void*)> del) {
         impl_ctx_ = ctx;
         impl_ctx_del_ = del;
     }
 
-    int32 get_type() const {
-        return type_;
-    }
+    int32 get_type() const { return type_; }
 
 protected:
     virtual void exec() = 0;
@@ -86,6 +77,6 @@ private:
     int32 type_;
 };
 
-}
+} // namespace nuraft
 
 #endif

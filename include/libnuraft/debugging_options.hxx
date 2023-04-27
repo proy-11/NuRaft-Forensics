@@ -1,16 +1,15 @@
 #pragma once
 
 #include <atomic>
-#include <cstdlib>
 #include <cstddef>
+#include <cstdlib>
 
 namespace nuraft {
 
 struct debugging_options {
     debugging_options()
         : disable_reconn_backoff_(false)
-        , handle_cli_req_sleep_us_(0)
-        {}
+        , handle_cli_req_sleep_us_(0) {}
 
     static debugging_options& get_instance() {
         static debugging_options opt;
@@ -31,4 +30,4 @@ struct debugging_options {
     std::atomic<size_t> handle_cli_req_sleep_us_;
 };
 
-}
+} // namespace nuraft

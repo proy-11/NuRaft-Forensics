@@ -24,8 +24,7 @@ limitations under the License.
 namespace nuraft {
 
 inmem_log_store::inmem_log_store()
-    : start_idx_(1)
-{
+    : start_idx_(1) {
     // Dummy entry for index 0.
     ptr<buffer> buf = buffer::alloc(sz_ulong);
     logs_[0] = cs_new<log_entry>(0, buf);
@@ -34,10 +33,7 @@ inmem_log_store::inmem_log_store()
 inmem_log_store::~inmem_log_store() {}
 
 ptr<log_entry> inmem_log_store::make_clone(const ptr<log_entry>& entry) {
-    ptr<log_entry> clone = cs_new<log_entry>
-                           ( entry->get_term(),
-                             buffer::clone( entry->get_buf() ),
-                             entry->get_val_type() );
+    ptr<log_entry> clone = cs_new<log_entry>(entry->get_term(), buffer::clone(entry->get_buf()), entry->get_val_type());
     return clone;
 }
 
@@ -47,14 +43,12 @@ ulong inmem_log_store::next_slot() const {
     return start_idx_ + logs_.size() - 1;
 }
 
-ulong inmem_log_store::start_index() const {
-    return start_idx_;
-}
+ulong inmem_log_store::start_index() const { return start_idx_; }
 
 ptr<log_entry> inmem_log_store::last_entry() const {
     ulong next_idx = next_slot();
     std::lock_guard<std::mutex> l(logs_lock_);
-    auto entry = logs_.find( next_idx - 1 );
+    auto entry = logs_.find(next_idx - 1);
     if (entry == logs_.end()) {
         entry = logs_.find(0);
     }
@@ -83,17 +77,15 @@ void inmem_log_store::write_at(ulong index, ptr<log_entry>& entry) {
     logs_[index] = clone;
 }
 
-ptr< std::vector< ptr<log_entry> > >
-    inmem_log_store::log_entries(ulong start, ulong end)
-{
-    ptr< std::vector< ptr<log_entry> > > ret =
-        cs_new< std::vector< ptr<log_entry> > >();
+ptr<std::vector<ptr<log_entry>>> inmem_log_store::log_entries(ulong start, ulong end) {
+    ptr<std::vector<ptr<log_entry>>> ret = cs_new<std::vector<ptr<log_entry>>>();
 
     ret->resize(end - start);
-    ulong cc=0;
-    for (ulong ii = start ; ii < end ; ++ii) {
+    ulong cc = 0;
+    for (ulong ii = start; ii < end; ++ii) {
         ptr<log_entry> src = nullptr;
-        {   std::lock_guard<std::mutex> l(logs_lock_);
+        {
+            std::lock_guard<std::mutex> l(logs_lock_);
             auto entry = logs_.find(ii);
             if (entry == logs_.end()) {
                 entry = logs_.find(0);
@@ -107,21 +99,18 @@ ptr< std::vector< ptr<log_entry> > >
 }
 
 ptr<std::vector<ptr<log_entry>>>
-    inmem_log_store::log_entries_ext(ulong start,
-                                     ulong end,
-                                     int64 batch_size_hint_in_bytes)
-{
-    ptr< std::vector< ptr<log_entry> > > ret =
-        cs_new< std::vector< ptr<log_entry> > >();
+inmem_log_store::log_entries_ext(ulong start, ulong end, int64 batch_size_hint_in_bytes) {
+    ptr<std::vector<ptr<log_entry>>> ret = cs_new<std::vector<ptr<log_entry>>>();
 
     if (batch_size_hint_in_bytes < 0) {
         return ret;
     }
 
     size_t accum_size = 0;
-    for (ulong ii = start ; ii < end ; ++ii) {
+    for (ulong ii = start; ii < end; ++ii) {
         ptr<log_entry> src = nullptr;
-        {   std::lock_guard<std::mutex> l(logs_lock_);
+        {
+            std::lock_guard<std::mutex> l(logs_lock_);
             auto entry = logs_.find(ii);
             if (entry == logs_.end()) {
                 entry = logs_.find(0);
@@ -131,15 +120,15 @@ ptr<std::vector<ptr<log_entry>>>
         }
         ret->push_back(make_clone(src));
         accum_size += src->get_buf().size();
-        if (batch_size_hint_in_bytes &&
-            accum_size >= (ulong)batch_size_hint_in_bytes) break;
+        if (batch_size_hint_in_bytes && accum_size >= (ulong)batch_size_hint_in_bytes) break;
     }
     return ret;
 }
 
 ptr<log_entry> inmem_log_store::entry_at(ulong index) {
     ptr<log_entry> src = nullptr;
-    {   std::lock_guard<std::mutex> l(logs_lock_);
+    {
+        std::lock_guard<std::mutex> l(logs_lock_);
         auto entry = logs_.find(index);
         if (entry == logs_.end()) {
             entry = logs_.find(0);
@@ -151,7 +140,8 @@ ptr<log_entry> inmem_log_store::entry_at(ulong index) {
 
 ulong inmem_log_store::term_at(ulong index) {
     ulong term = 0;
-    {   std::lock_guard<std::mutex> l(logs_lock_);
+    {
+        std::lock_guard<std::mutex> l(logs_lock_);
         auto entry = logs_.find(index);
         if (entry == logs_.end()) {
             entry = logs_.find(0);
@@ -162,24 +152,22 @@ ulong inmem_log_store::term_at(ulong index) {
 }
 
 ptr<buffer> inmem_log_store::pack(ulong index, int32 cnt) {
-    std::vector< ptr<buffer> > logs;
+    std::vector<ptr<buffer>> logs;
 
     size_t size_total = 0;
-    for (ulong ii=index; ii<index+cnt; ++ii) {
+    for (ulong ii = index; ii < index + cnt; ++ii) {
         ptr<log_entry> le = nullptr;
-        {   std::lock_guard<std::mutex> l(logs_lock_);
+        {
+            std::lock_guard<std::mutex> l(logs_lock_);
             le = logs_[ii];
         }
         assert(le.get());
         ptr<buffer> buf = le->serialize();
         size_total += buf->size();
-        logs.push_back( buf );
+        logs.push_back(buf);
     }
 
-    ptr<buffer> buf_out = buffer::alloc
-                          ( sizeof(int32) +
-                            cnt * sizeof(int32) +
-                            size_total );
+    ptr<buffer> buf_out = buffer::alloc(sizeof(int32) + cnt * sizeof(int32) + size_total);
     buf_out->pos(0);
     buf_out->put((int32)cnt);
 
@@ -195,7 +183,7 @@ void inmem_log_store::apply_pack(ulong index, buffer& pack) {
     pack.pos(0);
     int32 num_logs = pack.get_int();
 
-    for (int32 ii=0; ii<num_logs; ++ii) {
+    for (int32 ii = 0; ii < num_logs; ++ii) {
         ulong cur_idx = index + ii;
         int32 buf_size = pack.get_int();
 
@@ -203,12 +191,14 @@ void inmem_log_store::apply_pack(ulong index, buffer& pack) {
         pack.get(buf_local);
 
         ptr<log_entry> le = log_entry::deserialize(*buf_local);
-        {   std::lock_guard<std::mutex> l(logs_lock_);
+        {
+            std::lock_guard<std::mutex> l(logs_lock_);
             logs_[cur_idx] = le;
         }
     }
 
-    {   std::lock_guard<std::mutex> l(logs_lock_);
+    {
+        std::lock_guard<std::mutex> l(logs_lock_);
         auto entry = logs_.upper_bound(0);
         if (entry != logs_.end()) {
             start_idx_ = entry->first;
@@ -238,5 +228,4 @@ bool inmem_log_store::compact(ulong last_log_index) {
 
 void inmem_log_store::close() {}
 
-}
-
+} // namespace nuraft

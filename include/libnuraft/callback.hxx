@@ -159,15 +159,11 @@ public:
     };
 
     struct Param {
-        Param(int32_t my_id = -1,
-              int32_t leader_id = -1,
-              int32_t peer_id = -1,
-              void* _ctx = nullptr)
+        Param(int32_t my_id = -1, int32_t leader_id = -1, int32_t peer_id = -1, void* _ctx = nullptr)
             : myId(my_id)
             , leaderId(leader_id)
             , peerId(peer_id)
-            , ctx(_ctx)
-            {}
+            , ctx(_ctx) {}
         int32_t myId;
         int32_t leaderId;
         int32_t peerId;
@@ -180,7 +176,8 @@ public:
     };
 
     struct OutOfLogRangeWarningArgs {
-        OutOfLogRangeWarningArgs(uint64_t x = 0) : startIdxOfLeader(x) {}
+        OutOfLogRangeWarningArgs(uint64_t x = 0)
+            : startIdxOfLeader(x) {}
         uint64_t startIdxOfLeader;
     };
 
@@ -190,8 +187,11 @@ public:
                        uint32_t p = 0,
                        int32_t srv_id = -1,
                        bool is_leader = false)
-            : sessionId(id), address(addr), port(p)
-            , srvId(srv_id), isLeader(is_leader) {}
+            : sessionId(id)
+            , address(addr)
+            , port(p)
+            , srvId(srv_id)
+            , isLeader(is_leader) {}
         /**
          * ID of session.
          */
@@ -220,9 +220,11 @@ public:
 
     using func_type = std::function<ReturnCode(Type, Param*)>;
 
-    cb_func() : func(nullptr) {}
+    cb_func()
+        : func(nullptr) {}
 
-    cb_func(func_type _func) : func(_func) {}
+    cb_func(func_type _func)
+        : func(_func) {}
 
     ReturnCode call(Type type, Param* param) {
         if (func) {
@@ -235,6 +237,6 @@ private:
     func_type func;
 };
 
-}
+} // namespace nuraft
 
 #endif //_CALLBACK_H_

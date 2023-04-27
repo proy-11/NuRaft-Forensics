@@ -28,27 +28,22 @@ namespace nuraft {
 
 class FakeClient;
 class FakeNetworkBase;
-class FakeNetwork
-    : public rpc_client_factory
-    , public rpc_listener
-    , public std::enable_shared_from_this<FakeNetwork>
-{
+class FakeNetwork : public rpc_client_factory, public rpc_listener, public std::enable_shared_from_this<FakeNetwork> {
 public:
-    FakeNetwork(const std::string& _endpoint,
-                ptr<FakeNetworkBase>& _base);
+    FakeNetwork(const std::string& _endpoint, ptr<FakeNetworkBase>& _base);
 
     struct ReqPkg {
         ReqPkg(ptr<req_msg>& _req, rpc_handler& _when_done)
-            : req(_req), whenDone(_when_done)
-            {}
+            : req(_req)
+            , whenDone(_when_done) {}
         ptr<req_msg> req;
         rpc_handler whenDone;
     };
 
     struct RespPkg {
         RespPkg(ptr<resp_msg>& _resp, rpc_handler& _when_done)
-            : resp(_resp), whenDone(_when_done)
-            {}
+            : resp(_resp)
+            , whenDone(_when_done) {}
         ptr<resp_msg> resp;
         rpc_handler whenDone;
     };
@@ -67,18 +62,15 @@ public:
 
     ptr<FakeClient> findClient(const std::string& endpoint);
 
-    bool delieverReqTo(const std::string& endpoint,
-                       bool random_order = false);
+    bool delieverReqTo(const std::string& endpoint, bool random_order = false);
 
     void delieverAllTo(const std::string& endpoint);
 
-    bool makeReqFail(const std::string& endpoint,
-                     bool random_order = false);
+    bool makeReqFail(const std::string& endpoint, bool random_order = false);
 
     void makeReqFailAll(const std::string& endpoint);
 
-    bool handleRespFrom(const std::string& endpoint,
-                        bool random_order = false);
+    bool handleRespFrom(const std::string& endpoint, bool random_order = false);
 
     void handleAllFrom(const std::string& endpoint);
 
@@ -88,7 +80,7 @@ public:
 
     void goesOffline() { online = false; }
 
-    void goesOnline() { online =  true; }
+    void goesOnline() { online = true; }
 
     bool isOnline() const { return online; }
 
@@ -103,9 +95,9 @@ private:
     // NOTE: We don't use `unordered_map` as the order of traversal
     //       will be different according to platforms. We should make
     //       the test deterministic.
-    std::map< std::string, ptr<FakeClient> > clients;
+    std::map<std::string, ptr<FakeClient>> clients;
     std::mutex clientsLock;
-    std::list< ptr<FakeClient> > staleClients;
+    std::list<ptr<FakeClient>> staleClients;
     bool online;
 };
 
@@ -134,9 +126,9 @@ private:
 
 class FakeClient : public rpc_client {
     friend class FakeNetwork;
+
 public:
-    FakeClient(FakeNetwork* mother,
-               FakeNetwork* dst);
+    FakeClient(FakeNetwork* mother, FakeNetwork* dst);
 
     ~FakeClient();
 
@@ -160,8 +152,7 @@ private:
 
 class FakeTimer : public delayed_task_scheduler {
 public:
-    FakeTimer(const std::string& endpoint,
-              SimpleLogger* logger = nullptr);
+    FakeTimer(const std::string& endpoint, SimpleLogger* logger = nullptr);
 
     void schedule(ptr<delayed_task>& task, int32 milliseconds);
 
@@ -178,10 +169,9 @@ private:
 
     std::mutex tasksLock;
 
-    std::list< ptr<delayed_task> > tasks;
+    std::list<ptr<delayed_task>> tasks;
 
     SimpleLogger* myLog;
 };
 
-}  // namespace nuraft;
-
+} // namespace nuraft

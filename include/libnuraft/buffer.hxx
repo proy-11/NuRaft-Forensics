@@ -254,8 +254,8 @@ public:
     void put_raw(const byte* ba, size_t len);
 };
 
-std::ostream& operator << (std::ostream& out, buffer& buf);
-std::istream& operator >> (std::istream& in, buffer& buf);
+std::ostream& operator<<(std::ostream& out, buffer& buf);
+std::istream& operator>>(std::istream& in, buffer& buf);
 
-}
+} // namespace nuraft
 #endif //_BUFFER_HXX_

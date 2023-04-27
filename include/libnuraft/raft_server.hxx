@@ -25,8 +25,8 @@ limitations under the License.
 #include "callback.hxx"
 #include "internal_timer.hxx"
 #include "log_store.hxx"
-#include "snapshot_sync_req.hxx"
 #include "rpc_cli.hxx"
+#include "snapshot_sync_req.hxx"
 #include "srv_config.hxx"
 #include "srv_role.hxx"
 #include "srv_state.hxx"
@@ -60,12 +60,12 @@ struct raft_params;
 struct snapshot_sync_ctx;
 class raft_server : public std::enable_shared_from_this<raft_server> {
     friend class nuraft_global_mgr;
+
 public:
     struct init_options {
         init_options()
             : skip_initial_election_timeout_(false)
-            , start_server_in_constructor_(true)
-            {}
+            , start_server_in_constructor_(true) {}
 
         /**
          * If `true`, the election timer will not be initiated
@@ -98,18 +98,15 @@ public:
             , leadership_limit_(20)
             , reconnect_limit_(50)
             , leave_limit_(5)
-            , vote_limit_(5)
-            {}
+            , vote_limit_(5) {}
 
-        limits(const limits& src) {
-            *this = src;
-        }
+        limits(const limits& src) { *this = src; }
 
         limits& operator=(const limits& src) {
             pre_vote_rejection_limit_ = src.pre_vote_rejection_limit_.load();
             warning_limit_ = src.warning_limit_.load();
             response_limit_ = src.response_limit_.load();
-            leadership_limit_  = src.leadership_limit_.load();
+            leadership_limit_ = src.leadership_limit_.load();
             reconnect_limit_ = src.reconnect_limit_.load();
             leave_limit_ = src.leave_limit_.load();
             vote_limit_ = src.vote_limit_.load();
@@ -207,8 +204,7 @@ public:
      * @param srv Configuration of server to add.
      * @return `get_accepted()` will be true on success.
      */
-    ptr< cmd_result< ptr<buffer> > >
-        add_srv(const srv_config& srv);
+    ptr<cmd_result<ptr<buffer>>> add_srv(const srv_config& srv);
 
     /**
      * Remove a server from the current cluster.
@@ -218,8 +214,7 @@ public:
      * @param srv_id ID of server to remove.
      * @return `get_accepted()` will be true on success.
      */
-    ptr< cmd_result< ptr<buffer> > >
-        remove_srv(const int srv_id);
+    ptr<cmd_result<ptr<buffer>>> remove_srv(const int srv_id);
 
     /**
      * Append and replicate the given logs.
@@ -233,8 +228,7 @@ public:
      *     In async mode, this function will return immediately, and the
      *     commit results will be set to returned `cmd_result` instance later.
      */
-    ptr< cmd_result< ptr<buffer> > >
-        append_entries(const std::vector< ptr<buffer> >& logs);
+    ptr<cmd_result<ptr<buffer>>> append_entries(const std::vector<ptr<buffer>>& logs);
 
     /**
      * Update the priority of given server.
@@ -257,8 +251,7 @@ public:
      * @param srv_id ID of server to update priority.
      * @param new_priority New priority.
      */
-    void broadcast_priority_change(const int srv_id,
-                                   const int new_priority);
+    void broadcast_priority_change(const int srv_id, const int new_priority);
 
     /**
      * Yield current leadership and becomes a follower. Only a leader
@@ -282,8 +275,7 @@ public:
      *                     If `-1`, the successor will be chosen
      *                     automatically.
      */
-    void yield_leadership(bool immediate_yield = false,
-                          int successor_id = -1);
+    void yield_leadership(bool immediate_yield = false, int successor_id = -1);
 
     /**
      * Send a request to the current leader to yield its leadership,
@@ -320,16 +312,14 @@ public:
      *
      * @return Server ID.
      */
-    int32 get_id() const
-    { return id_; }
+    int32 get_id() const { return id_; }
 
     /**
      * Get the current term of this server.
      *
      * @return Term.
      */
-    ulong get_term() const
-    { return state_->get_term(); }
+    ulong get_term() const { return state_->get_term(); }
 
     /**
      * Get the term of given log index number.
@@ -337,48 +327,44 @@ public:
      * @param log_idx Log index number
      * @return Term of given log.
      */
-    ulong get_log_term(ulong log_idx) const
-    { return log_store_->term_at(log_idx); }
+    ulong get_log_term(ulong log_idx) const { return log_store_->term_at(log_idx); }
 
     /**
      * Get the term of the last log.
      *
      * @return Term of the last log.
      */
-    ulong get_last_log_term() const
-    { return log_store_->term_at(get_last_log_idx()); }
+    ulong get_last_log_term() const { return log_store_->term_at(get_last_log_idx()); }
 
     /**
      * Get the last log index number.
      *
      * @return Last log index number.
      */
-    ulong get_last_log_idx() const
-    { return log_store_->next_slot() - 1; }
+    ulong get_last_log_idx() const { return log_store_->next_slot() - 1; }
 
     /**
      * Get the last committed log index number of state machine.
      *
      * @return Last committed log index number of state machine.
      */
-    ulong get_committed_log_idx() const
-    { return sm_commit_index_.load(); }
+    ulong get_committed_log_idx() const { return sm_commit_index_.load(); }
 
     /**
      * Get the target log index number we are required to commit.
      *
      * @return Target committed log index number.
      */
-    ulong get_target_committed_log_idx() const
-    { return quick_commit_index_.load(); }
+    ulong get_target_committed_log_idx() const { return quick_commit_index_.load(); }
 
     /**
      * Get the leader's last committed log index number.
      *
      * @return The leader's last committed log index number.
      */
-    ulong get_leader_committed_log_idx() const
-    { return is_leader() ? get_committed_log_idx() : leader_commit_index_.load(); }
+    ulong get_leader_committed_log_idx() const {
+        return is_leader() ? get_committed_log_idx() : leader_commit_index_.load();
+    }
 
     /**
      * Calculate the log index to be committed
@@ -417,7 +403,7 @@ public:
      * @param srv_id Server ID.
      * @return Auxiliary context.
      */
-    std::string get_aux(int32 srv_id) const ;
+    std::string get_aux(int32 srv_id) const;
 
     /**
      * Get the ID of current leader.
@@ -428,8 +414,7 @@ public:
     int32 get_leader() const {
         // We should handle the case when `role_` is already
         // updated, but `leader_` value is stale.
-        if ( leader_ == id_ &&
-             role_ != srv_role::leader ) return -1;
+        if (leader_ == id_ && role_ != srv_role::leader) return -1;
         return leader_;
     }
 
@@ -439,8 +424,7 @@ public:
      * @return `true` if it is leader.
      */
     bool is_leader() const {
-        if ( leader_ == id_ &&
-             role_ == srv_role::leader ) return true;
+        if (leader_ == id_ && role_ == srv_role::leader) return true;
         return false;
     }
 
@@ -450,7 +434,7 @@ public:
      * @return `true` if live leader exists.
      */
     bool is_leader_alive() const {
-        if ( leader_ == -1 || !hb_alive_ ) return false;
+        if (leader_ == -1 || !hb_alive_) return false;
         return true;
     }
 
@@ -467,7 +451,7 @@ public:
      *
      * @param[out] configs_out Set of server configurations.
      */
-    void get_srv_config_all(std::vector< ptr<srv_config> >& configs_out) const;
+    void get_srv_config_all(std::vector<ptr<srv_config>>& configs_out) const;
 
     /**
      * Peer info structure.
@@ -476,8 +460,7 @@ public:
         peer_info()
             : id_(-1)
             , last_log_idx_(0)
-            , last_succ_resp_us_(0)
-            {}
+            , last_succ_resp_us_(0) {}
 
         /**
          * Peer ID.
@@ -575,8 +558,7 @@ public:
      * @return `true` on success.
      *         `false` if stat does not exist, or is not histogram type.
      */
-    static bool get_stat_histogram(const std::string& name,
-                                   std::map<double, uint64_t>& histogram_out);
+    static bool get_stat_histogram(const std::string& name, std::map<double, uint64_t>& histogram_out);
 
     /**
      * Reset given stat to zero.
@@ -603,9 +585,7 @@ public:
      * @param err_msg Will contain a message if error happens.
      * @return `true` on success.
      */
-    static bool apply_config_log_entry(ptr<log_entry>& le,
-                                       ptr<state_mgr>& s_mgr,
-                                       std::string& err_msg);
+    static bool apply_config_log_entry(ptr<log_entry>& le, ptr<state_mgr>& s_mgr, std::string& err_msg);
 
     /**
      * Get the current Raft limit values.
@@ -629,8 +609,7 @@ public:
      * @param param Parameters.
      * @return cb_func::ReturnCode.
      */
-    CbReturnCode invoke_callback(cb_func::Type type,
-                                 cb_func::Param* param);
+    CbReturnCode invoke_callback(cb_func::Type type, cb_func::Param* param);
 
     /**
      * Set a custom callback function for increasing term.
@@ -645,8 +624,9 @@ protected:
     struct pre_vote_status_t {
         pre_vote_status_t()
             : quorum_reject_count_(0)
-            , failure_count_(0)
-            { reset(0); }
+            , failure_count_(0) {
+            reset(0);
+        }
         void reset(ulong _term) {
             term_ = _term;
             done_ = false;
@@ -697,10 +677,8 @@ protected:
     ptr<resp_msg> handle_vote_req(req_msg& req);
     ptr<resp_msg> handle_cli_req_prelock(req_msg& req);
     ptr<resp_msg> handle_cli_req(req_msg& req);
-    ptr<resp_msg> handle_cli_req_callback(ptr<commit_ret_elem> elem,
-                                          ptr<resp_msg> resp);
-    ptr< cmd_result< ptr<buffer> > >
-        handle_cli_req_callback_async(ptr< cmd_result< ptr<buffer> > > async_res);
+    ptr<resp_msg> handle_cli_req_callback(ptr<commit_ret_elem> elem, ptr<resp_msg> resp);
+    ptr<cmd_result<ptr<buffer>>> handle_cli_req_callback_async(ptr<cmd_result<ptr<buffer>>> async_res);
 
     void drop_all_pending_commit_elems();
 
@@ -745,10 +723,7 @@ protected:
     void reset_srv_to_join();
     void reset_srv_to_leave();
     ptr<req_msg> create_append_entries_req(peer& p);
-    ptr<req_msg> create_sync_snapshot_req(peer& p,
-                                          ulong last_log_idx,
-                                          ulong term,
-                                          ulong commit_idx);
+    ptr<req_msg> create_sync_snapshot_req(peer& p, ulong last_log_idx, ulong term, ulong commit_idx);
     bool check_snapshot_timeout(ptr<peer> pp);
     void destroy_user_snp_ctx(ptr<snapshot_sync_ctx> sync_ctx);
     void clear_snapshot_sync_ctx(peer& pp);
@@ -771,9 +746,7 @@ protected:
     void invite_srv_to_join_cluster();
     void rm_srv_from_cluster(int32 srv_id);
     int get_snapshot_sync_block_size() const;
-    void on_snapshot_completed(ptr<snapshot>& s,
-                               bool result,
-                               ptr<std::exception>& err);
+    void on_snapshot_completed(ptr<snapshot>& s, bool result, ptr<std::exception>& err);
     void on_retryable_req_err(ptr<peer>& p, ptr<req_msg>& req);
     ulong term_for_log(ulong log_idx);
 
@@ -783,16 +756,12 @@ protected:
     void append_entries_in_bg();
     void append_entries_in_bg_exec();
 
-    void commit_app_log(ulong idx_to_commit,
-                        ptr<log_entry>& le,
-                        bool need_to_handle_commit_elem);
+    void commit_app_log(ulong idx_to_commit, ptr<log_entry>& le, bool need_to_handle_commit_elem);
     void commit_conf(ulong idx_to_commit, ptr<log_entry>& le);
 
-    ptr< cmd_result< ptr<buffer> > > send_msg_to_leader(ptr<req_msg>& req);
+    ptr<cmd_result<ptr<buffer>>> send_msg_to_leader(ptr<req_msg>& req);
 
-    void auto_fwd_release_rpc_cli(ptr<auto_fwd_pkg> cur_pkg,
-                                  ptr<rpc_client> rpc_cli);
-
+    void auto_fwd_release_rpc_cli(ptr<auto_fwd_pkg> cur_pkg, ptr<rpc_client> rpc_cli);
 
     void auto_fwd_resp_handler(ptr<cmd_result<ptr<buffer>>> presult,
                                ptr<auto_fwd_pkg> cur_pkg,
@@ -807,17 +776,11 @@ protected:
 
     ulong store_log_entry(ptr<log_entry>& entry, ulong index = 0);
 
-    ptr<resp_msg> handle_out_of_log_msg(req_msg& req,
-                                        ptr<custom_notification_msg> msg,
-                                        ptr<resp_msg> resp);
+    ptr<resp_msg> handle_out_of_log_msg(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
 
-    ptr<resp_msg> handle_leadership_takeover(req_msg& req,
-                                             ptr<custom_notification_msg> msg,
-                                             ptr<resp_msg> resp);
+    ptr<resp_msg> handle_leadership_takeover(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
 
-    ptr<resp_msg> handle_resignation_request(req_msg& req,
-                                             ptr<custom_notification_msg> msg,
-                                             ptr<resp_msg> resp);
+    ptr<resp_msg> handle_resignation_request(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
 
     void remove_peer_from_peers(const ptr<peer>& pp);
 
@@ -1294,6 +1257,6 @@ protected:
     std::atomic<ulong> vote_init_timer_term_;
 };
 
-} // namespace nuraft;
+} // namespace nuraft
 
 #endif //_RAFT_SERVER_HXX_

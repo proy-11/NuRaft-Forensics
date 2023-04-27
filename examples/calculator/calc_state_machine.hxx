@@ -33,18 +33,11 @@ class calc_state_machine : public state_machine {
 public:
     calc_state_machine()
         : cur_value_(0)
-        , last_committed_idx_(0)
-        {}
+        , last_committed_idx_(0) {}
 
     ~calc_state_machine() {}
 
-    enum op_type : int {
-        ADD = 0x0,
-        SUB = 0x1,
-        MUL = 0x2,
-        DIV = 0x3,
-        SET = 0x4
-    };
+    enum op_type : int { ADD = 0x0, SUB = 0x1, MUL = 0x2, DIV = 0x3, SET = 0x4 };
 
     struct op_payload {
         op_type type_;
@@ -81,19 +74,29 @@ public:
 
         int64_t prev_value = cur_value_;
         switch (payload.type_) {
-        case ADD:   prev_value += payload.oprnd_;   break;
-        case SUB:   prev_value -= payload.oprnd_;   break;
-        case MUL:   prev_value *= payload.oprnd_;   break;
-        case DIV:   prev_value /= payload.oprnd_;   break;
+        case ADD:
+            prev_value += payload.oprnd_;
+            break;
+        case SUB:
+            prev_value -= payload.oprnd_;
+            break;
+        case MUL:
+            prev_value *= payload.oprnd_;
+            break;
+        case DIV:
+            prev_value /= payload.oprnd_;
+            break;
         default:
-        case SET:   prev_value  = payload.oprnd_;   break;
+        case SET:
+            prev_value = payload.oprnd_;
+            break;
         }
         cur_value_ = prev_value;
 
         last_committed_idx_ = log_idx;
 
         // Return Raft log number as a return result.
-        ptr<buffer> ret = buffer::alloc( sizeof(log_idx) );
+        ptr<buffer> ret = buffer::alloc(sizeof(log_idx));
         buffer_serializer bs(ret);
         bs.put_u64(log_idx);
         return ret;
@@ -109,14 +112,10 @@ public:
         // as this example doesn't do anything on pre-commit.
     }
 
-    int read_logical_snp_obj(snapshot& s,
-                             void*& user_snp_ctx,
-                             ulong obj_id,
-                             ptr<buffer>& data_out,
-                             bool& is_last_obj)
-    {
+    int read_logical_snp_obj(snapshot& s, void*& user_snp_ctx, ulong obj_id, ptr<buffer>& data_out, bool& is_last_obj) {
         ptr<snapshot_ctx> ctx = nullptr;
-        {   std::lock_guard<std::mutex> ll(snapshots_lock_);
+        {
+            std::lock_guard<std::mutex> ll(snapshots_lock_);
             auto entry = snapshots_.find(s.get_last_log_idx());
             if (entry == snapshots_.end()) {
                 // Snapshot doesn't exist.
@@ -129,27 +128,22 @@ public:
 
         if (obj_id == 0) {
             // Object ID == 0: first object, put dummy data.
-            data_out = buffer::alloc( sizeof(int32) );
+            data_out = buffer::alloc(sizeof(int32));
             buffer_serializer bs(data_out);
             bs.put_i32(0);
             is_last_obj = false;
 
         } else {
             // Object ID > 0: second object, put actual value.
-            data_out = buffer::alloc( sizeof(ulong) );
+            data_out = buffer::alloc(sizeof(ulong));
             buffer_serializer bs(data_out);
-            bs.put_u64( ctx->value_ );
+            bs.put_u64(ctx->value_);
             is_last_obj = true;
         }
         return 0;
     }
 
-    void save_logical_snp_obj(snapshot& s,
-                              ulong& obj_id,
-                              buffer& data,
-                              bool is_first_obj,
-                              bool is_last_obj)
-    {
+    void save_logical_snp_obj(snapshot& s, ulong& obj_id, buffer& data, bool is_first_obj, bool is_last_obj) {
         if (obj_id == 0) {
             // Object ID == 0: it contains dummy value, create snapshot context.
             create_snapshot_internal(s);
@@ -193,14 +187,11 @@ public:
         return ctx->snapshot_;
     }
 
-    ulong last_commit_index() {
-        return last_committed_idx_;
-    }
+    ulong last_commit_index() { return last_committed_idx_; }
 
-    void create_snapshot(snapshot& s,
-                         async_result<bool>::handler_type& when_done)
-    {
-        {   std::lock_guard<std::mutex> ll(snapshots_lock_);
+    void create_snapshot(snapshot& s, async_result<bool>::handler_type& when_done) {
+        {
+            std::lock_guard<std::mutex> ll(snapshots_lock_);
             create_snapshot_internal(s);
         }
         ptr<std::exception> except(nullptr);
@@ -212,8 +203,9 @@ public:
 
 private:
     struct snapshot_ctx {
-        snapshot_ctx( ptr<snapshot>& s, int64_t v )
-            : snapshot_(s), value_(v) {}
+        snapshot_ctx(ptr<snapshot>& s, int64_t v)
+            : snapshot_(s)
+            , value_(v) {}
         ptr<snapshot> snapshot_;
         int64_t value_;
     };
@@ -244,11 +236,10 @@ private:
     std::atomic<uint64_t> last_committed_idx_;
 
     // Keeps the last 3 snapshots, by their Raft log numbers.
-    std::map< uint64_t, ptr<snapshot_ctx> > snapshots_;
+    std::map<uint64_t, ptr<snapshot_ctx>> snapshots_;
 
     // Mutex for `snapshots_`.
     std::mutex snapshots_lock_;
 };
 
 }; // namespace calc_server
-

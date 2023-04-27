@@ -3,7 +3,7 @@ set -ex
 
 . manifest.sh
 
-PROJECT_DIR=`pwd`
+PROJECT_DIR=$(pwd)
 
 cd ${PROJECT_DIR}
 

@@ -410,5 +410,6 @@ def main(argv=None):
     except IOError:
         sys.stderr.write("Unable to convert %s to Cobertura XML" % args[1])
 
+
 if __name__ == '__main__':
     main()
