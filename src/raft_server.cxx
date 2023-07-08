@@ -228,54 +228,54 @@ raft_server::raft_server(context* ctx, const init_options& opt)
     print_msg += temp_buf;
     p_in(print_msg.c_str());
 
-    if (flag_use_leader_sig() || flag_use_cc() ||  flag_use_ptr()) {
-        p_in("SET PEERS START\n");
-        for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
-                ptr<peer> pp = it->second;
-                p_in("Setting key info for Peer id %d", pp->get_id());
-                ptr<srv_config> serv = nullptr; 
-                if(pp != nullptr) {
-                    serv = c_conf->get_server(pp->get_id());
-                }
+    // if (flag_use_leader_sig() || flag_use_cc() ||  flag_use_ptr()) {
+    //     p_in("SET PEERS START\n");
+    //     for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
+    //             ptr<peer> pp = it->second;
+    //             p_in("Setting key info for Peer id %d", pp->get_id());
+    //             ptr<srv_config> serv = nullptr; 
+    //             if(pp != nullptr) {
+    //                 serv = c_conf->get_server(pp->get_id());
+    //             }
 
-                p_in("Reached 1");
-                if(pp != nullptr && serv != nullptr) {
-                    p_in("Reached 2");
-                    try {
-                        if(!serv->get_private_key_string().empty()) {
-                            p_in("Reached 3");
-                            ptr<seckey_intf> priv_key = cs_new<seckey_t>(serv->get_private_key_string());
-                            p_in("Reached 4");
-                            if(priv_key != nullptr) {
-                                p_in("Reached 5");
-                                serv->set_private_key(priv_key);
-                                p_in("Reached 6");
-                                ptr<pubkey_intf> pub_key = priv_key->derive();
-                                p_in("Reached 7");
-                                if(pub_key != nullptr) {
-                                    p_in("Reached 8");
-                                    serv->set_public_key(pub_key);
-                                    p_in("Reached 9");
-                                    pp->set_public_key(pub_key);
-                                    p_in("Reached 10");
-                                }
-                            }
-                            // p_tr("PEER Server private key: %s", serv->get_private_key()->str().c_str());
-                            // serv->set_public_key(serv->get_private_key()->derive());
-                            // p_tr("PEER Server public key: %s", serv->get_public_key()->str().c_str());
+    //             p_in("Reached 1");
+    //             if(pp != nullptr && serv != nullptr) {
+    //                 p_in("Reached 2");
+    //                 try {
+    //                     if(!serv->get_private_key_string().empty()) {
+    //                         p_in("Reached 3");
+    //                         ptr<seckey_intf> priv_key = cs_new<seckey_t>(serv->get_private_key_string());
+    //                         p_in("Reached 4");
+    //                         if(priv_key != nullptr) {
+    //                             p_in("Reached 5");
+    //                             serv->set_private_key(priv_key);
+    //                             p_in("Reached 6");
+    //                             ptr<pubkey_intf> pub_key = priv_key->derive();
+    //                             p_in("Reached 7");
+    //                             if(pub_key != nullptr) {
+    //                                 p_in("Reached 8");
+    //                                 serv->set_public_key(pub_key);
+    //                                 p_in("Reached 9");
+    //                                 pp->set_public_key(pub_key);
+    //                                 p_in("Reached 10");
+    //                             }
+    //                         }
+    //                         // p_tr("PEER Server private key: %s", serv->get_private_key()->str().c_str());
+    //                         // serv->set_public_key(serv->get_private_key()->derive());
+    //                         // p_tr("PEER Server public key: %s", serv->get_public_key()->str().c_str());
 
-                            // p_tr("Setting PEER public key for server %d", serv->get_id());
-                            // if(!serv->get_public_key()) {
-                                // pp->set_public_key(serv->get_public_key());
-                            // }
-                        }
-                    } catch (crypto_exception& e) {
-                        p_er("cannot load private key, exception (%s)", e.what());
-                    }
-                }
-        }
-        p_in("SET PEERS END\n");
-    }
+    //                         // p_tr("Setting PEER public key for server %d", serv->get_id());
+    //                         // if(!serv->get_public_key()) {
+    //                             // pp->set_public_key(serv->get_public_key());
+    //                         // }
+    //                     }
+    //                 } catch (crypto_exception& e) {
+    //                     p_er("cannot load private key, exception (%s)", e.what());
+    //                 }
+    //             }
+    //     }
+    //     p_in("SET PEERS END\n");
+    // }
 
     if (opt.start_server_in_constructor_) {
         start_server(opt.skip_initial_election_timeout_);
@@ -789,12 +789,13 @@ void raft_server::reset_peer_info() {
         if (flag_use_leader_sig()) {
             // auto timer = cs_new<timer_t>();
             // timer->start_timer();
-            ptr<buffer> buf= entry->serialize_sig();
-            if(!buf) {
-                p_in("message to sign is null");
-            }
-            p_in("Set sig");
-            entry->set_signature(get_signature(*buf));
+            entry->set_signature(get_signature(*entry->serialize_sig()));
+            // ptr<buffer> buf= entry->serialize_sig();
+            // if(!buf) {
+            //     p_in("message to sign is null");
+            // }
+            // p_in("Set sig");
+            // entry->set_signature(get_signature(*buf));
             // timer->add_record("ls.init.rpi");
             // t_->add_sess(timer);
         }
@@ -1144,8 +1145,8 @@ void raft_server::check_leadership_transfer() {
     for (auto& entry: peers_) {
         ptr<peer> peer_elem = entry.second;
         const srv_config& s_conf = peer_elem->get_config();
-        p_in("server config id %d, endpoint %d, dc id %d, priority %d, public key %d", s_conf.get_id(), 
-        s_conf.get_endpoint(), s_conf.get_dc_id(), s_conf.get_priority(), s_conf.get_public_key()->str());
+        // p_in("server config id %d, endpoint %d, dc id %d, priority %d, public key %d", s_conf.get_id(), 
+        // s_conf.get_endpoint(), s_conf.get_dc_id(), s_conf.get_priority(), s_conf.get_public_key()->str());
         int32 cur_priority = s_conf.get_priority();
         if (cur_priority > max_priority) {
             max_priority = cur_priority;
@@ -1603,7 +1604,8 @@ raft_server::peer_info raft_server::get_peer_info(int32 srv_id) const {
     peer_info ret;
     ptr<peer> pp = entry->second;
     ret.id_ = pp->get_id();
-    ret.last_log_idx_ = pp->get_last_accepted_log_idx();
+    // ret.last_log_idx_ = pp->get_last_accepted_log_idx();
+    ret.last_log_idx_ = pp->get_next_log_idx() - 1;
     ret.last_succ_resp_us_ = pp->get_resp_timer_us();
     return ret;
 }
@@ -1617,7 +1619,8 @@ std::vector<raft_server::peer_info> raft_server::get_peer_info_all() const {
         peer_info pi;
         ptr<peer> pp = entry.second;
         pi.id_ = pp->get_id();
-        pi.last_log_idx_ = pp->get_last_accepted_log_idx();
+        // pi.last_log_idx_ = pp->get_last_accepted_log_idx();
+        pi.last_log_idx_ = pp->get_next_log_idx() - 1;
         pi.last_succ_resp_us_ = pp->get_resp_timer_us();
         ret.push_back(pi);
     }

@@ -716,9 +716,9 @@ public:
         , io_svc_(io)
         , ssl_ctx_(ssl_ctx)
         , handler_()
-        , stopped_(false)
         , acceptor_(io, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port))
         , session_id_cnt_(1)
+        , stopped_(false)
         , ssl_enabled_(_enable_ssl)
         , l_(l) {
         p_in("Raft ASIO listener initiated, %s", ssl_enabled_ ? "SSL ENABLED" : "UNSECURED");
@@ -728,44 +728,46 @@ public:
 
 public:
     virtual void stop() override {
-        auto_lock(listener_lock_);
+        // auto_lock(listener_lock_);
         stopped_ = true;
         acceptor_.close();
     }
 
     virtual void listen(ptr<msg_handler>& handler) override {
-        std::lock_guard<std::mutex> guard(listener_lock_);
+        // std::lock_guard<std::mutex> guard(listener_lock_);
         handler_ = handler;
         stopped_ = false;
-        // start();
-        start(guard);
+        start();
+        // start(guard);
     }
 
     virtual void shutdown() override {
-        // auto_lock(session_lock_);
-        // for (auto& entry: active_sessions_) {
-        //     ptr<rpc_session> s = entry;
-        //     s->stop();
-        //     s.reset();
-        // }
-        // active_sessions_.clear();
-        // handler_.reset();
-        {
-            auto_lock(session_lock_);
-            for (auto& entry: active_sessions_) {
-                ptr<rpc_session> s = entry;
-                s->stop();
-                s.reset();
-            }
-            active_sessions_.clear();
+        auto_lock(session_lock_);
+        for (auto& entry: active_sessions_) {
+            ptr<rpc_session> s = entry;
+            s->stop();
+            s.reset();
         }
-
-        auto_lock(listener_lock_);
+        active_sessions_.clear();
         handler_.reset();
+        // {
+        //     auto_lock(session_lock_);
+        //     for (auto& entry: active_sessions_) {
+        //         ptr<rpc_session> s = entry;
+        //         s->stop();
+        //         s.reset();
+        //     }
+        //     active_sessions_.clear();
+        // }
+
+        // auto_lock(listener_lock_);
+        // handler_.reset();
+    
     }
 
 private:
-    void start(std::lock_guard<std::mutex> & listener_lock) {
+    // void start(std::lock_guard<std::mutex> & listener_lock) {
+    void start() {
         if (!acceptor_.is_open()) {
             return;
         }
@@ -790,12 +792,13 @@ private:
             p_er("failed to accept a rpc connection due to error %d", err.value());
         }
 
-        std::lock_guard<std::mutex> guard(listener_lock_);
+        // std::lock_guard<std::mutex> guard(listener_lock_);
         if (!stopped_) {
             // Re-listen only when not stopped,
             // otherwise crash happens as this class or `acceptor_`
             // may be destroyed in the meantime.
-            this->start(guard);
+            // this->start(guard);
+            this->start();
         }
     }
 
@@ -814,7 +817,7 @@ private:
     asio_service_impl* impl_;
     asio::io_service& io_svc_;
     ssl_context& ssl_ctx_;
-    std::mutex listener_lock_;
+    // std::mutex listener_lock_;
     ptr<msg_handler> handler_;
     asio::ip::tcp::acceptor acceptor_;
     std::vector<ptr<rpc_session>> active_sessions_;

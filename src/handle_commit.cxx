@@ -715,13 +715,14 @@ void raft_server::reconfigure(const ptr<cluster_config>& new_config) {
 
         snprintf(temp_buf,
                  1024,
-                 "peer %d, DC ID %d, %s, %s, %d pub key %s\n",
+                 "peer %d, DC ID %d, %s, %s, %d\n",
+                //  "peer %d, DC ID %d, %s, %s, %d pub key %s\n",
                  (int)s_conf->get_id(),
                  (int)s_conf->get_dc_id(),
                  s_conf->get_endpoint().c_str(),
                  s_conf->is_learner() ? "learner" : "voting member",
-                 s_conf->get_priority(),
-                 s_conf->get_public_key()->str().c_str());
+                 s_conf->get_priority());
+                //  s_conf->get_public_key()->str().c_str());
         str_buf += temp_buf;
     }
     p_in("new configuration: log idx %ld, prev log idx %ld\n"

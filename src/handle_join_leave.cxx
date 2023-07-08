@@ -183,9 +183,9 @@ void raft_server::handle_join_cluster_resp(resp_msg& resp) {
             p_in("new server (%d) has pubkey %s", pid, tobase64(*pk).c_str());
             ptr<pubkey_intf> pubkey = cs_new<pubkey_t>(*pk);
 
-            p_in("setting pubkey of server %d", srv_to_join_->get_id());
+            // p_in("setting pubkey of server %d", srv_to_join_->get_id());
             srv_to_join_->set_public_key(pubkey);
-            p_in("setting pubkey of server %d", conf_to_add_->get_id());
+            // p_in("setting pubkey of server %d", conf_to_add_->get_id());
             conf_to_add_->set_public_key(pubkey);
 
             p_in("new server (%d) confirms it will join, start syncing logs to it", srv_to_join_->get_id());
