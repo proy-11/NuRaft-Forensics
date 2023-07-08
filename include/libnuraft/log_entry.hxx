@@ -86,15 +86,15 @@ public:
 
     // FMARK: serialize for signature
     ptr<buffer> serialize_sig() {
-        if (!buff_) {
-            exit(0);
-#ifndef _NO_EXCEPTION
-            throw std::runtime_error("serialize_sig cannot be called for a log_entry "
-                                     "with nil buffer");
-#else
-            assert(0);
-#endif
-        }
+//         if (!buff_) {
+//             exit(0);
+// #ifndef _NO_EXCEPTION
+//             throw std::runtime_error("serialize_sig cannot be called for a log_entry "
+//                                      "with nil buffer");
+// #else
+//             assert(0);
+// #endif
+//         }
         buff_->pos(0);
         ptr<buffer> buf =
             buffer::alloc(sizeof(ulong) + sizeof(char) + buff_->size() + (prev_ == nullptr ? 0 : prev_->size()));
