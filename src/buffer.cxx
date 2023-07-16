@@ -244,6 +244,9 @@ const byte* buffer::get_bytes(size_t& len)
 }
 
 void buffer::pos(size_t p) {
+    if(this == nullptr) {
+        return;
+    }
     size_t position = ( p > size() ) ? size() : p;
     __set_block_pos(this, position);
 }
