@@ -152,6 +152,9 @@ size_t buffer::container_size() const {
 }
 
 size_t buffer::size() const {
+    if(this == nullptr) {
+        return 0;
+    }
     return (size_t)( __size_of_block(this) );
 }
 

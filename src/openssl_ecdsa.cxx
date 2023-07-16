@@ -302,7 +302,12 @@ ptr<buffer> create_hash(ptr<log_entry> le_, ulong height) {
     // size_t msgsize = serial->size() + sizeof(ulong);
     ptr<buffer> msg = buffer::alloc(msgsize);
     msg->put(height);
-    msg->put(*serial);
+    if(serial != nullptr) {
+        msg->put(*serial);
+    } else {
+        msg->put((byte)0);
+    }
+    // msg->put(*serial);
     msg->pos(0);
 
     uint32_t digest_length = SHA256_DIGEST_LENGTH;
