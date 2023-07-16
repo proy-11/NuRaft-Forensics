@@ -227,6 +227,31 @@ raft_server::raft_server(context* ctx, const init_options& opt)
     print_msg += temp_buf;
     p_in(print_msg.c_str());
 
+
+    if(flag_use_leader_sig()  && flag_use_cc() && flag_use_ptr()) {
+        p_in("SET PEERS START\n");
+        std::list<ptr<srv_config>>& srvs = c_conf->get_servers();
+        for (cluster_config::srv_itor it = srvs.begin(); it != srvs.end(); ++it) {
+            ptr<srv_config> cur_srv = *it;
+            if (cur_srv->get_id() != id_) {
+                ptr<peer> pp = peers_[cur_srv->get_id()];
+                if(pp != nullptr) {
+                    p_in("Reached 1");
+                    ptr<seckey_intf> sk = cs_new<seckey_t>(cur_srv->get_private_key_string());
+                    p_in("Reached 2");
+                    cur_srv->set_private_key(sk);
+                    p_in("Reached 3");
+                    ptr<pubkey_intf> pk = sk->derive();
+                    p_in("Reached 4");
+                    cur_srv->set_public_key(pk);
+                    p_in("Reached 5");
+                    pp->set_public_key(pk);
+                    p_in("Reached 6");
+                }
+            }
+        }
+    }
+
     // if (flag_use_leader_sig() || flag_use_cc() ||  flag_use_ptr()) {
     //     p_in("SET PEERS START\n");
     //     for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
