@@ -95,6 +95,9 @@ public:
 //             assert(0);
 // #endif
 //         }
+        if(!buff_) {
+            return nullptr;
+        }
         buff_->pos(0);
         ptr<buffer> buf =
             buffer::alloc(sizeof(ulong) + sizeof(char) + buff_->size() + (prev_ == nullptr ? 0 : prev_->size()));
