@@ -173,7 +173,7 @@ seckey_t::seckey_t(std::string priv_key) {
     }
     key =  PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
     if ( key == NULL) {
-        throw crypto_exception("seckey from file");
+        throw crypto_exception("seckey from string");
     }
     if(bio) {
         BIO_free(bio);
