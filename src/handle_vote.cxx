@@ -26,6 +26,7 @@ limitations under the License.
 #include "peer.hxx"
 #include "state_mgr.hxx"
 #include "tracer.hxx"
+#include "leader_certificate.hxx"
 
 #include <cassert>
 #include <sstream>
@@ -221,6 +222,9 @@ void raft_server::request_vote(bool force_vote) {
     ctx_->state_mgr_->save_state(*state_);
     votes_granted_ += 1;
     votes_responded_ += 1;
+    // FMARK: reset leader certificate for this new election
+    new_leader_certificate();
+
     p_in("[VOTE INIT] my id %d, my role %s, term %ld, log idx %ld, "
          "log term %ld, priority (target %d / mine %d)\n",
          id_, srv_role_to_string(role_).c_str(),
@@ -260,6 +264,12 @@ void raft_server::request_vote(bool force_vote) {
             // Ship it.
             req->log_entries().push_back(fv_msg_le);
         }
+
+        if (it == peers_.begin()) {
+            // FMARK: set request field of leader_cert_ to the serialized vote request (only saved once)
+            leader_cert_->set_request(req->serialize());
+        }
+
         p_db( "send %s to server %d with term %llu",
               msg_type_to_string(req->get_type()).c_str(),
               it->second->get_id(),
@@ -330,6 +340,8 @@ ptr<resp_msg> raft_server::handle_vote_req(req_msg& req) {
         p_in("decision: O (grant), voted_for %d, term %zu",
              req.get_src(), resp->get_term());
         resp->accept(log_store_->next_slot());
+        // FMARK: set signature field of resp to my signature of the vote request
+        resp->set_signature(get_signature(*req.serialize()), 0);
         state_->set_voted_for(req.get_src());
         ctx_->state_mgr_->save_state(*state_);
     } else {
@@ -356,6 +368,8 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
 
     if (resp.get_accepted()) {
         votes_granted_ += 1;
+        // FMARK: Save the signature in the vote response to my leader certificate.
+        leader_cert_->insert(resp.get_src(), resp.get_signature());
     }
 
     if (votes_responded_ >= get_num_voting_members()) {
@@ -375,9 +389,83 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
     if (votes_granted_ >= election_quorum_size) {
         p_in("Server is elected as leader for term %zu", state_->get_term());
         election_completed_ = true;
+        // FMARK: Broadcast Leader Certificate to all peers.
+        broadcast_leader_certificate();
         become_leader();
         p_in("  === LEADER (term %zu) ===\n", state_->get_term());
     }
+}
+
+/**
+ * @brief FMARK: Send Leader Certificate to all peers.
+ *
+ */
+void raft_server::broadcast_leader_certificate() {
+    ulong next_term = term_for_log(log_store_->next_slot() - 1)
+                    + 1; // TODO: the term may be incorrect
+    p_in("Sace the LC locally");
+    election_list_[next_term] = leader_cert_->clone();
+    p_in("Broadcast Leader Certificate to all other peers");
+    for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
+        ptr<peer> pp = it->second;
+        ptr<req_msg> req(cs_new<req_msg>(state_->get_term(),
+                                         msg_type::broadcast_leader_certificate_request,
+                                         id_,
+                                         pp->get_id(),
+                                         term_for_log(log_store_->next_slot() - 1),
+                                         log_store_->next_slot() - 1,
+                                         quick_commit_index_.load()));
+        ptr<log_entry> lc_msg_le =
+            cs_new<log_entry>(0, leader_cert_->serialize(), log_val_type::custom);
+        req->log_entries().push_back(lc_msg_le);
+        if (pp->make_busy()) {
+            pp->send_req(pp, req, resp_handler_);
+        } else {
+            p_wn("failed to send leader certificate: peer %d (%s) is busy",
+                 pp->get_id(),
+                 pp->get_endpoint().c_str());
+        }
+    }
+}
+
+/**
+ * @brief FMARK: handle leader certificate request (broadcast), no response
+ *
+ */
+ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
+    p_in("[LEADER CERTIFICATE REQ] from peer %d, my role %s, log term: req %ld / mine "
+         "%ld\n"
+         "last idx: req %ld / mine %ld, term: req %ld / mine %ld\n",
+         req.get_src(),
+         srv_role_to_string(role_).c_str(),
+         req.get_last_log_term(),
+         log_store_->last_entry()->get_term(),
+         req.get_last_log_idx(),
+         log_store_->next_slot() - 1,
+         req.get_term(),
+         state_->get_term());
+
+    ptr<resp_msg> resp( cs_new<resp_msg>
+                ( state_->get_term(),
+                    msg_type::broadcast_leader_certificate_response,
+                    id_,
+                    req.get_src() ) );
+    if (state_->get_voted_for() == req.get_src()) {
+        ulong next_term = term_for_log(log_store_->next_slot() - 1)
+                          + 1; // TODO: the term may be incorrect
+        if (election_list_.find(next_term) != election_list_.end()) {
+            p_wn("Leader certificate already exists for term %ld, ignore the request",
+                 next_term);
+            return resp;
+        }
+        p_tr("Saving the leader certificate from peer %d to my election list",
+             req.get_src());
+        ptr<buffer> lc_buffer = req.log_entries().at(0)->get_buf_ptr();
+        election_list_[next_term] = leader_certificate::deserialize(*lc_buffer);
+    } else {
+        p_in("I'm not voting for peer %d, ignore the leader certificate", req.get_src());
+    }
+    return resp;
 }
 
 ptr<resp_msg> raft_server::handle_prevote_req(req_msg& req) {

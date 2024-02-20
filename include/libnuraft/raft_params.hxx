@@ -93,6 +93,7 @@ struct raft_params {
         , use_chain_ptr_(true)
         , use_leader_sig_(true)
         , use_commitment_cert_(true)
+        , use_election_list_(true)
         , locking_method_type_(dual_mutex)
         , return_method_(blocking)
         , auto_forwarding_req_timeout_(0)
@@ -517,6 +518,12 @@ public:
      *
      */
     bool use_commitment_cert_;
+
+    /**
+     * @brief FMARK: If true, use election list
+     * 
+     */
+    bool use_election_list_;
 
     /**
      * Choose the type of lock that will be used by user threads.

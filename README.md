@@ -4,6 +4,10 @@ NuRaft-Forensics
 
 NuRaft library with forensics support (TODO) and benchmarker. 
 
+Issues
+------
+* some test cases fail
+
 Features
 --------
 ### New features added in this project ###

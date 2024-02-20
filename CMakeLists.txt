@@ -55,7 +55,7 @@ else ()
                     /usr/local/include
                     /usr/include)
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DASIO_STANDALONE -lboost_system")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DASIO_STANDALONE")
 
 endif ()
 
@@ -279,6 +279,7 @@ set(RAFT_CORE
     ${ROOT_SRC}/handle_user_cmd.cxx
     ${ROOT_SRC}/handle_vote.cxx
     ${ROOT_SRC}/launcher.cxx
+    ${ROOT_SRC}/leader_certificate.cxx
     ${ROOT_SRC}/peer.cxx
     ${ROOT_SRC}/raft_server.cxx
     ${ROOT_SRC}/snapshot.cxx
@@ -299,6 +300,7 @@ set_target_properties(static_lib PROPERTIES OUTPUT_NAME ${LIBRARY_NAME} CLEAN_DI
 
 add_library(shared_lib SHARED ${STATIC_LIB_SRC})
 set_target_properties(shared_lib PROPERTIES OUTPUT_NAME ${LIBRARY_NAME} CLEAN_DIRECT_OUTPUT 1)
+target_link_libraries(shared_lib ${LIBBOOST_SYSTEM})
 if (APPLE)
     target_link_libraries(shared_lib ${LIBRARIES})
 endif ()
