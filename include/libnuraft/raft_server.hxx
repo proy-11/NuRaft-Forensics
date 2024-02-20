@@ -41,6 +41,8 @@ limitations under the License.
 #include <unordered_map>
 #include <unordered_set>
 
+#include "leader_certificate.hxx"
+
 class EventAwaiter;
 
 namespace nuraft {
@@ -639,6 +641,8 @@ public:
 
     bool get_is_under_attack();
 
+    bool flag_use_election_list();
+
 protected:
     typedef std::unordered_map<int32, ptr<peer>>::const_iterator peer_itor;
 
@@ -813,6 +817,15 @@ protected:
 
     ptr<resp_msg> handle_resignation_request(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
 
+    // FMARK: for leader elections
+    void broadcast_leader_certificate();
+
+    void new_leader_certificate();
+
+    ptr<resp_msg> handle_leader_certificate_request(req_msg& req);
+
+    // END FMARK
+
     void remove_peer_from_peers(const ptr<peer>& pp);
 
     void check_overall_status();
@@ -851,6 +864,20 @@ protected:
      *
      */
     std::mutex cert_lock_;
+
+
+    /**
+     * @brief FMARK: leader certificate
+     * 
+     */
+    ptr<leader_certificate> leader_cert_;
+
+
+    /**
+     * @brief FMARK: election list (term, leader_certificate)
+     * 
+     */
+    std::unordered_map<ulong, ptr<leader_certificate>> election_list_;
 
     /**
      * (Read-only)

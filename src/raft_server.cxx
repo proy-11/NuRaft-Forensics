@@ -746,6 +746,8 @@ ptr<resp_msg> raft_server::process_req(req_msg& req) {
     } else if (req.get_type() == msg_type::priority_change_request) {
         resp = handle_priority_change_req(req);
 
+    } else if (req.get_type() == msg_type::broadcast_leader_certificate_request){
+        resp = handle_leader_certificate_request(req);
     } else {
         // extended requests
         resp = handle_ext_msg(req);
@@ -1826,6 +1828,11 @@ bool raft_server::push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term
     return false;
 }
 
+// FMARK: get new leader certificate
+void raft_server::new_leader_certificate() {
+    leader_cert_ = cs_new<leader_certificate>();
+}
+
 CbReturnCode raft_server::invoke_callback(cb_func::Type type, cb_func::Param* param) {
     CbReturnCode rc = ctx_->cb_func_.call(type, param);
     return rc;
@@ -1863,4 +1870,6 @@ bool raft_server::get_is_under_attack() { return is_under_attack_.load(); }
 void raft_server::set_fault_type(const fault_type &f) { fault_type_ = f; }
 
 fault_type raft_server::get_fault_type() { return fault_type_; }
+
+bool raft_server::flag_use_election_list() { return get_current_params().use_election_list_; }
 } // namespace nuraft
