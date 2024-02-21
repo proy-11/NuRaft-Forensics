@@ -403,9 +403,9 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
 void raft_server::broadcast_leader_certificate() {
     ulong next_term = term_for_log(log_store_->next_slot() - 1)
                     + 1; // TODO: the term may be incorrect
-    p_in("Sace the LC locally");
+    p_in("Save the LC locally");
     election_list_[next_term] = leader_cert_->clone();
-    p_in("Broadcast Leader Certificate to all other peers");
+    p_in("Broadcast Leader Certificates to all other peers");
     for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
         ptr<peer> pp = it->second;
         ptr<req_msg> req(cs_new<req_msg>(state_->get_term(),
