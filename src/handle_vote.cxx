@@ -418,13 +418,15 @@ void raft_server::broadcast_leader_certificate() {
         ptr<log_entry> lc_msg_le =
             cs_new<log_entry>(0, leader_cert_->serialize(), log_val_type::custom);
         req->log_entries().push_back(lc_msg_le);
-        if (pp->make_busy()) {
-            pp->send_req(pp, req, resp_handler_);
-        } else {
-            p_wn("failed to send leader certificate: peer %d (%s) is busy",
-                 pp->get_id(),
-                 pp->get_endpoint().c_str());
-        }
+        // FMARK: do not set the peer busy. Send LC casually.
+        pp->send_req(pp, req, resp_handler_);
+        // if (pp->make_busy()) {
+        //     pp->send_req(pp, req, resp_handler_);
+        // } else {
+        //     p_wn("failed to send leader certificate: peer %d (%s) is busy",
+        //          pp->get_id(),
+        //          pp->get_endpoint().c_str());
+        // }
     }
 }
 
@@ -434,7 +436,7 @@ void raft_server::broadcast_leader_certificate() {
  */
 ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
     p_in("[LEADER CERTIFICATE REQ] from peer %d, my role %s, log term: req %ld / mine "
-         "%ld\n"
+         "%ld"
          "last idx: req %ld / mine %ld, term: req %ld / mine %ld\n",
          req.get_src(),
          srv_role_to_string(role_).c_str(),

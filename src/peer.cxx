@@ -77,7 +77,8 @@ void peer::handle_rpc_result(ptr<peer> myself,
                                                msg_type::leave_cluster_request,
                                                msg_type::custom_notification_request,
                                                msg_type::reconnect_request,
-                                               msg_type::priority_change_request});
+                                               msg_type::priority_change_request,
+                                               msg_type::broadcast_leader_certificate_request});
 
     if (abandoned_) {
         p_in("peer %d has been shut down, ignore response.", config_->get_id());
