@@ -1735,4 +1735,8 @@ bool raft_server::flag_use_leader_sig() { return get_current_params().use_leader
 bool raft_server::flag_use_cc() { return get_current_params().use_commitment_cert_; }
 
 bool raft_server::flag_use_election_list() { return get_current_params().use_election_list_; }
+
+bool raft_server::flag_save_election_list() {return get_current_params().save_election_list_; }
+
+ulong raft_server::get_election_list_max() { return get_current_params().election_list_max_; }
 } // namespace nuraft

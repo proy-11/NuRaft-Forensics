@@ -390,7 +390,7 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
         p_in("Server is elected as leader for term %zu", state_->get_term());
         election_completed_ = true;
         // FMARK: Broadcast Leader Certificate to all peers.
-        broadcast_leader_certificate();
+        if (flag_use_election_list()) broadcast_leader_certificate();
         become_leader();
         p_in("  === LEADER (term %zu) ===\n", state_->get_term());
     }
@@ -452,6 +452,12 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
                     msg_type::broadcast_leader_certificate_response,
                     id_,
                     req.get_src() ) );
+
+    if (!flag_use_election_list()) {
+        p_in("I'm not using election list, ignore the leader certificate");
+        return resp;
+    }
+
     if (state_->get_voted_for() == req.get_src()) {
         ulong next_term = term_for_log(log_store_->next_slot() - 1)
                           + 1; // TODO: the term may be incorrect
@@ -464,6 +470,10 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
              req.get_src());
         ptr<buffer> lc_buffer = req.log_entries().at(0)->get_buf_ptr();
         election_list_[next_term] = leader_certificate::deserialize(*lc_buffer);
+        if (flag_save_election_list()) {
+            p_tr("Saving the election list to file");
+            if (save_and_clean_election_list(get_election_list_max())) p_in("Election list saved, memory cleaned");
+        }
     } else {
         p_in("I'm not voting for peer %d, ignore the leader certificate", req.get_src());
     }

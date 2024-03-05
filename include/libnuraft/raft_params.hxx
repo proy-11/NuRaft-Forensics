@@ -94,6 +94,9 @@ struct raft_params {
         , use_leader_sig_(true)
         , use_commitment_cert_(true)
         , use_election_list_(true)
+        , save_election_list_(true)
+        , forensics_output_path_("forensics_out")
+        , election_list_max_(1)
         , locking_method_type_(dual_mutex)
         , return_method_(blocking)
         , auto_forwarding_req_timeout_(0)
@@ -524,6 +527,24 @@ public:
      * 
      */
     bool use_election_list_;
+
+    /**
+     * @brief FMARK: periodically save election list to files
+     * 
+     */
+    bool save_election_list_;
+
+    /**
+     * @brief FMARK: forensics output path
+     * 
+     */
+    std::string forensics_output_path_;
+
+    /**
+     * @brief FMARK: election list max entries in memory before dumping to file
+     * 
+     */
+    ulong election_list_max_;
 
     /**
      * Choose the type of lock that will be used by user threads.

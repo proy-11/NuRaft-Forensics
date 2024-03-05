@@ -632,6 +632,10 @@ public:
 
     bool flag_use_election_list();
 
+    bool flag_save_election_list();
+
+    ulong get_election_list_max();
+
 protected:
     typedef std::unordered_map<int32, ptr<peer>>::const_iterator peer_itor;
 
@@ -813,6 +817,10 @@ protected:
 
     ptr<resp_msg> handle_leader_certificate_request(req_msg& req);
 
+    bool save_and_clean_election_list(ulong threshold, bool force = false);
+
+    std::string get_election_list_file_name(const std::string& data_dir);
+
     // END FMARK
 
     void remove_peer_from_peers(const ptr<peer>& pp);
@@ -867,6 +875,12 @@ protected:
      * 
      */
     std::unordered_map<ulong, ptr<leader_certificate>> election_list_;
+
+    /**
+     * @brief FMARK: election list lock
+     * 
+     */
+    std::mutex election_list_lock_;
 
     /**
      * (Read-only)
