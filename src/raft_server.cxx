@@ -1872,4 +1872,8 @@ void raft_server::set_fault_type(const fault_type &f) { fault_type_ = f; }
 fault_type raft_server::get_fault_type() { return fault_type_; }
 
 bool raft_server::flag_use_election_list() { return get_current_params().use_election_list_; }
+
+bool raft_server::flag_save_election_list() {return get_current_params().save_election_list_; }
+
+ulong raft_server::get_election_list_max() { return get_current_params().election_list_max_; }
 } // namespace nuraft

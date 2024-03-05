@@ -6,7 +6,8 @@ NuRaft library with forensics support (TODO) and benchmarker.
 
 Issues
 ------
-* some test cases fail
+* ~~some test cases fail~~ all accompanied test cases pass but more tests may be needed
+* leader certificates are broadcasted casually. The just-elected leader does not wait for the followers to acknowledge the certificate before becoming a leader
 
 Features
 --------
