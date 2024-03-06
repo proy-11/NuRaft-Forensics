@@ -442,6 +442,12 @@ void raft_server::shutdown() {
         ctx_->scheduler_.reset();
     }
 
+    if (flag_save_election_list()){
+        // FMARK: save election list to file
+        p_in("saving unsaved election list to file");
+        save_and_clean_election_list(1);
+    }
+
     p_in("reset all pointers.");
 
     // Server to join/leave.

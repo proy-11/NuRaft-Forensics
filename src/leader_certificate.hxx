@@ -19,6 +19,10 @@ public:
         : certificate(cert->get_num_servers(), cert->get_term(), cert->get_index()){
     }
 
+    ptr<buffer> get_request() {
+        return request_;
+    }
+
     void set_request(ptr<buffer> req) {
         request_ = req;
     }

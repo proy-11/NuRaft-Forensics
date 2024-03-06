@@ -67,6 +67,7 @@ public:
         buf->put(msg_base::get_term());
         buf->put(msg_base::get_type());
         buf->put(msg_base::get_src());
+        buf->pos(0);
         return buf;
     }
 

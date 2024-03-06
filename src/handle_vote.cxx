@@ -401,10 +401,17 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
  *
  */
 void raft_server::broadcast_leader_certificate() {
-    ulong next_term = term_for_log(log_store_->next_slot() - 1)
-                    + 1; // TODO: the term may be incorrect
+    ulong next_term = state_->get_inc_term();
     p_in("Save the LC locally");
-    election_list_[next_term] = leader_cert_->clone();
+    {
+        std::lock_guard<std::mutex> guard(election_list_lock_);
+        election_list_[next_term] = leader_cert_->clone();
+    }
+
+    if (flag_save_election_list()){
+        if (save_and_clean_election_list(get_election_list_max())) p_in("Election list saved, memory cleaned");
+    }
+
     p_in("Broadcast Leader Certificates to all other peers");
     for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
         ptr<peer> pp = it->second;
@@ -459,17 +466,42 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
     }
 
     if (state_->get_voted_for() == req.get_src()) {
-        ulong next_term = term_for_log(log_store_->next_slot() - 1)
-                          + 1; // TODO: the term may be incorrect
-        if (election_list_.find(next_term) != election_list_.end()) {
-            p_wn("Leader certificate already exists for term %ld, ignore the request",
-                 next_term);
+        ulong next_term = state_->get_inc_term();
+
+        if (req.log_entries().size() != 1) {
+            p_er("Invalid leader certificate request, no log entry");
             return resp;
         }
+
+        ptr<buffer> lc_buffer = req.log_entries().at(0)->get_buf_ptr();
+        ptr<leader_certificate> lc = leader_certificate::deserialize(*lc_buffer);
+        ulong lc_term = req_msg::deserialize(*lc->get_request())->get_term();
+
+        if (lc_term != state_->get_term()) {
+            p_er("Invalid leader certificate request, term mismatch. LC from elected server has term %d. My term %ld.",
+                 lc_term,
+                 state_->get_term());
+            return resp;
+        }
+
+        // FMARK: verify all signatures
+        std::unordered_map<int32, ptr<buffer>> sigs = lc->get_sigs();
+        for (auto& sig: sigs) {
+            if (sig.first == id_) continue;
+            if (!peers_.find(sig.first)->second->verify_signature(lc->get_request(), sig.second)){
+                p_er("Invalid leader certificate request, signature mismatch. LC from elected server %d. Mismatched signature from peer %d.",
+                    req.get_src(),
+                    sig.first);
+                return resp;
+            }
+        }
+
         p_tr("Saving the leader certificate from peer %d to my election list",
              req.get_src());
-        ptr<buffer> lc_buffer = req.log_entries().at(0)->get_buf_ptr();
-        election_list_[next_term] = leader_certificate::deserialize(*lc_buffer);
+        {
+            std::lock_guard<std::mutex> guard(election_list_lock_);
+            election_list_[next_term] = lc;
+        }
         if (flag_save_election_list()) {
             p_tr("Saving the election list to file");
             if (save_and_clean_election_list(get_election_list_max())) p_in("Election list saved, memory cleaned");

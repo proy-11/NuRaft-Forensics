@@ -817,7 +817,7 @@ protected:
 
     ptr<resp_msg> handle_leader_certificate_request(req_msg& req);
 
-    bool save_and_clean_election_list(ulong threshold, bool force = false);
+    bool save_and_clean_election_list(ulong threshold);
 
     std::string get_election_list_file_name(const std::string& data_dir);
 
