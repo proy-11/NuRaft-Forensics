@@ -101,6 +101,15 @@ public:
         term_++;
     }
 
+    ulong get_inc_term() {
+        if (inc_term_cb_) {
+            ulong new_term = inc_term_cb_(term_);
+            assert(new_term > term_);
+            return new_term;
+        }
+        return term_ + 1;
+    }
+
     int get_voted_for() const {
         return voted_for_;
     }

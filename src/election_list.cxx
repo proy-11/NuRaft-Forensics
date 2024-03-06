@@ -10,7 +10,7 @@
 namespace fs = boost::filesystem;
 
 namespace nuraft {
-bool raft_server::save_and_clean_election_list(ulong threshold, bool force) {
+bool raft_server::save_and_clean_election_list(ulong threshold) {
     std::unordered_map<ulong, ptr<leader_certificate>> temp_list;
     std::string filename;
     std::string dir = ctx_->get_params()->forensics_output_path_;
