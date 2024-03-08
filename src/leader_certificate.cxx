@@ -5,7 +5,7 @@ namespace nuraft {
         ptr<buffer> buf = certificate::serialize();
         ptr<buffer> temp = buffer::alloc(buf->size() + sizeof(size_t) + request_->size());
         temp->put_raw(buf->data(), buf->size());
-        temp->put(request_->data(), request_->size());
+        temp->put(request_->data_begin(), request_->size());
         temp->pos(0);
         return temp;
     }

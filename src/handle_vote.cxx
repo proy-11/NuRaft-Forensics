@@ -234,6 +234,7 @@ void raft_server::request_vote(bool force_vote) {
 
     // is this the only server?
     if (votes_granted_ > get_quorum_for_election()) {
+        // TODO: No LC saved for this situation.
         election_completed_ = true;
         become_leader();
         return;
@@ -369,6 +370,7 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
     if (resp.get_accepted()) {
         votes_granted_ += 1;
         // FMARK: Save the signature in the vote response to my leader certificate.
+        p_tr("Save signature from peer %d to my leader certificate", resp.get_src());
         leader_cert_->insert(resp.get_src(), resp.get_signature());
     }
 
@@ -403,9 +405,11 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
 void raft_server::broadcast_leader_certificate() {
     ulong next_term = state_->get_inc_term();
     p_in("Save the LC locally");
+    ptr<leader_certificate> tmp_lc = leader_cert_->clone();
+
     {
         std::lock_guard<std::mutex> guard(election_list_lock_);
-        election_list_[next_term] = leader_cert_->clone();
+        election_list_[next_term] = tmp_lc;
     }
 
     if (flag_save_election_list()){
@@ -423,7 +427,7 @@ void raft_server::broadcast_leader_certificate() {
                                          log_store_->next_slot() - 1,
                                          quick_commit_index_.load()));
         ptr<log_entry> lc_msg_le =
-            cs_new<log_entry>(0, leader_cert_->serialize(), log_val_type::custom);
+            cs_new<log_entry>(0, tmp_lc->serialize(), log_val_type::custom);
         req->log_entries().push_back(lc_msg_le);
         // FMARK: do not set the peer busy. Send LC casually.
         pp->send_req(pp, req, resp_handler_);
@@ -475,7 +479,15 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
 
         ptr<buffer> lc_buffer = req.log_entries().at(0)->get_buf_ptr();
         ptr<leader_certificate> lc = leader_certificate::deserialize(*lc_buffer);
-        ulong lc_term = req_msg::deserialize(*lc->get_request())->get_term();
+        // ulong lc_term = req_msg::deserialize(*lc->get_request())->get_term();
+        ptr<req_msg> lc_req = req_msg::deserialize(*lc->get_request());
+        ulong lc_term = lc_req->get_term();
+        p_tr("Received leader certificate request from peer %d, term %ld, last log term %ld, last log index %ld, commit index %ld",
+             req.get_src(),
+             lc_term,
+             lc_req->get_last_log_term(),
+             lc_req->get_last_log_idx(),
+             lc_req->get_commit_idx());
 
         if (lc_term != state_->get_term()) {
             p_er("Invalid leader certificate request, term mismatch. LC from elected server has term %d. My term %ld.",
@@ -502,6 +514,7 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
             std::lock_guard<std::mutex> guard(election_list_lock_);
             election_list_[next_term] = lc;
         }
+
         if (flag_save_election_list()) {
             p_tr("Saving the election list to file");
             if (save_and_clean_election_list(get_election_list_max())) p_in("Election list saved, memory cleaned");

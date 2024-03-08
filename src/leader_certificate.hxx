@@ -17,9 +17,13 @@ public:
 
     leader_certificate(const ptr<certificate>& cert)
         : certificate(cert->get_num_servers(), cert->get_term(), cert->get_index()){
+            for (auto& it: cert->get_sigs()) {
+                insert(it.first, buffer::clone(*it.second));
+            }
     }
 
     ptr<buffer> get_request() {
+        request_->pos(0);
         return request_;
     }
 
