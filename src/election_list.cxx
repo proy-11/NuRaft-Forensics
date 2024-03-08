@@ -22,8 +22,7 @@ bool raft_server::save_and_clean_election_list(ulong threshold) {
         if (!boost::filesystem::exists(dir)) {
             boost::filesystem::create_directory(dir); // TODO: handle error
         }
-        temp_list = election_list_;
-        election_list_.clear();
+        temp_list = std::move(election_list_);
         filename =
             get_election_list_file_name(dir); // file name should be unique by using
                                               // timestamp, server id (and also the lock)
