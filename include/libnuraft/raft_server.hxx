@@ -821,6 +821,13 @@ protected:
 
     std::string get_election_list_file_name(const std::string& data_dir);
 
+    /**
+     * @brief check whether the term has been verified with a valid leader certificate. Use server_id = -1 to check for arbitary server.
+     */
+    bool term_verified(ulong term, int32 server_id);
+
+    void save_verified_term(ulong term, int32 server_id);
+
     // END FMARK
 
     void remove_peer_from_peers(const ptr<peer>& pp);
@@ -881,6 +888,12 @@ protected:
      * 
      */
     std::mutex election_list_lock_;
+
+    /**
+     * @brief FMARK: terms that have been verified with valid leader certificates. Map of term to server ID.
+     * 
+     */
+    std::unordered_map<ulong, int32> verified_terms_;
 
     /**
      * (Read-only)
