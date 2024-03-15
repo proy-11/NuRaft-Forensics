@@ -412,6 +412,8 @@ void raft_server::broadcast_leader_certificate() {
         election_list_[next_term] = tmp_lc;
     }
 
+    save_verified_term(next_term, get_id());
+
     if (flag_save_election_list()){
         if (save_and_clean_election_list(get_election_list_max())) p_in("Election list saved, memory cleaned");
     }
@@ -469,6 +471,12 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
         return resp;
     }
 
+    if (term_verified(req.get_term(), -1)) {
+        p_wn("Leader certificate for term %ld has been verified and saved, ignore it",
+             req.get_term());
+        return resp;
+    }
+
     if (state_->get_voted_for() == req.get_src()) {
         ulong next_term = state_->get_inc_term();
 
@@ -514,6 +522,8 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
             std::lock_guard<std::mutex> guard(election_list_lock_);
             election_list_[next_term] = lc;
         }
+
+        save_verified_term(next_term, req.get_src());
 
         if (flag_save_election_list()) {
             p_tr("Saving the election list to file");
@@ -649,6 +659,29 @@ void raft_server::handle_prevote_resp(resp_msg& resp) {
         p_er("[PRE-VOTE DONE] this node has been removed, stepping down");
         steps_to_down_ = 2;
     }
+}
+
+
+bool raft_server::term_verified(ulong term, int32 server_id) {
+    if (verified_terms_.find(term) != verified_terms_.end()) {
+        if (server_id == -1 || verified_terms_[term] == server_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void raft_server::save_verified_term(ulong term, int32 server_id) {
+    if (term < state_->get_term()) {
+        p_wn("term %ld is already expired, ignore it", term);
+        return;
+    }
+    if (verified_terms_.find(term) != verified_terms_.end()) {
+        p_wn("term %ld is already verified by another server %d, ignore it",
+                term, verified_terms_[term]);
+        return;
+    }
+    verified_terms_[term] = server_id;
 }
 
 } // namespace nuraft;

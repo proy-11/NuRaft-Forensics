@@ -8,6 +8,8 @@ Issues
 ------
 * ~~some test cases fail~~ all accompanied test cases pass but more tests may be needed
 * leader certificates are broadcasted casually. The just-elected leader does not wait for the followers to acknowledge the certificate before becoming a leader
+* election list contains only the leader certificate if the election is held. For certain situations, a peer may become a leader without an election.
+* synchronization needs to be tested (only run in single-threaded-ish mode)
 
 Features
 --------
