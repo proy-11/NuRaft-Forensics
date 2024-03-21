@@ -399,6 +399,33 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
 }
 
 /**
+ * @brief FMARK: send leader certificate to one peer
+ * 
+ */
+void raft_server::send_leader_certificate(int32 peer_id, ptr<leader_certificate> tmp_lc){
+    ptr<peer> pp = peers_[peer_id];
+    ptr<req_msg> req(cs_new<req_msg>(state_->get_term(),
+                                        msg_type::broadcast_leader_certificate_request,
+                                        id_,
+                                        pp->get_id(),
+                                        term_for_log(log_store_->next_slot() - 1),
+                                        log_store_->next_slot() - 1,
+                                        quick_commit_index_.load()));
+    ptr<log_entry> lc_msg_le =
+        cs_new<log_entry>(0, tmp_lc->serialize(), log_val_type::custom);
+    req->log_entries().push_back(lc_msg_le);
+    // FMARK: do not set the peer busy. Send LC casually.
+    pp->send_req(pp, req, resp_handler_);
+    // if (pp->make_busy()) {
+    //     pp->send_req(pp, req, resp_handler_);
+    // } else {
+    //     p_wn("failed to send leader certificate: peer %d (%s) is busy",
+    //          pp->get_id(),
+    //          pp->get_endpoint().c_str());
+    // }
+}
+
+/**
  * @brief FMARK: Send Leader Certificate to all peers.
  *
  */
@@ -420,26 +447,7 @@ void raft_server::broadcast_leader_certificate() {
 
     p_in("Broadcast Leader Certificates to all other peers");
     for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
-        ptr<peer> pp = it->second;
-        ptr<req_msg> req(cs_new<req_msg>(state_->get_term(),
-                                         msg_type::broadcast_leader_certificate_request,
-                                         id_,
-                                         pp->get_id(),
-                                         term_for_log(log_store_->next_slot() - 1),
-                                         log_store_->next_slot() - 1,
-                                         quick_commit_index_.load()));
-        ptr<log_entry> lc_msg_le =
-            cs_new<log_entry>(0, tmp_lc->serialize(), log_val_type::custom);
-        req->log_entries().push_back(lc_msg_le);
-        // FMARK: do not set the peer busy. Send LC casually.
-        pp->send_req(pp, req, resp_handler_);
-        // if (pp->make_busy()) {
-        //     pp->send_req(pp, req, resp_handler_);
-        // } else {
-        //     p_wn("failed to send leader certificate: peer %d (%s) is busy",
-        //          pp->get_id(),
-        //          pp->get_endpoint().c_str());
-        // }
+        send_leader_certificate(it->first, tmp_lc);
     }
 }
 

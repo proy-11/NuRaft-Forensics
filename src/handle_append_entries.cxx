@@ -591,6 +591,16 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         return resp;
     }
 
+    // FMARK: check whether the leader certificate (for this leader and for this term) is received and verified
+    if (term_verified(req.get_term(), req.get_src())) {
+        p_tr("leader certificate of term %zu is verified", req.get_term());
+    } else {
+        p_wn("leader certificate of term %zu is not verified", req.get_term());
+        resp->set_result_code(cmd_result_code::NO_LC);
+        resp->set_next_batch_size_hint_in_bytes(state_machine_->get_next_batch_size_hint_in_bytes());
+        return resp;
+    }
+
     // FMARK: check chain nature and leader sig
     size_t log_size = req.log_entries().size();
     // ptr<timer_t> timer = cs_new<timer_t>();
@@ -1039,6 +1049,16 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
         // }
         need_to_catchup = p->clear_pending_commit() || resp.get_next_idx() < log_store_->next_slot();
     } else {
+        // FMARK: check NO_LC 
+        if (resp.get_result_code() == cmd_result_code::NO_LC) {
+            p_wn("peer %d does not have my leader certificate.", p->get_id());
+            if (role_ == srv_role::leader) {
+                ptr<leader_certificate> tmp_lc = leader_cert_->clone();
+                send_leader_certificate(it->first, tmp_lc);
+            }
+            return;
+        }
+
         ulong prev_next_log = p->get_next_log_idx();
         std::lock_guard<std::mutex> guard(p->get_lock());
         if (resp.get_next_idx() > 0 && p->get_next_log_idx() > resp.get_next_idx()) {
