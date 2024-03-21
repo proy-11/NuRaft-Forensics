@@ -822,6 +822,8 @@ protected:
     ptr<resp_msg> handle_resignation_request(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
 
     // FMARK: for leader elections
+    void send_leader_certificate(int32 peer_id, ptr<leader_certificate> tmp_lc);
+
     void broadcast_leader_certificate();
 
     void new_leader_certificate();

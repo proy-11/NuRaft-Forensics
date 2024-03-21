@@ -12,17 +12,22 @@ namespace nuraft {
 class leader_certificate : public certificate {
 public:
     leader_certificate(/* parameters */) 
-        : certificate(0, 0, 0){
+        : certificate(0, 0, 0),
+          request_(nullptr){
     }
 
     leader_certificate(const ptr<certificate>& cert)
-        : certificate(cert->get_num_servers(), cert->get_term(), cert->get_index()){
+        : certificate(cert->get_num_servers(), cert->get_term(), cert->get_index()),
+          request_(nullptr){
             for (auto& it: cert->get_sigs()) {
                 insert(it.first, buffer::clone(*it.second));
             }
     }
 
     ptr<buffer> get_request() {
+        if (request_ == nullptr) {
+            return nullptr;
+        }
         request_->pos(0);
         return request_;
     }
@@ -33,7 +38,9 @@ public:
 
     ptr<leader_certificate> clone() {
         ptr<leader_certificate> new_cert = cs_new<leader_certificate>(certificate::clone());
-        new_cert->set_request(buffer::clone(*request_));
+        if (request_ != nullptr) {
+            new_cert->set_request(buffer::clone(*request_));
+        }
         return new_cert;
     }
 
