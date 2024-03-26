@@ -455,7 +455,11 @@ void raft_server::apply_and_log_current_params() {
         if (!private_key_) {
             // FMARK: RN: do not re-generate private key if it's already generated
             private_key_ = cs_new<seckey_t>();
-            private_key_->tofile(params->private_key);
+            try {
+                private_key_->tofile(params->private_key);
+            } catch (crypto_exception& e) {
+                p_wn("cannot save private key to %s (%s)", params->private_key.c_str(), e.what());
+            }
         }
     }
     p_tr("public key derive 1");
