@@ -451,11 +451,11 @@ void raft_server::apply_and_log_current_params() {
     try {
         private_key_ = cs_new<seckey_t>(params->private_key.c_str());
     } catch (crypto_exception& e) {
-        p_er("CRYPTO EXCEPTION");
-        p_er("cannot load private key, exception (%s)", e.what());
-        p_tr("Creating new private key");
-        private_key_ = cs_new<seckey_t>();
-        p_tr("Finished creating new private key");
+        p_er("cannot load private key from %s (%s)", params->private_key.c_str(), e.what());
+        if (!private_key_) {
+            // FMARK: RN: do not re-generate private key if it's already generated
+            private_key_ = cs_new<seckey_t>();
+        }
     }
     p_tr("public key derive 1");
     public_key_ = private_key_->derive();

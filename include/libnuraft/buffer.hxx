@@ -252,6 +252,20 @@ public:
      * @param len Length of the byte array.
      */
     void put_raw(const byte* ba, size_t len);
+
+    /**
+     * @brief Get the buffer content as hex string
+     * 
+     */
+    std::string str() const {
+        std::string ret;
+        ret.reserve(size() * 2);
+        for (size_t i = 0; i < size(); ++i) {
+            ret += "0123456789ABCDEF"[data_begin()[i] >> 4];
+            ret += "0123456789ABCDEF"[data_begin()[i] & 0x0F];
+        }
+        return ret;
+    }
 };
 
 std::ostream& operator << (std::ostream& out, buffer& buf);

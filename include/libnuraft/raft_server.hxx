@@ -823,10 +823,13 @@ protected:
 
     // FMARK: for leader elections
     void send_leader_certificate(int32 peer_id, ptr<leader_certificate> tmp_lc);
+    void send_leader_certificate(ptr<peer>& pp, ptr<leader_certificate> tmp_lc);
 
     void broadcast_leader_certificate();
 
     void new_leader_certificate();
+
+    bool verify_and_save_leader_certificate(req_msg& req, ptr<buffer> lc_buffer);
 
     ptr<resp_msg> handle_leader_certificate_request(req_msg& req);
 
