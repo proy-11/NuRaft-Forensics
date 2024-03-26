@@ -396,7 +396,6 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
         p_in("Server is elected as leader for term %zu", state_->get_term());
         election_completed_ = true;
         // FMARK: Broadcast Leader Certificate to all peers.
-        if (flag_use_election_list()) broadcast_leader_certificate();
         become_leader();
         p_in("  === LEADER (term %zu) ===\n", state_->get_term());
     }
@@ -482,17 +481,23 @@ bool raft_server::verify_and_save_leader_certificate(req_msg& req, ptr<buffer> l
             lc_req->get_last_log_idx(),
             lc_req->get_commit_idx());
 
-        if (lc_term != state_->get_term()) {
+        if (lc_term < state_->get_term()) {
             p_er("Invalid leader certificate request, term mismatch. LC from elected server has term %d. My term %ld.",
                 lc_term,
                 state_->get_term());
             return false;
         }
 
+        term_ = lc_term;
+
         // FMARK: verify all signatures
         std::unordered_map<int32, ptr<buffer>> sigs = lc->get_sigs();
         for (auto& sig: sigs) {
             if (sig.first == id_) continue;
+            if (peers_.find(sig.first) == peers_.end()) {
+                p_er("Received signature from non-existing peer %d, accept the signature...", sig.first);
+                continue;
+            }
             if (!peers_.find(sig.first)->second->verify_signature(lc->get_request(), sig.second)){
                 p_er("Invalid leader certificate request, signature mismatch. LC from elected server %d. Mismatched signature from peer %d.",
                     req.get_src(),
@@ -549,30 +554,34 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
     }
 
     if (term_verified(req.get_term(), -1)) {
-        p_wn("Leader certificate for term %ld has been verified and saved, ignore it",
+        p_wn("Leader certificate for term %ld has been verified and saved, replacing the old LC",
              req.get_term());
         return resp;
     }
 
-    if (state_->get_voted_for() == -1 || state_->get_voted_for() == req.get_src()) {
-        if (state_->get_voted_for() == -1) {
-            p_in("I'm voting for no peer, accept the leader certificate from peer %d",
-                 req.get_src());
-        }
-
-
-        if (req.log_entries().size() != 1) {
-            p_er("Invalid leader certificate request, no log entry");
-            return resp;
-        }
-
-        ptr<buffer> lc_buffer = req.log_entries().at(0)->get_buf_ptr();
-        if(!verify_and_save_leader_certificate(req, lc_buffer)) return resp;
-
-    } else {
-        p_in("I'm not voting for peer %d, ignore the leader certificate", req.get_src());
+    if (state_->get_voted_for() == -1) {
+        p_in("I'm voting for no peer, accept the leader certificate from peer %d",
+                req.get_src());
     }
+
+
+    if (req.log_entries().size() != 1) {
+        p_er("Invalid leader certificate request, no log entry");
+        return resp;
+    }
+
+    ptr<buffer> lc_buffer = req.log_entries().at(0)->get_buf_ptr();
+    if(!verify_and_save_leader_certificate(req, lc_buffer)) return resp;
+
+    resp->accept(0);
     return resp;
+}
+
+void raft_server::handle_leader_certificate_resp(resp_msg& resp) {
+    if (resp.get_accepted()){
+        p_in("Leader certificate request accepted by peer %d, now retrying to append entries", resp.get_src());
+        request_append_entries(peers_[resp.get_src()]);
+    }
 }
 
 ptr<resp_msg> raft_server::handle_prevote_req(req_msg& req) {
@@ -715,9 +724,8 @@ void raft_server::save_verified_term(ulong term, int32 server_id) {
         return;
     }
     if (verified_terms_.find(term) != verified_terms_.end()) {
-        p_wn("term %ld is already verified by another server %d, ignore it",
+        p_wn("term %ld is already verified by another server %d, replacing it",
                 term, verified_terms_[term]);
-        return;
     }
     verified_terms_[term] = server_id;
 }
