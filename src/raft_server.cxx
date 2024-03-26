@@ -369,7 +369,10 @@ void raft_server::apply_and_log_current_params() {
         private_key = cs_new<seckey_t>(params->private_key_path);
     } catch (crypto_exception& e) {
         p_er("cannot load private key from %s (%s)", params->private_key_path.c_str(), e.what());
-        private_key = cs_new<seckey_t>();
+        if (!private_key) {
+            // FMARK: RN: do not re-generate private key if it's already generated
+            private_key = cs_new<seckey_t>();
+        }
     }
     public_key = private_key->derive();
     config_->get_server(get_id())->set_public_key(public_key);
