@@ -938,6 +938,10 @@ void raft_server::handle_peer_resp(ptr<resp_msg>& resp, ptr<rpc_exception>& err)
         handle_custom_notification_resp(*resp);
         break;
 
+    case msg_type::broadcast_leader_certificate_response:
+        handle_leader_certificate_resp(*resp);
+        break;
+
     default:
         p_er("received an unexpected response: %s, ignore it", msg_type_to_string(resp->get_type()).c_str());
         break;
@@ -1112,7 +1116,13 @@ void raft_server::become_leader() {
     pre_vote_.failure_count_ = 0;
     data_fresh_ = true;
 
-    request_append_entries();
+    // request_append_entries();
+    if (peers_.size() == 0 || get_quorum_for_commit() == 0) {
+        p_tr("append entries requested for one node cluster or quorum size 1 (including leader)");
+        commit(precommit_index_.load());
+    }
+    
+    if (flag_use_election_list()) broadcast_leader_certificate();
 
     if (my_priority_ == 0 && get_num_voting_members() > 1) {
         // If this member's priority is zero, this node owns a temporary

@@ -832,6 +832,8 @@ protected:
     bool verify_and_save_leader_certificate(req_msg& req, ptr<buffer> lc_buffer);
 
     ptr<resp_msg> handle_leader_certificate_request(req_msg& req);
+    
+    void handle_leader_certificate_resp(resp_msg& resp);
 
     bool save_and_clean_election_list(ulong threshold);
 
