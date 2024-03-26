@@ -1514,6 +1514,8 @@ int temporary_leader_test() {
     s3.fNet->execReqResp();
     // FMARK: compensate for broadcasting LC
     s3.fNet->execReqResp();
+    s3.fNet->execReqResp();
+    s3.fNet->execReqResp();
 
     // Now S2 initiates leader election.
     s2.fNet->execReqResp();
