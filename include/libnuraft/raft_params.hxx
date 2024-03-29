@@ -96,7 +96,7 @@ struct raft_params {
         , use_election_list_(true)
         , save_election_list_(true)
         , forensics_output_path_("forensics_out")
-        , election_list_max_(1)
+        , election_list_max_(10)
         , locking_method_type_(dual_mutex)
         , return_method_(blocking)
         , auto_forwarding_req_timeout_(0)
