@@ -114,6 +114,9 @@ void raft_server::invite_srv_to_join_cluster() {
     ptr<cluster_config> c_conf = get_config();
     // FMARK: self pubkey in c_conf
     req->log_entries().push_back(cs_new<log_entry>(state_->get_term(), c_conf->serialize(), log_val_type::conf));
+    // FMARK: push leader certificate to the log entry
+    ptr<leader_certificate> tmp_lc = leader_cert_->clone();
+    req->log_entries().push_back(cs_new<log_entry>(0, tmp_lc->serialize(), log_val_type::custom));
     srv_to_join_->send_req(srv_to_join_, req, ex_resp_handler_);
     p_in("sent join request to peer %d, %s", srv_to_join_->get_id(), srv_to_join_->get_endpoint().c_str());
 }
@@ -121,7 +124,7 @@ void raft_server::invite_srv_to_join_cluster() {
 ptr<resp_msg> raft_server::handle_join_cluster_req(req_msg& req) {
     std::vector<ptr<log_entry>>& entries = req.log_entries();
     ptr<resp_msg> resp = cs_new<resp_msg>(state_->get_term(), msg_type::join_cluster_response, id_, req.get_src());
-    if (entries.size() != 1 || entries[0]->get_val_type() != log_val_type::conf) {
+    if ((entries.size() != 1 && entries.size() != 2) || entries[0]->get_val_type() != log_val_type::conf) {
         p_in("receive an invalid JoinClusterRequest as the log entry value "
              "doesn't meet the requirements");
         return resp;
@@ -160,6 +163,15 @@ ptr<resp_msg> raft_server::handle_join_cluster_req(req_msg& req) {
     ctx_->state_mgr_->save_state(*state_);
     reconfigure(cluster_config::deserialize(entries[0]->get_buf()));
     p_in("leader %d's pubkey = %s", int(leader_), get_srv_config(leader_)->get_public_key()->str().c_str());
+
+    // FMARK: verify leader certificate
+    if (entries.size() == 2) {
+        ptr<buffer> lc_buffer = req.log_entries().at(1)->get_buf_ptr();
+        verify_and_save_leader_certificate(req, lc_buffer);
+        p_in("leader certificate is verified and saved");
+    } else {
+        p_wn("no leader certificate in the log entry");
+    }
 
     resp->accept(quick_commit_index_.load() + 1);
     p_in("Set sig");

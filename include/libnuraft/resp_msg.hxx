@@ -34,7 +34,7 @@ using resp_async_cb = std::function<ptr<cmd_result<ptr<buffer>>>()>;
 
 class resp_msg : public msg_base {
 public:
-    resp_msg(ulong term, msg_type type, int32 src, int32 dst, ulong next_idx = 0L, bool accepted = false)
+    resp_msg(ulong term, msg_type type, int32 src, int32 dst, ulong next_idx = 0L, bool accepted = false, bool lc_needed = false)
         : msg_base(term, type, src, dst)
         , next_idx_(next_idx)
         , next_batch_size_hint_in_bytes_(0)
@@ -44,7 +44,8 @@ public:
         , async_cb_func_(nullptr)
         , result_code_(cmd_result_code::OK)
         , sigid_(0)
-        , signature_(nullptr) {}
+        , signature_(nullptr)
+        , lc_needed_(lc_needed) {}
 
     __nocopy__(resp_msg);
 
@@ -60,6 +61,12 @@ public:
     void accept(ulong next_idx) {
         next_idx_ = next_idx;
         accepted_ = true;
+    }
+
+    bool get_lc_needed() const { return lc_needed_; }
+
+    void need_lc() {
+        lc_needed_ = true;
     }
 
     void set_ctx(ptr<buffer> src) { ctx_ = src; }
@@ -117,6 +124,7 @@ private:
     // FMARK: sig
     ulong sigid_;
     ptr<buffer> signature_;
+    bool lc_needed_;
 };
 
 } // namespace nuraft

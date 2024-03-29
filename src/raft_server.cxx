@@ -450,8 +450,16 @@ void raft_server::apply_and_log_current_params() {
     } catch (crypto_exception& e) {
         p_er("CRYPTO EXCEPTION");
         p_er("cannot load private key, exception (%s)", e.what());
-        p_tr("Creating new private key");
-        private_key_ = cs_new<seckey_t>();
+        p_tr("Creating new private key if it doesn't exist");
+        if (!private_key) {
+            // FMARK: RN: do not re-generate private key if it's already generated
+            private_key_ = cs_new<seckey_t>();
+            try {
+                private_key->tofile(params->private_key);
+            } catch (crypto_exception& e) {
+                p_wn("cannot save private key to %s (%s)", params->private_key.c_str(), e.what());
+            }
+        }
         p_tr("Finished creating new private key");
     }
     p_tr("public key derive 1");
@@ -528,6 +536,12 @@ void raft_server::shutdown() {
         ctx_->rpc_listener_.reset();
         ctx_->rpc_cli_factory_.reset();
         ctx_->scheduler_.reset();
+    }
+
+    if (flag_save_election_list()){
+        // FMARK: save election list to file
+        p_in("saving unsaved election list to file");
+        save_and_clean_election_list(1);
     }
 
     p_in("reset all pointers.");
@@ -743,6 +757,8 @@ ptr<resp_msg> raft_server::process_req(req_msg& req) {
     } else if (req.get_type() == msg_type::priority_change_request) {
         resp = handle_priority_change_req(req);
 
+    } else if (req.get_type() == msg_type::broadcast_leader_certificate_request){
+        resp = handle_leader_certificate_request(req);
     } else {
         // extended requests
         resp = handle_ext_msg(req);
@@ -909,6 +925,10 @@ void raft_server::handle_peer_resp(ptr<resp_msg>& resp, ptr<rpc_exception>& err)
 
     case msg_type::custom_notification_response:
         handle_custom_notification_resp(*resp);
+        break;
+
+    case msg_type::broadcast_leader_certificate_response:
+        handle_leader_certificate_resp(*resp);
         break;
 
     default:
@@ -1085,7 +1105,13 @@ void raft_server::become_leader() {
     pre_vote_.failure_count_ = 0;
     data_fresh_ = true;
 
-    request_append_entries();
+    // request_append_entries();
+    if (peers_.size() == 0 || get_quorum_for_commit() == 0) {
+        p_tr("append entries requested for one node cluster or quorum size 1 (including leader)");
+        commit(precommit_index_.load());
+    }
+    
+    if (flag_use_election_list()) broadcast_leader_certificate();
 
     if (my_priority_ == 0 && get_num_voting_members() > 1) {
         // If this member's priority is zero, this node owns a temporary
@@ -1807,6 +1833,11 @@ bool raft_server::push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term
     return false;
 }
 
+// FMARK: get new leader certificate
+void raft_server::new_leader_certificate() {
+    leader_cert_ = cs_new<leader_certificate>();
+}
+
 CbReturnCode raft_server::invoke_callback(cb_func::Type type, cb_func::Param* param) {
     CbReturnCode rc = ctx_->cb_func_.call(type, param);
     return rc;
@@ -1834,4 +1865,10 @@ bool raft_server::flag_use_ptr() { return get_current_params().use_chain_ptr_; }
 bool raft_server::flag_use_leader_sig() { return get_current_params().use_leader_sig_; }
 
 bool raft_server::flag_use_cc() { return get_current_params().use_commitment_cert_; }
+
+bool raft_server::flag_use_election_list() { return get_current_params().use_election_list_; }
+
+bool raft_server::flag_save_election_list() {return get_current_params().save_election_list_; }
+
+ulong raft_server::get_election_list_max() { return get_current_params().election_list_max_; }
 } // namespace nuraft

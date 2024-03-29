@@ -40,6 +40,8 @@ limitations under the License.
 #include <unordered_map>
 #include <unordered_set>
 
+#include "leader_certificate.hxx"
+
 class EventAwaiter;
 
 namespace nuraft {
@@ -628,6 +630,12 @@ public:
 
     bool flag_use_cc();
 
+    bool flag_use_election_list();
+
+    bool flag_save_election_list();
+
+    ulong get_election_list_max();
+
 protected:
     typedef std::unordered_map<int32, ptr<peer>>::const_iterator peer_itor;
 
@@ -802,6 +810,33 @@ protected:
 
     ptr<resp_msg> handle_resignation_request(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
 
+    // FMARK: for leader elections
+    void send_leader_certificate(int32 peer_id, ptr<leader_certificate> tmp_lc);
+    void send_leader_certificate(ptr<peer>& pp, ptr<leader_certificate> tmp_lc);
+
+    void broadcast_leader_certificate();
+
+    void new_leader_certificate();
+
+    bool verify_and_save_leader_certificate(req_msg& req, ptr<buffer> lc_buffer);
+
+    ptr<resp_msg> handle_leader_certificate_request(req_msg& req);
+    
+    void handle_leader_certificate_resp(resp_msg& resp);
+
+    bool save_and_clean_election_list(ulong threshold);
+
+    std::string get_election_list_file_name(const std::string& data_dir);
+
+    /**
+     * @brief check whether the term has been verified with a valid leader certificate. Use server_id = -1 to check for arbitary server.
+     */
+    bool term_verified(ulong term, int32 server_id);
+
+    void save_verified_term(ulong term, int32 server_id);
+
+    // END FMARK
+
     void remove_peer_from_peers(const ptr<peer>& pp);
 
     void check_overall_status();
@@ -840,6 +875,32 @@ protected:
      *
      */
     std::mutex cert_lock_;
+
+
+    /**
+     * @brief FMARK: leader certificate
+     * 
+     */
+    ptr<leader_certificate> leader_cert_;
+
+
+    /**
+     * @brief FMARK: election list (term, leader_certificate)
+     * 
+     */
+    std::unordered_map<ulong, ptr<leader_certificate>> election_list_;
+
+    /**
+     * @brief FMARK: election list lock
+     * 
+     */
+    std::mutex election_list_lock_;
+
+    /**
+     * @brief FMARK: terms that have been verified with valid leader certificates. Map of term to server ID.
+     * 
+     */
+    std::unordered_map<ulong, int32> verified_terms_;
 
     /**
      * (Read-only)

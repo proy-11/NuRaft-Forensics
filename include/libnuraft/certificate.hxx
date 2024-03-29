@@ -37,11 +37,18 @@ public:
         return 2 * (int32)signatures_.size() > num_servers_;
     }
 
+    inline int32 get_num_servers() { return num_servers_; }
+
     inline ulong get_term() { return term_; }
 
     inline ulong get_index() { return index_; }
 
     inline std::unordered_map<int32, ptr<buffer>> get_sigs() { return signatures_; }
+
+    inline void set_signatures(std::unordered_map<int32, ptr<buffer>> sigs) {
+        std::lock_guard<std::mutex> guard(mutex_);
+        signatures_ = sigs;
+    }
 
     ptr<buffer> serialize() {
         std::lock_guard<std::mutex> guard(mutex_);

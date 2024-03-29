@@ -51,6 +51,7 @@ enum cmd_result_code {
     BAD_CHAIN = -100,
     BAD_LEADER_SIG = -101,
     BAD_CC = -102,
+    NO_LC = -103,
     FAILED = -32768,
 };
 
@@ -226,6 +227,7 @@ public:
              {cmd_result_code::BAD_CHAIN, "Chain nature violated."},
              {cmd_result_code::BAD_LEADER_SIG, "Leader signature invalid."},
              {cmd_result_code::BAD_CC, "CC invalid."},
+             {cmd_result_code::NO_LC, "No LC found for this leader."},
              {cmd_result_code::FAILED, "Failed."}});
         auto entry = code_str_map.find((int)code);
         if (entry == code_str_map.end()) {
