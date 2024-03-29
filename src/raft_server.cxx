@@ -451,7 +451,9 @@ void raft_server::apply_and_log_current_params() {
     try {
         private_key_ = cs_new<seckey_t>(params->private_key.c_str());
     } catch (crypto_exception& e) {
-        p_er("cannot load private key from %s (%s)", params->private_key.c_str(), e.what());
+        p_er("CRYPTO EXCEPTION");
+        p_er("cannot load private key, exception (%s)", e.what());
+        p_tr("Creating new private key if it doesn't exist");
         if (!private_key_) {
             // FMARK: RN: do not re-generate private key if it's already generated
             private_key_ = cs_new<seckey_t>();
