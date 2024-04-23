@@ -95,7 +95,7 @@ private:
     // after appending given logs.
     ulong commit_idx_;
 
-    // Logs. Can be empty.
+    // Logs. Can be empty. (for append_entries request, the 0-idx log is the hash pointer)
     std::vector<ptr<log_entry>> log_entries_;
 
     // FMARK: certificate

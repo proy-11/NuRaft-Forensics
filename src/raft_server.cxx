@@ -96,7 +96,9 @@ raft_server::raft_server(context* ctx, const init_options& opt)
           (rpc_handler)std::bind(&raft_server::handle_peer_resp, this, std::placeholders::_1, std::placeholders::_2))
     , ex_resp_handler_(
           (rpc_handler)std::bind(&raft_server::handle_ext_resp, this, std::placeholders::_1, std::placeholders::_2))
-    , last_snapshot_(ctx->state_machine_->last_snapshot()) {
+    , last_snapshot_(ctx->state_machine_->last_snapshot())
+    , last_log_hash_(nullptr)
+    , last_committed_log_hash_(nullptr) {
 
     const size_t BUFSIZE = 4096;
     char temp_buf[BUFSIZE];
@@ -1685,10 +1687,24 @@ void raft_server::set_last_snapshot(const ptr<snapshot>& new_snapshot) {
 ulong raft_server::store_log_entry(ptr<log_entry>& entry, ulong index) {
     ulong log_index = index;
 
+    // TODO: update last_log_hash_ptr here; either based on last_committed_hash_ptr or last_log_hash_ptr
     if (index == 0) {
         log_index = log_store_->append(entry);
+        if (entry->get_val_type() == log_val_type::app_log) last_log_hash_ = create_hash(entry, last_log_hash_, log_index);
     } else {
         log_store_->write_at(log_index, entry);
+        // FMARK: RN: regenerate starting from last_committed_hash_ptr
+        for (ulong i = sm_commit_index_; i <= index; i++) {
+            ptr<log_entry> entry = log_store_->entry_at(i);
+            if (entry->get_val_type() != log_val_type::app_log) continue;
+            last_log_hash_ = create_hash(entry, last_committed_log_hash_, index + i);
+        }
+    }
+
+    if (last_log_hash_ == nullptr) {
+        p_tr("empty last log hash");
+    } else {
+        p_tr("last log hash updated to %s", tobase64(*last_log_hash_).c_str());
     }
 
     if (entry->get_val_type() == log_val_type::conf) {
@@ -1715,30 +1731,48 @@ ulong raft_server::store_log_entry(ptr<log_entry>& entry, ulong index) {
  * FMARK:
  * @param index index of the appending point of target chain
  *
- * @return -1 on pass; index of failed entry on fail;
+ * @return true on pass;
  */
-ssize_t raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong& index) {
+bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong index, ptr<buffer> target_hash) {
+    p_tr("number of entries %zu, index %zu", entries.size(), index);
+    for (auto& entry: entries) {
+        p_tr("entry %zu, term %zu, size %zu, type %d", entry->get_term(), entry->get_term(), entry->get_buf().size(), entry->get_val_type());
+    }
     ptr<log_entry> prev_entry = log_store_->last_app_log_entry();
     ssize_t prev_index = (ssize_t)log_store_->last_app_log_idx();
-    ulong starter = index + 1;
-    if (index > 0 && index < log_store_->next_slot() - 1) {
-        prev_index = index;
-        while (prev_index > 0 && log_store_->entry_at(prev_index)->get_val_type() != log_val_type::app_log) {
-            prev_index--;
+    // ulong starter = index + 1;
+    ptr<buffer> base_hash = last_log_hash_;
+    if (index <= sm_commit_index_) {
+        p_ft("next index %zu is less than or equal to state machine commit index %zu", index, sm_commit_index_.load());
+        return false;
+    }
+    if (index > log_store_->next_slot()) {
+        p_wn("index %zu is greater than next slot %zu", index, log_store_->next_slot());
+        return false;
+    }
+    if (index != log_store_->next_slot()) {
+        // TODO: get bash hash based on last_committed_log_hash if within this range; otherwise, use saved last_log_hash
+        p_in("regenerating hash from %zu to %zu", sm_commit_index_.load(), index);
+        for (ulong i = sm_commit_index_; i < index; i++) {
+            // TODO: iteratively hash the entries to the last one. Need to modify the log_entry and raft_server:
+            //   1. do not include prv_ptr in the log_entry structure. Only include the last hash pointer in the req msg.
+            //   2. each node stores only the hash pointers of the latest entry and also the latest comitted entry. intermediate ckpt
+            ptr<log_entry> entry = log_store_->entry_at(i);
+            if (entry->get_val_type() != log_val_type::app_log) continue;
+            base_hash = create_hash(entry, base_hash, index + i);
         }
-        prev_entry = log_store_->entry_at(prev_index);
+
     }
     // if (!check_hash(entries[0], log_store_->entry_at(index), index)) return 0;
-    for (ulong i = 0; i < (ulong)entries.size(); i++) {
-        if (entries[i]->get_val_type() != log_val_type::app_log) continue;
-        if (!check_hash(entries[i], prev_entry, prev_index)) {
-            index = prev_index;
-            return (ssize_t)(i + starter);
+    bool ret = check_hash(entries, base_hash, target_hash, index);
+    if (!ret){
+        if (base_hash == nullptr) {
+            p_er("hash pointers are of different lengths, length of target hash %zu", target_hash->size());
+        } else {
+            p_er("expected hash %s, but got %s", tobase64(*base_hash).c_str(), tobase64(*target_hash).c_str());
         }
-        prev_entry = entries[i];
-        prev_index = starter + i;
     }
-    return (ssize_t)-1;
+    return ret;
 }
 
 /**
@@ -1857,6 +1891,10 @@ void raft_server::check_overall_status() { check_leadership_transfer(); }
 
 // FMARK: sign message
 ptr<buffer> raft_server::get_signature(buffer& msg) { return private_key_->sign_md(msg); }
+
+ptr<buffer> raft_server::hash_last_entry() { return last_log_hash_;}
+
+ptr<buffer> raft_server::hash_last_committed_entry() { return last_committed_log_hash_;}
 
 // FMARK: flag wrappers
 

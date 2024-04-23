@@ -71,8 +71,12 @@ ptr<buffer> create_hash(ptr<log_entry> le_, ulong height);
 
 ptr<buffer> create_hash(ptr<log_store> store_);
 
-bool check_hash(ptr<log_entry> appended, ptr<log_entry> latest, ulong height);
+// bool check_hash(ptr<log_entry> appended, ptr<log_entry> latest, ulong height);
+
+bool check_hash(std::vector<ptr<log_entry>>& entries, ptr<buffer>& base_hash, ptr<buffer> target_hash, ulong starting_idx); 
 
 bool check_hash(ptr<log_entry> appended, ptr<log_store> store_, ulong pos);
+
+ptr<buffer> create_hash(ptr<log_entry> new_entry, ptr<buffer> curr_ptr, ulong idx);
 } // namespace nuraft
 #endif

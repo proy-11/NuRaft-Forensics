@@ -29,6 +29,7 @@ enum log_val_type {
     cluster_server  = 3,
     log_pack        = 4,
     snp_sync_req    = 5,
+    hash_ptr        = 11, // FMARK: for sharing hash pointer
     custom          = 999,
 };
 

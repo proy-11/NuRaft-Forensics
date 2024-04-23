@@ -456,6 +456,15 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
         term, msg_type::append_entries_request, id_, p.get_id(), last_log_term, last_log_idx, commit_idx));
     std::vector<ptr<log_entry>>& v = req->log_entries();
     if (log_entries) {
+        // FMARK: RN: use the first log entry to transmit hash pointer
+        if (flag_use_ptr() && last_log_hash_ != nullptr && adjusted_end_idx == cur_nxt_idx ) {
+            // FMARK: RN: send hash pointer only when all local (leader's) log entries are sent
+            ptr<buffer> hash_ptr_buf = buffer::clone(*last_log_hash_);
+            ptr<log_entry> ptr_msg_le =
+                    cs_new<log_entry>(0, hash_ptr_buf, log_val_type::hash_ptr);
+            v.push_back(ptr_msg_le);
+            p_tr("hash pointer (%s) sent to peer %d", tobase64(*hash_ptr_buf).c_str(), p.get_id());
+        }
         v.insert(v.end(), log_entries->begin(), log_entries->end());
         // FMARK: TODO: correctness
         if (flag_use_cc() && commit_cert_) {
@@ -601,6 +610,12 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         return resp;
     }
 
+    ptr<buffer> hash_ptr = nullptr;
+    if (req.log_entries().size() > 0 && req.log_entries().at(0)->get_val_type() == log_val_type::hash_ptr) {
+        hash_ptr = req.log_entries().at(0)->get_buf_ptr();
+        req.log_entries().erase(req.log_entries().begin());
+    }
+
     // FMARK: check chain nature and leader sig
     size_t log_size = req.log_entries().size();
     // ptr<timer_t> timer = cs_new<timer_t>();
@@ -610,9 +625,10 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         ulong prev_idx = log_idx;
         int64_t conflict;
 
-        if (flag_use_ptr()) {
+        if (flag_use_ptr() && hash_ptr != nullptr) {
             // timer->start_timer();
-            if ((conflict = match_log_entry(req.log_entries(), prev_idx)) >= 0) {
+            p_tr("check hash pointer of requests appending %zu", log_idx + 1);
+            if ((conflict = match_log_entry(req.log_entries(), prev_idx + 1, hash_ptr)) != true) {
                 p_wn("deny illegal hash pointer of requests appending %zu: match failure at %zu -> %zu",
                      log_idx,
                      prev_idx,
@@ -628,15 +644,19 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
 
                 p_wn("RECV NUM ENTRIES = %llu", log_size);
                 for (size_t k = 0; k < log_size; k++) {
-                    p_wn("RECV REQ ENTRY %lld (%d): %s (%s)",
-                         k,
-                         req.log_entries()[k]->get_val_type(),
-                         tobase64(*create_hash(req.log_entries()[k], k + log_idx + 1)).c_str(),
-                         req.log_entries()[k]->get_val_type() == log_val_type::app_log
-                             ? req.log_entries()[k]->get_prev_ptr() == nullptr
-                                   ? "null"
-                                   : tobase64(*req.log_entries()[k]->get_prev_ptr()).c_str()
-                             : "");
+                    // p_wn("RECV REQ ENTRY %lld (%d): %s (%s)",
+                    //      k,
+                    //      req.log_entries()[k]->get_val_type(),
+                    //      tobase64(*create_hash(req.log_entries()[k], k + log_idx + 1)).c_str(),
+                    //      req.log_entries()[k]->get_val_type() == log_val_type::app_log
+                    //          ? req.log_entries()[k]->get_prev_ptr() == nullptr
+                    //                ? "null"
+                    //                : tobase64(*req.log_entries()[k]->get_prev_ptr()).c_str()
+                    //          : "");
+                    p_wn("RECV REQ ENTRY %lld (%d): %s",
+                        k,
+                        req.log_entries()[k]->get_val_type(),
+                        tobase64(*create_hash(req.log_entries()[k], k + log_idx + 1)).c_str());
                 }
 
                 resp->set_result_code(cmd_result_code::BAD_CHAIN);
@@ -645,6 +665,8 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                 p_db("req log idx %zu -- %zu passed pointer checks", log_idx + 1, log_idx + log_size);
             }
             // timer->add_record("ptr.check");
+        } else {
+            p_db("hash pointer is not used/received");
         }
 
         if (flag_use_leader_sig()) {
