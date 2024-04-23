@@ -536,7 +536,7 @@ private:
                         log_ctx->get(sig);
                     }
 
-                    ptr<log_entry> entry(cs_new<log_entry>(term, buf, val_type, prev, sig));
+                    ptr<log_entry> entry(cs_new<log_entry>(term, buf, val_type, sig));
                     req->log_entries().push_back(entry);
                 }
             }
@@ -1040,9 +1040,9 @@ public:
         for (auto& entry: req->log_entries()) {
             ptr<log_entry>& le = entry;
             size_t total_size = 8 + 1 + 4 + le->get_buf().size() + 8;
-            if (le->get_prev_ptr()) {
-                total_size += le->get_prev_ptr()->size();
-            }
+            // if (le->get_prev_ptr()) {
+            //     total_size += le->get_prev_ptr()->size();
+            // }
             if (le->get_sig_ptr()) {
                 total_size += le->get_sig_ptr()->size();
             }
@@ -1055,11 +1055,11 @@ public:
             entry_buf->put(le->get_buf());
 
             // FMARK:
-            entry_buf->put(le->get_prev_ptr() == nullptr ? (int32)0 : (int32)le->get_prev_ptr()->size());
-            if (le->get_prev_ptr()) {
-                le->get_prev_ptr()->pos(0);
-                entry_buf->put(*le->get_prev_ptr());
-            }
+            entry_buf->put((int32)0);
+            // if (le->get_prev_ptr()) {
+            //     le->get_prev_ptr()->pos(0);
+            //     entry_buf->put(*le->get_prev_ptr());
+            // }
             entry_buf->put(le->get_sig_ptr() == nullptr ? (int32)0 : (int32)le->get_sig_ptr()->size());
             if (le->get_sig_ptr()) {
                 le->get_sig_ptr()->pos(0);

@@ -19,6 +19,7 @@ limitations under the License.
 **************************************************************************/
 
 #include "raft_server.hxx"
+#include "openssl_ecdsa.hxx"
 
 #include "cluster_config.hxx"
 #include "error_code.hxx"
@@ -210,6 +211,8 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
 
         if (le->get_val_type() == log_val_type::app_log) {
             commit_app_log(index_to_commit, le, need_to_handle_commit_elem);
+            // TODO: update last_committed_log_hash
+            last_committed_log_hash_ = create_hash(le, last_committed_log_hash_, index_to_commit);
 
         } else if (le->get_val_type() == log_val_type::conf) {
             commit_conf(index_to_commit, le);

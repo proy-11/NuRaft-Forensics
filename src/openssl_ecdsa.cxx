@@ -333,30 +333,91 @@ ptr<buffer> create_hash(ptr<log_store> store_) {
 /**
  * @param height the height of the latest log entry
  */
-bool check_hash(ptr<log_entry> appended, ptr<log_entry> latest, ulong height) {
-    ptr<buffer> pointer = appended->get_prev_ptr();
-    if (pointer == nullptr) {
+// bool check_hash(ptr<log_entry> appended, ptr<log_entry> latest, ulong height) {
+//     ptr<buffer> pointer = appended->get_prev_ptr();
+//     if (pointer == nullptr) {
+//         return false;
+//     }
+//     auto digest = create_hash(latest, height);
+//     if (digest->size() != pointer->size()) {
+//         return false;
+//     }
+//     for (size_t i = 0; i < digest->size(); i++) {
+//         if (digest->get_byte() != pointer->get_byte()) {
+//             pointer->pos(0);
+//             return false;
+//         }
+//     }
+//     pointer->pos(0);
+//     return true;
+// }
+
+bool check_hash(std::vector<ptr<log_entry>>& entries, ptr<buffer>& base_hash, ptr<buffer> target_hash, ulong starting_idx) {
+    ptr<buffer> curr_hash = base_hash;
+    for (size_t i = 0; i < entries.size(); i++) {
+        // TODO: iteratively hash the entries to the last one. Need to modify the log_entry and raft_server:
+        //   1. do not include prv_ptr in the log_entry structure. Only include the last hash pointer in the req msg.
+        //   2. each node stores only the hash pointers of the latest entry and also the latest comitted entry. intermediate ckpt
+        
+        if (entries[i]->get_val_type() != log_val_type::app_log) continue;
+        curr_hash = create_hash(entries[i], curr_hash, starting_idx + i);
+        cout << "curr_hash: " << tobase64(*curr_hash) << std::endl;
+    }
+
+    if (curr_hash->size() != target_hash->size()) {
+        base_hash = nullptr;
         return false;
     }
-    auto digest = create_hash(latest, height);
-    if (digest->size() != pointer->size()) {
-        return false;
-    }
-    for (size_t i = 0; i < digest->size(); i++) {
-        if (digest->get_byte() != pointer->get_byte()) {
-            pointer->pos(0);
+    curr_hash->pos(0);
+    target_hash->pos(0);
+    for (size_t j = 0; j < curr_hash->size(); j++) {
+        if (curr_hash->get_byte() != target_hash->get_byte()) {
+            base_hash = curr_hash;
             return false;
         }
     }
-    pointer->pos(0);
+    curr_hash->pos(0);
+    target_hash->pos(0);
     return true;
 }
 
-bool check_hash(ptr<log_entry> appended, ptr<log_store> store_, ulong pos) {
-    if (pos == (ulong)-1) {
-        return check_hash(appended, store_->last_entry(), store_->next_slot() - 1);
+// bool check_hash(ptr<log_entry> appended, ptr<log_store> store_, ulong pos) {
+//     if (pos == (ulong)-1) {
+//         return check_hash(appended, store_->last_entry(), store_->next_slot() - 1);
+//     } else {
+//         return check_hash(appended, store_->entry_at(pos), pos);
+//     }
+// }
+
+ptr<buffer> create_hash(ptr<log_entry> new_entry, ptr<buffer> curr_ptr, ulong idx) {
+    ptr<buffer> serial = new_entry->serialize_sig();
+    size_t msgsize;
+    if(serial == nullptr) {
+        msgsize = sizeof(ulong);
     } else {
-        return check_hash(appended, store_->entry_at(pos), pos);
+        msgsize = serial->size() + sizeof(ulong);
     }
+    if (curr_ptr != nullptr) msgsize += curr_ptr->size();
+    ptr<buffer> msg = buffer::alloc(msgsize);
+    msg->put(idx);
+    if(serial != nullptr) {
+        msg->put(*serial);
+    } else {
+        msg->put((byte)0);
+    }
+    if (curr_ptr != nullptr) curr_ptr->pos(0);
+    if (curr_ptr != nullptr) msg->put(*curr_ptr);
+    msg->pos(0);
+
+    uint32_t digest_length = SHA256_DIGEST_LENGTH;
+    ptr<buffer> digest = buffer::alloc(digest_length);
+    EVP_MD_CTX* context = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(context, HASH_FN(), nullptr);
+    EVP_DigestUpdate(context, msg->data(), msg->size());
+    EVP_DigestFinal_ex(context, digest->data(), &digest_length);
+    EVP_MD_CTX_destroy(context);
+
+    digest->pos(0);
+    return digest;
 }
 } // namespace nuraft

@@ -627,6 +627,17 @@ public:
     // FMARK: flag functions
     bool flag_use_ptr();
 
+
+    /**
+     * FMARK: Get the hash of the last log entry.
+     */
+    ptr<buffer> hash_last_entry();
+
+    /**
+     * FMARK: Get the hash of the last committed log entry.
+     */
+    ptr<buffer> hash_last_committed_entry();
+
     bool flag_use_leader_sig();
 
     bool flag_use_cc();
@@ -808,7 +819,7 @@ protected:
     ulong store_log_entry(ptr<log_entry>& entry, ulong index = 0);
 
     // FMARK: crypto checks
-    ssize_t match_log_entry(std::vector<ptr<log_entry>>& entries, ulong& index);
+    bool match_log_entry(std::vector<ptr<log_entry>>& entries, ulong index, ptr<buffer> target_hash);
     ssize_t check_leader_sig(std::vector<ptr<log_entry>>& entries, int32 signer);
     int32 validate_commitment_certificate(ptr<certificate> cert, ptr<log_entry> entry);
 
@@ -912,6 +923,10 @@ protected:
      * 
      */
     std::unordered_map<ulong, int32> verified_terms_;
+
+    // FMARK
+    ptr<buffer> last_log_hash_;
+    ptr<buffer> last_committed_log_hash_;
 
     /**
      * (Read-only)

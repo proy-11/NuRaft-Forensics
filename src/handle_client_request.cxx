@@ -103,11 +103,11 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
         // FMARK: add pointer
         // auto timer = cs_new<timer_t>();
 
-        if (flag_use_ptr()) {
-            // timer->start_timer();
-            entries.at(i)->set_prev(create_hash(log_store_));
-            // timer->add_record("ptr.init");
-        }
+        // if (flag_use_ptr()) {
+        //     // timer->start_timer();
+        //     entries.at(i)->set_prev(create_hash(log_store_)); 
+        //     // timer->add_record("ptr.init");
+        // }
 
         // FMARK: add sig
         if (flag_use_leader_sig()) {
