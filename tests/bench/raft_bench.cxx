@@ -196,8 +196,11 @@ std::vector<response> response_list;
 
 int init_raft(server_stuff& stuff, int complexity, std::string fault) {
     // Create logger for this server.
-    std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
-    stuff.log_wrap_ = cs_new<logger_wrapper>(log_file_name, 6);
+    std::string log_file_name = global_workdir.string() + "/srv" + std::to_string(stuff.server_id_) + ".log";
+    // std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
+
+    _msg("Writing log to %s\n", log_file_name.c_str());
+    stuff.log_wrap_ = cs_new<logger_wrapper>(log_file_name, 4);
     stuff.raft_logger_ = stuff.log_wrap_;
 
     // Create state manager and state machine.
@@ -646,14 +649,18 @@ bench_config parse_config(int argc, char** argv) {
         exit(0);
     }
 
-    if (srv_id > 1) {
-        // Follower.
-        return bench_config(srv_id, my_endpoint, duration, complexity, fault, cluster_size);
-    }
 
     iarg++;
     std::string workdir(argv[iarg]);
     global_workdir = workdir;
+
+
+    if (srv_id > 1) {
+        // Follower.
+        bench_config cfg = bench_config(srv_id, my_endpoint, duration, complexity);
+        cfg.workdir = workdir;
+        return cfg;
+    }
 
     ensure_dir(workdir);
 

@@ -357,6 +357,7 @@ public:
     static int getTzGap();
     static void handleSegFault(int sig);
     static void handleSegAbort(int sig);
+    static void handleSigInt(int sig);
 #if defined(__linux__) || defined(__APPLE__)
     static void handleStackTrace(int sig, siginfo_t* info, void* secret);
 #endif
@@ -456,6 +457,8 @@ private:
 
     // Original abort handler.
     void (*oldSigAbortHandler)(int);
+
+    void (*oldSigIntHandler)(int);
 
     // Critical info that will be displayed on crash.
     std::string globalCriticalInfo;
