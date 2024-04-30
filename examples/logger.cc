@@ -465,6 +465,20 @@ void SimpleLoggerMgr::handleSegAbort(int sig) {
 #endif
 }
 
+void SimpleLoggerMgr::handleSigInt(int sig) {
+#if defined(__linux__) || defined(__APPLE__)
+    SimpleLoggerMgr* mgr = SimpleLoggerMgr::get();
+    signal(SIGINT, mgr->oldSigIntHandler);
+    mgr->enableOnlyOneDisplayer();
+    mgr->flushAllLoggers(1, "Canceled by user");
+    mgr->logStackBacktrace();
+
+    printf("[SIGINT] Flushed all logs safely.\n");
+    fflush(stdout);
+
+#endif
+}
+
 #if defined(__linux__) || defined(__APPLE__)
 void SimpleLoggerMgr::handleStackTrace(int sig, siginfo_t* info, void* secret) {
 #ifndef __linux__
@@ -551,6 +565,7 @@ SimpleLoggerMgr::SimpleLoggerMgr()
     : termination(false)
     , oldSigSegvHandler(nullptr)
     , oldSigAbortHandler(nullptr)
+    , oldSigIntHandler(nullptr)
     , stackTraceBuffer(nullptr)
     , crashOriginThread(0)
     , crashDumpOriginOnly(true)
@@ -566,6 +581,7 @@ SimpleLoggerMgr::SimpleLoggerMgr()
     } else {
         oldSigSegvHandler = signal(SIGSEGV, SimpleLoggerMgr::handleSegFault);
         oldSigAbortHandler = signal(SIGABRT, SimpleLoggerMgr::handleSegAbort);
+        oldSigIntHandler = signal(SIGINT, SimpleLoggerMgr::handleSigInt);
     }
     stackTraceBuffer = (char*)malloc(stackTraceBufferSize);
 
@@ -580,6 +596,7 @@ SimpleLoggerMgr::~SimpleLoggerMgr() {
 #if defined(__linux__) || defined(__APPLE__)
     signal(SIGSEGV, oldSigSegvHandler);
     signal(SIGABRT, oldSigAbortHandler);
+    signal(SIGINT, oldSigIntHandler);
 #endif
     {
         std::unique_lock<std::mutex> l(cvFlusherLock);
