@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
-# find_package(Boost 1.74.0 COMPONENTS asio filesystem)
 project(NuRaft VERSION 1.0.0 LANGUAGES CXX)
+# find_package(Boost 1.74.0 REQUIRED COMPONENTS filesystem)
+find_package(Boost REQUIRED COMPONENTS filesystem)
 
 set(CMAKE_THREAD_LIBS_INIT "-lpthread")
 set(CMAKE_HAVE_THREADS_LIBRARY 1)
@@ -55,7 +56,7 @@ else ()
                     /usr/local/include
                     /usr/include)
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DASIO_STANDALONE -lboost_system")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DASIO_STANDALONE")
 
 endif ()
 
@@ -227,7 +228,8 @@ set(LIBRARIES
     ${LIBCRYPTOPP}
     ${LIBBOOST_SYSTEM}
     ${LIBDL}
-    ${LIBZ})
+    ${LIBZ}
+    ${Boost_LIBRARIES})
 
 
 # === Paths ===
@@ -299,6 +301,7 @@ set_target_properties(static_lib PROPERTIES OUTPUT_NAME ${LIBRARY_NAME} CLEAN_DI
 
 add_library(shared_lib SHARED ${STATIC_LIB_SRC})
 set_target_properties(shared_lib PROPERTIES OUTPUT_NAME ${LIBRARY_NAME} CLEAN_DIRECT_OUTPUT 1)
+target_link_libraries(shared_lib ${LIBBOOST_SYSTEM} ${Boost_LIBRARIES})
 if (APPLE)
     target_link_libraries(shared_lib ${LIBRARIES})
 endif ()
