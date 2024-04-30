@@ -499,7 +499,7 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
             ptr<log_entry> ptr_msg_le =
                     cs_new<log_entry>(0, hash_ptr_buf, log_val_type::hash_ptr);
             v.push_back(ptr_msg_le);
-            p_tr("hash pointer (%s) sent to peer %d", tobase64(*hash_ptr_buf).c_str(), p.get_id());
+            p_in("hash pointer (%s) sent to peer %d", tobase64(*hash_ptr_buf).c_str(), p.get_id());
         }
         v.insert(v.end(), log_entries->begin(), log_entries->end());
         // FMARK: TODO: correctness
