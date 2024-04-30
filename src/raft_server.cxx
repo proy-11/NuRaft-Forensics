@@ -1702,9 +1702,9 @@ ulong raft_server::store_log_entry(ptr<log_entry>& entry, ulong index) {
     }
 
     if (last_log_hash_ == nullptr) {
-        p_tr("empty last log hash");
+        p_in("empty last log hash");
     } else {
-        p_tr("last log hash updated to %s", tobase64(*last_log_hash_).c_str());
+        p_in("last log hash updated to %s", tobase64(*last_log_hash_).c_str());
     }
 
     if (entry->get_val_type() == log_val_type::conf) {
