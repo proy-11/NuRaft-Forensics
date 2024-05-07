@@ -1399,6 +1399,9 @@ protected:
     std::atomic<bool> is_under_attack_;
 
     fault_type fault_type_;
+
+    // FMARK: RN
+    std::mutex last_log_hash_lock_;
 };
 
 } // namespace nuraft

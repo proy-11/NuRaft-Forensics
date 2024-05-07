@@ -96,57 +96,62 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
     std::vector<ptr<log_entry>>& entries = req.log_entries();
     size_t num_entries = entries.size();
 
-    for (size_t i = 0; i < num_entries; ++i) {
-        // force the log's term to current term
-        entries.at(i)->set_term(cur_term);
+    {
+        auto_lock(last_log_hash_lock_);
+        for (size_t i = 0; i < num_entries; ++i) {
+            // force the log's term to current term
+            entries.at(i)->set_term(cur_term);
 
-        // FMARK: add pointer
-        // auto timer = cs_new<timer_t>();
+            // FMARK: add pointer
+            // auto timer = cs_new<timer_t>();
 
-        // if (flag_use_ptr()) {
-        //     // timer->start_timer();
-        //     entries.at(i)->set_prev(create_hash(log_store_)); 
-        //     // timer->add_record("ptr.init");
-        // }
+            // if (flag_use_ptr()) {
+            //     // timer->start_timer();
+            //     entries.at(i)->set_prev(create_hash(log_store_)); 
+            //     // timer->add_record("ptr.init");
+            // }
 
-        // FMARK: add sig
-        if (flag_use_leader_sig()) {
-            p_in("Set sig");
-            // timer->start_timer();
-            entries.at(i)->set_signature(this->get_signature(*entries.at(i)->serialize_sig()));
-            // timer->add_record("ls.init.clireq");
+            // FMARK: add sig
+            if (flag_use_leader_sig()) {
+                p_in("Set sig");
+                // timer->start_timer();
+                entries.at(i)->set_signature(this->get_signature(*entries.at(i)->serialize_sig()));
+                // timer->add_record("ls.init.clireq");
+            }
+
+            // t_->add_sess(timer);
+
+            ulong next_slot = store_log_entry(entries.at(i));
+            p_db("append at log_idx %zu\n", next_slot);
+
+            last_idx = next_slot;
+
+            ptr<buffer> buf = entries.at(i)->get_buf_ptr();
+            buf->pos(0);
+            ret_value = state_machine_->pre_commit_ext(state_machine::ext_op_params(last_idx, buf));
         }
+        if (num_entries) {
+            log_store_->end_of_append_batch(last_idx - num_entries, num_entries);
+            // FMARK:
 
-        // t_->add_sess(timer);
+            // p_wn("Current NUM ENTRIES = %llu", log_store_->next_slot());
+            // for (size_t k = 0; k < log_store_->next_slot(); k++) {
+            //     p_wn("Current ENTRY %lld (%d): %s (%s)",
+            //          k,
+            //          log_store_->entry_at(k)->get_val_type(),
+            //          tobase64(*create_hash(log_store_->entry_at(k), k)).c_str(),
+            //          log_store_->entry_at(k)->get_val_type() == log_val_type::app_log
+            //              ? log_store_->entry_at(k)->get_prev_ptr() == nullptr
+            //                    ? "null"
+            //                    : tobase64(*log_store_->entry_at(k)->get_prev_ptr()).c_str()
+            //              : "");
+            // }
+        }
+        try_update_precommit_index(last_idx);
+        p_in("pre_commit_index_ updated to %llu", precommit_index_.load());
+        resp_idx = log_store_->next_slot();
 
-        ulong next_slot = store_log_entry(entries.at(i));
-        p_db("append at log_idx %zu\n", next_slot);
-
-        last_idx = next_slot;
-
-        ptr<buffer> buf = entries.at(i)->get_buf_ptr();
-        buf->pos(0);
-        ret_value = state_machine_->pre_commit_ext(state_machine::ext_op_params(last_idx, buf));
     }
-    if (num_entries) {
-        log_store_->end_of_append_batch(last_idx - num_entries, num_entries);
-        // FMARK:
-
-        // p_wn("Current NUM ENTRIES = %llu", log_store_->next_slot());
-        // for (size_t k = 0; k < log_store_->next_slot(); k++) {
-        //     p_wn("Current ENTRY %lld (%d): %s (%s)",
-        //          k,
-        //          log_store_->entry_at(k)->get_val_type(),
-        //          tobase64(*create_hash(log_store_->entry_at(k), k)).c_str(),
-        //          log_store_->entry_at(k)->get_val_type() == log_val_type::app_log
-        //              ? log_store_->entry_at(k)->get_prev_ptr() == nullptr
-        //                    ? "null"
-        //                    : tobase64(*log_store_->entry_at(k)->get_prev_ptr()).c_str()
-        //              : "");
-        // }
-    }
-    try_update_precommit_index(last_idx);
-    resp_idx = log_store_->next_slot();
 
     // Finished appending logs and pre_commit of itself.
     cb_func::Param param(id_, leader_);

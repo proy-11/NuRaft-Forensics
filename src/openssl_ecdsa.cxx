@@ -361,7 +361,6 @@ bool check_hash(std::vector<ptr<log_entry>>& entries, ptr<buffer>& base_hash, pt
         
         if (entries[i]->get_val_type() != log_val_type::app_log) continue;
         curr_hash = create_hash(entries[i], curr_hash, starting_idx + i);
-        cout << "curr_hash: " << tobase64(*curr_hash) << std::endl;
     }
 
     if (curr_hash->size() != target_hash->size()) {
@@ -373,6 +372,8 @@ bool check_hash(std::vector<ptr<log_entry>>& entries, ptr<buffer>& base_hash, pt
     for (size_t j = 0; j < curr_hash->size(); j++) {
         if (curr_hash->get_byte() != target_hash->get_byte()) {
             base_hash = curr_hash;
+            curr_hash->pos(0);
+            target_hash->pos(0);
             return false;
         }
     }
