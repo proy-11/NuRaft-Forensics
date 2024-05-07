@@ -171,7 +171,7 @@ int init_raft(server_stuff& stuff, int complexity) {
     // std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
 
     _msg("Writing log to %s\n", log_file_name.c_str());
-    stuff.log_wrap_ = cs_new<logger_wrapper>(log_file_name, 4);
+    stuff.log_wrap_ = cs_new<logger_wrapper>(log_file_name, 5);
     stuff.raft_logger_ = stuff.log_wrap_;
 
     // Create state manager and state machine.
