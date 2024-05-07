@@ -715,8 +715,8 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                          log_store_->next_slot() - 1,
                          ri_min,
                          ri_max);
-                    resp->set_result_code(cmd_result_code::BAD_CC);
-                    return resp;
+                    // resp->set_result_code(cmd_result_code::BAD_CC);
+                    // return resp;
                 }
                 // timer->add_record("cc.check");
             }
