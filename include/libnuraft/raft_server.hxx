@@ -1384,6 +1384,9 @@ protected:
      * The term when `vote_init_timer_` was reset.
      */
     std::atomic<ulong> vote_init_timer_term_;
+
+    // FMARK: RN
+    std::mutex last_log_hash_lock_;
 };
 
 } // namespace nuraft

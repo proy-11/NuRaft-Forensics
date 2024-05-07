@@ -1690,14 +1690,17 @@ ulong raft_server::store_log_entry(ptr<log_entry>& entry, ulong index) {
     // TODO: update last_log_hash_ptr here; either based on last_committed_hash_ptr or last_log_hash_ptr
     if (index == 0) {
         log_index = log_store_->append(entry);
-        if (entry->get_val_type() == log_val_type::app_log) last_log_hash_ = create_hash(entry, last_log_hash_, log_index);
+        if (entry->get_val_type() == log_val_type::app_log) 
+            last_log_hash_ = create_hash(entry, last_log_hash_, log_index);
     } else {
         log_store_->write_at(log_index, entry);
         // FMARK: RN: regenerate starting from last_committed_hash_ptr
         for (ulong i = sm_commit_index_; i <= index; i++) {
             ptr<log_entry> entry = log_store_->entry_at(i);
             if (entry->get_val_type() != log_val_type::app_log) continue;
-            last_log_hash_ = create_hash(entry, last_committed_log_hash_, index + i);
+            {
+                last_log_hash_ = create_hash(entry, last_committed_log_hash_, index + i);
+            }
         }
     }
 
@@ -1743,7 +1746,7 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong in
     // ulong starter = index + 1;
     ptr<buffer> base_hash = last_log_hash_;
     if (index <= sm_commit_index_) {
-        p_ft("next index %zu is less than or equal to state machine commit index %zu", index, sm_commit_index_.load());
+        p_er("next index %zu is less than or equal to state machine commit index %zu", index, sm_commit_index_.load());
         return false;
     }
     if (index > log_store_->next_slot()) {
@@ -1751,15 +1754,25 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong in
         return false;
     }
     if (index != log_store_->next_slot()) {
+        p_in("index %zu is not equal to next slot %zu", index, log_store_->next_slot());
         // TODO: get bash hash based on last_committed_log_hash if within this range; otherwise, use saved last_log_hash
-        p_in("regenerating hash from %zu to %zu", sm_commit_index_.load(), index);
-        for (ulong i = sm_commit_index_; i < index; i++) {
+        unsigned long long  sm_commit_index_current;
+        {
+            recur_lock(lock_);
+            base_hash = last_committed_log_hash_ != nullptr ? buffer::clone(*last_committed_log_hash_): nullptr;
+            sm_commit_index_current = sm_commit_index_.load();
+        }
+        p_in("regenerating hash from %zu to %zu", sm_commit_index_current, index);
+
+        for (ulong i = sm_commit_index_current + 1; i < index; i++) {
             // TODO: iteratively hash the entries to the last one. Need to modify the log_entry and raft_server:
             //   1. do not include prv_ptr in the log_entry structure. Only include the last hash pointer in the req msg.
             //   2. each node stores only the hash pointers of the latest entry and also the latest comitted entry. intermediate ckpt
             ptr<log_entry> entry = log_store_->entry_at(i);
             if (entry->get_val_type() != log_val_type::app_log) continue;
-            base_hash = create_hash(entry, base_hash, index + i);
+            auto new_hash = create_hash(entry, base_hash, i);
+            p_in("old hash %s, new hash %s", ((base_hash != nullptr) ? tobase64(*base_hash).c_str() : "null"), tobase64(*new_hash).c_str());
+            base_hash = new_hash;
         }
 
     }
