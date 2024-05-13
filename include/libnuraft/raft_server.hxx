@@ -1402,6 +1402,7 @@ protected:
 
     // FMARK: RN
     std::mutex last_log_hash_lock_;
+    std::mutex last_committed_log_hash_lock_;
 };
 
 } // namespace nuraft
