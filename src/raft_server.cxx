@@ -1758,7 +1758,7 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong in
         // TODO: get bash hash based on last_committed_log_hash if within this range; otherwise, use saved last_log_hash
         unsigned long long  sm_commit_index_current;
         {
-            recur_lock(lock_);
+            auto_lock(last_committed_log_hash_lock_);
             base_hash = last_committed_log_hash_ != nullptr ? buffer::clone(*last_committed_log_hash_): nullptr;
             sm_commit_index_current = sm_commit_index_.load();
         }

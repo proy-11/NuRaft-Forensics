@@ -213,28 +213,30 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
 
         ulong exp_idx = index_to_commit - 1;
 
+        bool sm_commit_index_exchange_success = false;
         {
-            recur_lock(lock_);
+            auto_lock(last_committed_log_hash_lock_);
             if (le->get_val_type() == log_val_type::app_log) {
                 // TODO: update last_committed_log_hash
                 last_committed_log_hash_ = create_hash(le, last_committed_log_hash_, index_to_commit);
                 p_in("last_committed_log_hash_ updated to %s", tobase64(*last_committed_log_hash_).c_str());
             }
-            if (sm_commit_index_.compare_exchange_strong(exp_idx, index_to_commit)) {
-                snapshot_and_compact(sm_commit_index_);
+            sm_commit_index_exchange_success = sm_commit_index_.compare_exchange_strong(exp_idx, index_to_commit);
+        }
+        if (sm_commit_index_exchange_success) {
+            snapshot_and_compact(sm_commit_index_);
 
-                cb_func::Param param(id_, leader_);
-                // Copy to other local variable to be safe.
-                uint64_t log_idx = index_to_commit;
-                param.ctx = &log_idx;
-                ctx_->cb_func_.call(cb_func::StateMachineExecution, &param);
-            } else {
-                p_er("sm_commit_index_ has been changed from %zu to %zu, "
-                    "this thread attempted %zu",
-                    index_to_commit - 1,
-                    exp_idx,
-                    index_to_commit);
-            }
+            cb_func::Param param(id_, leader_);
+            // Copy to other local variable to be safe.
+            uint64_t log_idx = index_to_commit;
+            param.ctx = &log_idx;
+            ctx_->cb_func_.call(cb_func::StateMachineExecution, &param);
+        } else {
+            p_er("sm_commit_index_ has been changed from %zu to %zu, "
+                "this thread attempted %zu",
+                index_to_commit - 1,
+                exp_idx,
+                index_to_commit);
         }
     }
     p_tr("DONE: commit upto %ld, curruent idx %ld\n", quick_commit_index_.load(), sm_commit_index_.load());
