@@ -1745,6 +1745,18 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong in
     ssize_t prev_index = (ssize_t)log_store_->last_app_log_idx();
     // ulong starter = index + 1;
     ptr<buffer> base_hash = last_log_hash_;
+
+    // Skipping already existing (with the same term) logs.
+    size_t cnt = 0;
+    while (index < log_store_->next_slot() && cnt < entries.size()) {
+        if (log_store_->term_at(index) == entries.at(cnt)->get_term()) {
+            index++;
+            cnt++;
+        } else {
+            break;
+        }
+    }
+
     if (index <= sm_commit_index_) {
         p_er("next index %zu is less than or equal to state machine commit index %zu", index, sm_commit_index_.load());
         return false;
@@ -1777,7 +1789,12 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong in
 
     }
     // if (!check_hash(entries[0], log_store_->entry_at(index), index)) return 0;
-    bool ret = check_hash(entries, base_hash, target_hash, index);
+    // bool ret = check_hash(entries, base_hash, target_hash, index);
+
+    // get sub vector cnt:end from entries
+    std::vector<ptr<log_entry>> new_entries(entries.begin() + cnt, entries.end());
+    bool ret = check_hash(new_entries, base_hash, target_hash, index);
+    
     if (!ret){
         if (base_hash == nullptr) {
             p_er("hash pointers are of different lengths, length of target hash %zu", target_hash->size());
