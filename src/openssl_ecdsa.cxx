@@ -2,6 +2,7 @@
 
 #include "openssl_ecdsa.hxx"
 #include <iostream>
+#include <map>
 
 #define BASE64_ENC_SIZE(size) (4 * (((size) + 2) / 3))
 #define BASE64_DEC_SIZE(size) (3 * (size) / 4)
@@ -352,15 +353,19 @@ ptr<buffer> create_hash(ptr<log_store> store_) {
 //     return true;
 // }
 
-bool check_hash(std::vector<ptr<log_entry>>& entries, ptr<buffer>& base_hash, ptr<buffer> target_hash, ulong starting_idx) {
+bool check_hash(std::vector<ptr<log_entry>>& entries, ptr<buffer>& base_hash, ptr<buffer> target_hash, ulong starting_idx, std::map<ulong, ptr<buffer>>& hash_map_to_update) {
     ptr<buffer> curr_hash = base_hash;
     for (size_t i = 0; i < entries.size(); i++) {
         // TODO: iteratively hash the entries to the last one. Need to modify the log_entry and raft_server:
         //   1. do not include prv_ptr in the log_entry structure. Only include the last hash pointer in the req msg.
         //   2. each node stores only the hash pointers of the latest entry and also the latest comitted entry. intermediate ckpt
         
-        if (entries[i]->get_val_type() != log_val_type::app_log) continue;
+        if (entries[i]->get_val_type() != log_val_type::app_log) {
+            hash_map_to_update[starting_idx + i] = curr_hash;
+            continue;
+        }
         curr_hash = create_hash(entries[i], curr_hash, starting_idx + i);
+        hash_map_to_update[starting_idx + i] = curr_hash;
     }
 
     if (curr_hash->size() != target_hash->size()) {

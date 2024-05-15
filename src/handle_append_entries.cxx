@@ -319,18 +319,11 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     ulong term(0L);
     ulong starting_idx(1L);
 
-    ptr<buffer> hash_ptr_buf;
-    {
-        std::lock_guard<std::mutex> guard(last_log_hash_lock_);
-        starting_idx = log_store_->start_index();
-        cur_nxt_idx = precommit_index_ + 1;
-        commit_idx = quick_commit_index_;
-        term = state_->get_term();
-        if (flag_use_ptr() && last_log_hash_ != nullptr) {
-            hash_ptr_buf = buffer::clone(*last_log_hash_);
-        }
-        p_in("Current next index of peer #%d: %llu (%llu)", p.get_id(), cur_nxt_idx, p.get_next_log_idx());
-    }
+    starting_idx = log_store_->start_index();
+    cur_nxt_idx = precommit_index_ + 1;
+    commit_idx = quick_commit_index_;
+    term = state_->get_term();
+    p_in("Current next index of peer #%d: %llu (%llu)", p.get_id(), cur_nxt_idx, p.get_next_log_idx());
 
     {
         std::lock_guard<std::mutex> guard(p.get_lock());
@@ -341,6 +334,12 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
 
         last_log_idx = p.get_next_log_idx() - 1;
     }
+
+    ptr<buffer> hash_ptr_buf = nullptr;
+    if (hash_cache_.find(last_log_idx) != hash_cache_.end()) {
+        hash_ptr_buf = buffer::clone(*hash_cache_[last_log_idx]);
+    }
+
 
     if (last_log_idx >= cur_nxt_idx) {
         // LCOV_EXCL_START
@@ -497,7 +496,7 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     std::vector<ptr<log_entry>>& v = req->log_entries();
     if (log_entries) {
         // FMARK: RN: use the first log entry to transmit hash pointer
-        if (flag_use_ptr() && last_log_hash_ != nullptr && adjusted_end_idx == cur_nxt_idx ) {
+        if (flag_use_ptr() && hash_ptr_buf != nullptr) {
             // FMARK: RN: send hash pointer only when all local (leader's) log entries are sent
             ptr<log_entry> ptr_msg_le =
                     cs_new<log_entry>(0, hash_ptr_buf, log_val_type::hash_ptr);

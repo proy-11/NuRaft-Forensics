@@ -12,6 +12,7 @@
 #include <openssl/pem.h>
 #include <openssl/sha.h>
 #include <openssl/err.h>
+#include <map>
 
 #include "key.hxx"
 #include "log_entry.hxx"
@@ -73,7 +74,7 @@ ptr<buffer> create_hash(ptr<log_store> store_);
 
 // bool check_hash(ptr<log_entry> appended, ptr<log_entry> latest, ulong height);
 
-bool check_hash(std::vector<ptr<log_entry>>& entries, ptr<buffer>& base_hash, ptr<buffer> target_hash, ulong starting_idx); 
+bool check_hash(std::vector<ptr<log_entry>>& entries, ptr<buffer>& base_hash, ptr<buffer> target_hash, ulong starting_idx, std::map<ulong, ptr<buffer>>& hash_map_to_update); 
 
 bool check_hash(ptr<log_entry> appended, ptr<log_store> store_, ulong pos);
 

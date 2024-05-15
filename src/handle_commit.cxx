@@ -219,15 +219,11 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
         ulong exp_idx = index_to_commit - 1;
 
         bool sm_commit_index_exchange_success = false;
-        {
-            auto_lock(last_committed_log_hash_lock_);
-            if (le->get_val_type() == log_val_type::app_log) {
-                // TODO: update last_committed_log_hash
-                last_committed_log_hash_ = create_hash(le, last_committed_log_hash_, index_to_commit);
-                p_in("last_committed_log_hash_ updated to %s", tobase64(*last_committed_log_hash_).c_str());
-            }
-            sm_commit_index_exchange_success = sm_commit_index_.compare_exchange_strong(exp_idx, index_to_commit);
-        }
+
+        hash_cache_.erase(index_to_commit - 1);
+
+        sm_commit_index_exchange_success = sm_commit_index_.compare_exchange_strong(exp_idx, index_to_commit);
+
         if (sm_commit_index_exchange_success) {
             snapshot_and_compact(sm_commit_index_);
 

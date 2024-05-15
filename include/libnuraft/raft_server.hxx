@@ -627,17 +627,6 @@ public:
     // FMARK: flag functions
     bool flag_use_ptr();
 
-
-    /**
-     * FMARK: Get the hash of the last log entry.
-     */
-    ptr<buffer> hash_last_entry();
-
-    /**
-     * FMARK: Get the hash of the last committed log entry.
-     */
-    ptr<buffer> hash_last_committed_entry();
-
     bool flag_use_leader_sig();
 
     bool flag_use_cc();
@@ -924,9 +913,11 @@ protected:
      */
     std::unordered_map<ulong, int32> verified_terms_;
 
-    // FMARK
-    ptr<buffer> last_log_hash_;
-    ptr<buffer> last_committed_log_hash_;
+    // FMARK: RN: hash pointer cache (deque of <index, pointer>)
+    // the following two saved pointers are deprecated
+    // ptr<buffer> last_log_hash_; 
+    // ptr<buffer> last_committed_log_hash_;
+    std::map<ulong, ptr<buffer>> hash_cache_;
 
     /**
      * (Read-only)
@@ -1400,9 +1391,13 @@ protected:
 
     fault_type fault_type_;
 
-    // FMARK: RN
-    std::mutex last_log_hash_lock_;
-    std::mutex last_committed_log_hash_lock_;
+    std::atomic<bool> is_under_attack_;
+
+    fault_type fault_type_;
+
+    // FMARK: RN (deprecated)
+    // std::mutex last_log_hash_lock_;
+    // std::mutex last_committed_log_hash_lock_;
 };
 
 } // namespace nuraft
