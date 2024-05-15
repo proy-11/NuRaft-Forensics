@@ -20,6 +20,7 @@ limitations under the License.
 #include <functional>
 #include <string>
 #include <system_error>
+#include <cstdint>
 
 namespace nuraft {
 
