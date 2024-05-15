@@ -482,19 +482,19 @@ bench_config parse_config(int argc, char** argv) {
 
     if (argc < 7) usage(argc, argv);
 
-    size_t iops = atoi( argv[4] );
+    size_t iops = atoi( argv[6] );
     if (iops < 1 || iops > 1000000) {
         std::cout << "valid IOPS range: 1 - 1M." << std::endl;
         exit(0);
     }
 
-    size_t num_threads = atoi( argv[5] );
+    size_t num_threads = atoi( argv[7] );
     if (num_threads < 1 || num_threads > 128) {
         std::cout << "valid thread number range: 1 - 128." << std::endl;
         exit(0);
     }
 
-    size_t payload_size = atoi( argv[6] );
+    size_t payload_size = atoi( argv[8] );
     if (payload_size < 1 || payload_size > 16*1024*1024) {
         std::cout << "valid payload size range: 1 byte - 16 MB." << std::endl;
         exit(0);
@@ -502,7 +502,7 @@ bench_config parse_config(int argc, char** argv) {
 
     bench_config ret(srv_id, my_endpoint, duration, iops, num_threads, payload_size);
 
-    for (int ii=7; ii<argc; ++ii) {
+    for (int ii=9; ii<argc; ++ii) {
         std::string cur_endpoint = argv[ii];
         if (cur_endpoint.find("tcp://") == std::string::npos) {
             cur_endpoint = "tcp://" + cur_endpoint;
