@@ -907,6 +907,7 @@ protected:
     // ptr<buffer> last_log_hash_; 
     // ptr<buffer> last_committed_log_hash_;
     std::map<ulong, ptr<buffer>> hash_cache_;
+    std::mutex hash_cache_lock_;
 
     /**
      * (Read-only)

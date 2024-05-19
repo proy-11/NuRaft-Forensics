@@ -215,7 +215,11 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
 
         bool sm_commit_index_exchange_success = false;
 
-        hash_cache_.erase(index_to_commit - 1);
+        {
+            std::unique_lock<std::mutex> lock(hash_cache_lock_);
+            hash_cache_.erase(index_to_commit - 1);
+        }
+        p_in("hash cache erase %ld", index_to_commit - 1);
 
         sm_commit_index_exchange_success = sm_commit_index_.compare_exchange_strong(exp_idx, index_to_commit);
 
