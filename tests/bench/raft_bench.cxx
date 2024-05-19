@@ -201,7 +201,7 @@ int init_raft(server_stuff& stuff, int complexity) {
     params.snapshot_distance_ = 100000;
     params.client_req_timeout_ = 4000;
     params.return_method_ = raft_params::blocking;
-    params.max_append_size_ = 100000; // FMARK: RN: using a very large batch size
+    // params.max_append_size_ = 100000; // FMARK: RN: using a very large batch size
 
     if (complexity < 3) {
         params.use_commitment_cert_ = false;
