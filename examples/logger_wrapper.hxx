@@ -28,7 +28,7 @@ using namespace nuraft;
 class logger_wrapper : public logger {
 public:
     logger_wrapper(const std::string& log_file, int log_level = 6) {
-        my_log_ = new SimpleLogger(log_file, 1024, 32*1024*1024, 10);
+        my_log_ = new SimpleLogger(log_file, 4096 * 8, 2*512*1024*1024, 10);
         my_log_->setLogLevel(log_level);
         my_log_->setDispLevel(-1);
         my_log_->setCrashDumpPath("./", true);
