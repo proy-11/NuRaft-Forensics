@@ -1709,6 +1709,24 @@ ulong raft_server::store_log_entry(ptr<log_entry>& entry, ulong index) {
         log_store_->write_at(log_index, entry);
     }
 
+    {
+        std::unique_lock<std::mutex> lock(hash_cache_lock_);
+        if (hash_cache_.find(log_index) == hash_cache_.end()) {
+            // not in cache
+            ptr<buffer> prev_hash = nullptr;
+            if (hash_cache_.find(log_index - 1) != hash_cache_.end()) {
+                // previous hash is in cachef
+                prev_hash = hash_cache_[log_index - 1];
+            }
+            lock.unlock();
+            if (entry->get_val_type() == log_val_type::app_log)
+                hash_cache_[log_index] = create_hash(entry, prev_hash, log_index);
+            else
+                hash_cache_[log_index] = prev_hash;
+            p_in("hash cache updated for log index %zu -> %s", log_index, (hash_cache_[log_index] != nullptr) ? tobase64(*hash_cache_[log_index]).c_str() : "null");
+        }
+    }
+
     if (entry->get_val_type() == log_val_type::conf) {
         // Force persistence of config_change logs to guarantee the durability of
         // cluster membership change log entries.  Losing cluster membership log
@@ -1743,7 +1761,6 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong in
     ptr<log_entry> prev_entry = log_store_->last_app_log_entry();
     ssize_t prev_index = (ssize_t)log_store_->last_app_log_idx();
     // ulong starter = index + 1;
-    ptr<buffer> base_hash = hash_cache_[index - 1];
 
     // Skipping already existing (with the same term) logs.
     size_t cnt = 0;
@@ -1753,6 +1770,15 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong in
             cnt++;
         } else {
             break;
+        }
+    }
+
+    ptr<buffer> base_hash = nullptr;
+    {
+        std::unique_lock<std::mutex> lock(hash_cache_lock_);
+        if (hash_cache_.find(index - 1) != hash_cache_.end()) {
+            lock.unlock();
+            base_hash = hash_cache_[index - 1];
         }
     }
 
@@ -1782,6 +1808,7 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong in
         // apply hash_cache_to_update to hash_cache_
         for (auto& it: hash_cache_to_update) {
             hash_cache_[it.first] = it.second;
+            p_in("hash cache updated for log index %zu -> %s", it.first, (hash_cache_[it.first] != nullptr) ? tobase64(*hash_cache_[it.first]).c_str() : "null");
         }
     }
     return ret;

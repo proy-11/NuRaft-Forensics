@@ -335,12 +335,6 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
         last_log_idx = p.get_next_log_idx() - 1;
     }
 
-    ptr<buffer> hash_ptr_buf = nullptr;
-    if (hash_cache_.find(last_log_idx) != hash_cache_.end()) {
-        hash_ptr_buf = buffer::clone(*hash_cache_[last_log_idx]);
-    }
-
-
     if (last_log_idx >= cur_nxt_idx) {
         // LCOV_EXCL_START
         p_er("Peer #%d's lastLogIndex is too large %llu v.s. %llu, ", p.get_id(), last_log_idx, cur_nxt_idx);
@@ -450,6 +444,20 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
         p_tr("adjusted end_idx due to batch size hint: %zu -> %zu", end_idx, adjusted_end_idx);
     }
 
+
+    ptr<buffer> hash_ptr_buf = nullptr;
+    {
+        std::unique_lock<std::mutex> guard(hash_cache_lock_);
+        if (hash_cache_.find(adjusted_end_idx - 1) != hash_cache_.end() && hash_cache_[adjusted_end_idx - 1] != nullptr) {
+            guard.unlock();
+            hash_ptr_buf = buffer::clone(*hash_cache_[adjusted_end_idx - 1]);
+            p_in("hash pointer (%s) found for idx %zu", tobase64(*hash_ptr_buf).c_str(), adjusted_end_idx - 1);
+        } else {
+            p_in("hash pointer not found for idx %zu", adjusted_end_idx - 1);
+        }
+    }
+
+
     p_db("append_entries for %d with LastLogIndex=%llu, "
          "LastLogTerm=%llu, EntriesLength=%d, CommitIndex=%llu, "
          "Term=%llu, peer_last_sent_idx %zu",
@@ -497,7 +505,6 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     if (log_entries) {
         // FMARK: RN: use the first log entry to transmit hash pointer
         if (flag_use_ptr() && hash_ptr_buf != nullptr) {
-            // FMARK: RN: send hash pointer only when all local (leader's) log entries are sent
             ptr<log_entry> ptr_msg_le =
                     cs_new<log_entry>(0, hash_ptr_buf, log_val_type::hash_ptr);
             v.push_back(ptr_msg_le);
@@ -705,7 +712,7 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
             }
             // timer->add_record("ptr.check");
         } else {
-            p_db("hash pointer is not used/received");
+            p_in("hash pointer is not used/received");
         }
 
         if (flag_use_leader_sig()) {
