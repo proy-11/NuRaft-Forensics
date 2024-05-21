@@ -17,8 +17,8 @@ limitations under the License.
 
 #pragma once
 
-#include "nuraft.hxx"
 #include "logger.h"
+#include "nuraft.hxx"
 
 using namespace nuraft;
 
@@ -28,16 +28,14 @@ using namespace nuraft;
 class logger_wrapper : public logger {
 public:
     logger_wrapper(const std::string& log_file, int log_level = 6) {
-        my_log_ = new SimpleLogger(log_file, 1024, 32*1024*1024, 10);
+        my_log_ = new SimpleLogger(log_file, 1024, 32 * 1024 * 1024, 10);
         my_log_->setLogLevel(log_level);
         my_log_->setDispLevel(-1);
         my_log_->setCrashDumpPath("./", true);
         my_log_->start();
     }
 
-    ~logger_wrapper() {
-        destroy();
-    }
+    ~logger_wrapper() { destroy(); }
 
     void destroy() {
         if (my_log_) {
@@ -52,11 +50,9 @@ public:
                      const char* source_file,
                      const char* func_name,
                      size_t line_number,
-                     const std::string& msg)
-    {
+                     const std::string& msg) {
         if (my_log_) {
-            my_log_->put( level, source_file, func_name, line_number,
-                          "%s", msg.c_str() );
+            my_log_->put(level, source_file, func_name, line_number, "%s", msg.c_str());
         }
     }
 
@@ -78,5 +74,3 @@ public:
 private:
     SimpleLogger* my_log_;
 };
-
-

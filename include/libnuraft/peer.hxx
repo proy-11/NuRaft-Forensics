@@ -37,8 +37,12 @@ namespace nuraft {
 class snapshot;
 class peer {
 public:
-    peer(ptr<srv_config>& config, const context& ctx, timer_task<int32>::executor& hb_exec, ptr<logger>& logger);
-    // peer(ptr<srv_config>& config, const context& ctx, timer_task<int32>::executor& hb_exec, ptr<logger>& logger)
+    peer(ptr<srv_config>& config,
+         const context& ctx,
+         timer_task<int32>::executor& hb_exec,
+         ptr<logger>& logger);
+    // peer(ptr<srv_config>& config, const context& ctx, timer_task<int32>::executor&
+    // hb_exec, ptr<logger>& logger)
     //     : config_(config)
     //     , scheduler_(ctx.scheduler_)
     //     , rpc_(ctx.rpc_cli_factory_->create_client(config->get_endpoint()))
@@ -127,17 +131,17 @@ public:
 
     void set_next_log_idx(ulong idx) { next_log_idx_ = idx; }
 
-    uint64_t get_last_accepted_log_idx() const {
-        return last_accepted_log_idx_;
+    uint64_t get_last_accepted_log_idx() const { return last_accepted_log_idx_; }
+
+    void set_last_accepted_log_idx(uint64_t to) { last_accepted_log_idx_ = to; }
+
+    int64 get_next_batch_size_hint_in_bytes() const {
+        return next_batch_size_hint_in_bytes_;
     }
 
-    void set_last_accepted_log_idx(uint64_t to) {
-        last_accepted_log_idx_ = to;
+    void set_next_batch_size_hint_in_bytes(int64 batch_size) {
+        next_batch_size_hint_in_bytes_ = batch_size;
     }
-
-    int64 get_next_batch_size_hint_in_bytes() const { return next_batch_size_hint_in_bytes_; }
-
-    void set_next_batch_size_hint_in_bytes(int64 batch_size) { next_batch_size_hint_in_bytes_ = batch_size; }
 
     ulong get_matched_idx() const { return matched_idx_; }
 
@@ -160,7 +164,10 @@ public:
 
     ptr<snapshot_sync_ctx> get_snapshot_sync_ctx() const { return snp_sync_ctx_; }
 
-    void slow_down_hb() { current_hb_interval_ = std::min(max_hb_interval_, current_hb_interval_ + rpc_backoff_); }
+    void slow_down_hb() {
+        current_hb_interval_ =
+            std::min(max_hb_interval_, current_hb_interval_ + rpc_backoff_);
+    }
 
     void resume_hb_speed() { current_hb_interval_ = hb_interval_; }
 

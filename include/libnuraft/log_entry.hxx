@@ -38,7 +38,7 @@ public:
     log_entry(ulong term,
               const ptr<buffer>& buff,
               log_val_type value_type = log_val_type::app_log,
-            //   const ptr<buffer>& prev = nullptr,
+              //   const ptr<buffer>& prev = nullptr,
               const ptr<buffer>& leadersig = nullptr)
         : term_(term)
         , value_type_(value_type)
@@ -86,24 +86,23 @@ public:
 
     // FMARK: serialize for signature
     ptr<buffer> serialize_sig() {
-//         if (!buff_) {
-//             exit(0);
-// #ifndef _NO_EXCEPTION
-//             throw std::runtime_error("serialize_sig cannot be called for a log_entry "
-//                                      "with nil buffer");
-// #else
-//             assert(0);
-// #endif
-//         }
-        if(!buff_) {
+        //         if (!buff_) {
+        //             exit(0);
+        // #ifndef _NO_EXCEPTION
+        //             throw std::runtime_error("serialize_sig cannot be called for a
+        //             log_entry "
+        //                                      "with nil buffer");
+        // #else
+        //             assert(0);
+        // #endif
+        //         }
+        if (!buff_) {
             return nullptr;
         }
         buff_->pos(0);
-        ptr<buffer> buf =
-            buffer::alloc(sizeof(ulong) + sizeof(char) + buff_->size() + 
-                // (prev_ == nullptr ? 0 : prev_->size())
-                0
-            );
+        ptr<buffer> buf = buffer::alloc(sizeof(ulong) + sizeof(char) + buff_->size() +
+                                        // (prev_ == nullptr ? 0 : prev_->size())
+                                        0);
         buf->put(term_);
         buf->put((static_cast<byte>(value_type_)));
         buf->put(*buff_);
@@ -115,11 +114,12 @@ public:
     // FMARK: serialize prev_pointer and signature
     ptr<buffer> serialize() {
         buff_->pos(0);
-        ptr<buffer> buf = buffer::alloc(sizeof(ulong) + sizeof(char) + sizeof(ulong) + buff_->size() + sizeof(ulong)
-                                        // + (prev_ == nullptr ? 0 : prev_->size()) 
-                                        + 0 // FMARK: RN: prev_ removed
-                                        + sizeof(ulong)
-                                        + (leader_sig_ == nullptr ? 0 : leader_sig_->size()));
+        ptr<buffer> buf = buffer::alloc(
+            sizeof(ulong) + sizeof(char) + sizeof(ulong) + buff_->size()
+            + sizeof(ulong)
+            // + (prev_ == nullptr ? 0 : prev_->size())
+            + 0 // FMARK: RN: prev_ removed
+            + sizeof(ulong) + (leader_sig_ == nullptr ? 0 : leader_sig_->size()));
         buf->put(term_);
         buf->put((static_cast<byte>(value_type_)));
         buf->put((ulong)buff_->size());

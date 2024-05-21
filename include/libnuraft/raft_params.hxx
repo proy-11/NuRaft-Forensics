@@ -340,7 +340,8 @@ struct raft_params {
      * @return Heartbeat interval in millisecond.
      */
     int max_hb_interval() const {
-        return std::max(heart_beat_interval_, election_timeout_lower_bound_ - (heart_beat_interval_ / 2));
+        return std::max(heart_beat_interval_,
+                        election_timeout_lower_bound_ - (heart_beat_interval_ / 2));
     }
 
 public:
@@ -524,25 +525,25 @@ public:
 
     /**
      * @brief FMARK: If true, use election list
-     * 
+     *
      */
     bool use_election_list_;
 
     /**
      * @brief FMARK: periodically save election list to files
-     * 
+     *
      */
     bool save_election_list_;
 
     /**
      * @brief FMARK: forensics output path
-     * 
+     *
      */
     std::string forensics_output_path_;
 
     /**
      * @brief FMARK: election list max entries in memory before dumping to file
-     * 
+     *
      */
     ulong election_list_max_;
 
