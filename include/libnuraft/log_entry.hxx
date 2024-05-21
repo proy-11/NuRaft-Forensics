@@ -87,8 +87,8 @@ public:
     // FMARK: serialize for signature
     ptr<buffer> serialize_sig() {
         buff_->pos(0);
-        ptr<buffer> buf =
-            buffer::alloc(sizeof(ulong) + sizeof(char) + buff_->size() + (prev_ == nullptr ? 0 : prev_->size()));
+        ptr<buffer> buf = buffer::alloc(sizeof(ulong) + sizeof(char) + buff_->size()
+                                        + (prev_ == nullptr ? 0 : prev_->size()));
         buf->put(term_);
         buf->put((static_cast<byte>(value_type_)));
         buf->put(*buff_);
@@ -100,9 +100,10 @@ public:
     // FMARK: serialize prev_pointer and signature
     ptr<buffer> serialize() {
         buff_->pos(0);
-        ptr<buffer> buf = buffer::alloc(sizeof(ulong) + sizeof(char) + sizeof(ulong) + buff_->size() + sizeof(ulong)
-                                        + (prev_ == nullptr ? 0 : prev_->size()) + sizeof(ulong)
-                                        + (leader_sig_ == nullptr ? 0 : leader_sig_->size()));
+        ptr<buffer> buf = buffer::alloc(
+            sizeof(ulong) + sizeof(char) + sizeof(ulong) + buff_->size() + sizeof(ulong)
+            + (prev_ == nullptr ? 0 : prev_->size()) + sizeof(ulong)
+            + (leader_sig_ == nullptr ? 0 : leader_sig_->size()));
         buf->put(term_);
         buf->put((static_cast<byte>(value_type_)));
         buf->put((ulong)buff_->size());

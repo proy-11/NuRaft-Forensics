@@ -23,15 +23,13 @@ limitations under the License.
 
 namespace nuraft {
 
-class inmem_state_mgr: public state_mgr {
+class inmem_state_mgr : public state_mgr {
 public:
-    inmem_state_mgr(int srv_id,
-                    const std::string& endpoint)
+    inmem_state_mgr(int srv_id, const std::string& endpoint)
         : my_id_(srv_id)
         , my_endpoint_(endpoint)
-        , cur_log_store_( cs_new<inmem_log_store>() )
-    {
-        my_srv_config_ = cs_new<srv_config>( srv_id, endpoint );
+        , cur_log_store_(cs_new<inmem_log_store>()) {
+        my_srv_config_ = cs_new<srv_config>(srv_id, endpoint);
 
         // Initial cluster config: contains only one server (myself).
         saved_config_ = cs_new<cluster_config>();
@@ -66,16 +64,11 @@ public:
         return saved_state_;
     }
 
-    ptr<log_store> load_log_store() {
-        return cur_log_store_;
-    }
+    ptr<log_store> load_log_store() { return cur_log_store_; }
 
-    int32 server_id() {
-        return my_id_;
-    }
+    int32 server_id() { return my_id_; }
 
-    void system_exit(const int exit_code) {
-    }
+    void system_exit(const int exit_code) {}
 
     ptr<srv_config> get_srv_config() const { return my_srv_config_; }
 
@@ -88,5 +81,4 @@ private:
     ptr<srv_state> saved_state_;
 };
 
-};
-
+}; // namespace nuraft

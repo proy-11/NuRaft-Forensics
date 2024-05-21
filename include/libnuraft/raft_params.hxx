@@ -336,7 +336,8 @@ struct raft_params {
      * @return Heartbeat interval in millisecond.
      */
     int max_hb_interval() const {
-        return std::max(heart_beat_interval_, election_timeout_lower_bound_ - (heart_beat_interval_ / 2));
+        return std::max(heart_beat_interval_,
+                        election_timeout_lower_bound_ - (heart_beat_interval_ / 2));
     }
 
 public:

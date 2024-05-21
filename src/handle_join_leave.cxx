@@ -38,9 +38,11 @@ namespace nuraft {
  */
 ptr<resp_msg> raft_server::handle_add_srv_req(req_msg& req) {
     std::vector<ptr<log_entry>>& entries = req.log_entries();
-    ptr<resp_msg> resp = cs_new<resp_msg>(state_->get_term(), msg_type::add_server_response, id_, leader_);
+    ptr<resp_msg> resp =
+        cs_new<resp_msg>(state_->get_term(), msg_type::add_server_response, id_, leader_);
 
-    if (entries.size() != 1 || entries[0]->get_val_type() != log_val_type::cluster_server) {
+    if (entries.size() != 1
+        || entries[0]->get_val_type() != log_val_type::cluster_server) {
         p_db("bad add server request as we are expecting 1 log entries "
              "with value type of ClusterServer");
         resp->set_result_code(cmd_result_code::BAD_REQUEST);
@@ -81,8 +83,8 @@ ptr<resp_msg> raft_server::handle_add_srv_req(req_msg& req) {
              srv_to_join_->get_id(),
              last_active_ms);
 
-        if (last_active_ms
-            <= (ulong)raft_server::raft_limits_.response_limit_ * ctx_->get_params()->heart_beat_interval_) {
+        if (last_active_ms <= (ulong)raft_server::raft_limits_.response_limit_
+                                  * ctx_->get_params()->heart_beat_interval_) {
             resp->set_result_code(cmd_result_code::SERVER_IS_JOINING);
             return resp;
         }
@@ -93,10 +95,13 @@ ptr<resp_msg> raft_server::handle_add_srv_req(req_msg& req) {
 
     // ptr<buffer> pubkey = buffer::clone(entries[1]->get_buf());
     conf_to_add_ = std::move(srv_conf);
-    timer_task<int32>::executor exec =
-        (timer_task<int32>::executor)std::bind(&raft_server::handle_hb_timeout, this, std::placeholders::_1);
-    srv_to_join_ = cs_new<peer, ptr<srv_config>&, context&, timer_task<int32>::executor&, ptr<logger>&>(
-        conf_to_add_, *ctx_, exec, l_);
+    timer_task<int32>::executor exec = (timer_task<int32>::executor)std::bind(
+        &raft_server::handle_hb_timeout, this, std::placeholders::_1);
+    srv_to_join_ = cs_new<peer,
+                          ptr<srv_config>&,
+                          context&,
+                          timer_task<int32>::executor&,
+                          ptr<logger>&>(conf_to_add_, *ctx_, exec, l_);
     invite_srv_to_join_cluster();
     resp->accept(log_store_->next_slot());
     return resp;
@@ -113,14 +118,18 @@ void raft_server::invite_srv_to_join_cluster() {
 
     ptr<cluster_config> c_conf = get_config();
     // FMARK: self pubkey in c_conf
-    req->log_entries().push_back(cs_new<log_entry>(state_->get_term(), c_conf->serialize(), log_val_type::conf));
+    req->log_entries().push_back(
+        cs_new<log_entry>(state_->get_term(), c_conf->serialize(), log_val_type::conf));
     srv_to_join_->send_req(srv_to_join_, req, ex_resp_handler_);
-    p_in("sent join request to peer %d, %s", srv_to_join_->get_id(), srv_to_join_->get_endpoint().c_str());
+    p_in("sent join request to peer %d, %s",
+         srv_to_join_->get_id(),
+         srv_to_join_->get_endpoint().c_str());
 }
 
 ptr<resp_msg> raft_server::handle_join_cluster_req(req_msg& req) {
     std::vector<ptr<log_entry>>& entries = req.log_entries();
-    ptr<resp_msg> resp = cs_new<resp_msg>(state_->get_term(), msg_type::join_cluster_response, id_, req.get_src());
+    ptr<resp_msg> resp = cs_new<resp_msg>(
+        state_->get_term(), msg_type::join_cluster_response, id_, req.get_src());
     if (entries.size() != 1 || entries[0]->get_val_type() != log_val_type::conf) {
         p_in("receive an invalid JoinClusterRequest as the log entry value "
              "doesn't meet the requirements");
@@ -159,7 +168,9 @@ ptr<resp_msg> raft_server::handle_join_cluster_req(req_msg& req) {
     state_->set_term(req.get_term());
     ctx_->state_mgr_->save_state(*state_);
     reconfigure(cluster_config::deserialize(entries[0]->get_buf()));
-    p_in("leader %d's pubkey = %s", int(leader_), get_srv_config(leader_)->get_public_key()->str().c_str());
+    p_in("leader %d's pubkey = %s",
+         int(leader_),
+         get_srv_config(leader_)->get_public_key()->str().c_str());
 
     resp->accept(quick_commit_index_.load() + 1);
     resp->set_signature(public_key->tobuf(), 0);
@@ -184,10 +195,12 @@ void raft_server::handle_join_cluster_resp(resp_msg& resp) {
             srv_to_join_->set_public_key(pubkey);
             conf_to_add_->set_public_key(pubkey);
 
-            p_in("new server (%d) confirms it will join, start syncing logs to it", srv_to_join_->get_id());
+            p_in("new server (%d) confirms it will join, start syncing logs to it",
+                 srv_to_join_->get_id());
             sync_log_to_new_srv(resp.get_next_idx());
         } else {
-            p_wn("new server (%d) cannot accept the invitation, give up", srv_to_join_->get_id());
+            p_wn("new server (%d) cannot accept the invitation, give up",
+                 srv_to_join_->get_id());
         }
     } else {
         p_wn("no server to join, drop the message");
@@ -225,15 +238,18 @@ void raft_server::sync_log_to_new_srv(ulong start_idx) {
             cur_conf = uncommitted_config_;
         }
 
-        ptr<cluster_config> new_conf = cs_new<cluster_config>(log_store_->next_slot(), cur_conf->get_log_idx());
-        new_conf->get_servers().insert(
-            new_conf->get_servers().end(), cur_conf->get_servers().begin(), cur_conf->get_servers().end());
+        ptr<cluster_config> new_conf =
+            cs_new<cluster_config>(log_store_->next_slot(), cur_conf->get_log_idx());
+        new_conf->get_servers().insert(new_conf->get_servers().end(),
+                                       cur_conf->get_servers().begin(),
+                                       cur_conf->get_servers().end());
         new_conf->get_servers().push_back(conf_to_add_);
         new_conf->set_user_ctx(cur_conf->get_user_ctx());
         new_conf->set_async_replication(cur_conf->is_async_replication());
 
         ptr<buffer> new_conf_buf(new_conf->serialize());
-        ptr<log_entry> entry(cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
+        ptr<log_entry> entry(
+            cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
 
         // FMARK: add sig
         if (flag_use_leader_sig()) {
@@ -267,7 +283,8 @@ void raft_server::sync_log_to_new_srv(ulong start_idx) {
     // We should tolerate this.
     if (/* start_idx > 0 && */ start_idx < log_store_->start_index()) {
         srv_to_join_snp_retry_required_ = false;
-        req = create_sync_snapshot_req(*srv_to_join_, start_idx, state_->get_term(), quick_commit_index_);
+        req = create_sync_snapshot_req(
+            *srv_to_join_, start_idx, state_->get_term(), quick_commit_index_);
         if (req == nullptr) {
             // If reading snapshot fails, enable HB temporarily to retry it.
             srv_to_join_snp_retry_required_ = true;
@@ -286,7 +303,8 @@ void raft_server::sync_log_to_new_srv(ulong start_idx) {
                               0L,
                               start_idx - 1,
                               quick_commit_index_.load());
-        req->log_entries().push_back(cs_new<log_entry>(state_->get_term(), log_pack, log_val_type::log_pack));
+        req->log_entries().push_back(
+            cs_new<log_entry>(state_->get_term(), log_pack, log_val_type::log_pack));
     }
 
     srv_to_join_->send_req(srv_to_join_, req, ex_resp_handler_);
@@ -294,8 +312,11 @@ void raft_server::sync_log_to_new_srv(ulong start_idx) {
 
 ptr<resp_msg> raft_server::handle_log_sync_req(req_msg& req) {
     std::vector<ptr<log_entry>>& entries = req.log_entries();
-    ptr<resp_msg> resp(
-        cs_new<resp_msg>(state_->get_term(), msg_type::sync_log_response, id_, req.get_src(), log_store_->next_slot()));
+    ptr<resp_msg> resp(cs_new<resp_msg>(state_->get_term(),
+                                        msg_type::sync_log_response,
+                                        id_,
+                                        req.get_src(),
+                                        log_store_->next_slot()));
 
     p_db("entries size %d, type %d, catching_up %s\n",
          (int)entries.size(),
@@ -338,7 +359,8 @@ void raft_server::handle_log_sync_resp(resp_msg& resp) {
 
 ptr<resp_msg> raft_server::handle_rm_srv_req(req_msg& req) {
     std::vector<ptr<log_entry>>& entries = req.log_entries();
-    ptr<resp_msg> resp = cs_new<resp_msg>(state_->get_term(), msg_type::remove_server_response, id_, leader_);
+    ptr<resp_msg> resp = cs_new<resp_msg>(
+        state_->get_term(), msg_type::remove_server_response, id_, leader_);
 
     if (entries.size() != 1 || entries[0]->get_buf().size() != sz_int) {
         p_wn("bad remove server request as we are expecting "
@@ -355,7 +377,8 @@ ptr<resp_msg> raft_server::handle_rm_srv_req(req_msg& req) {
 
     check_srv_to_leave_timeout();
     if (srv_to_leave_) {
-        p_wn("previous to-be-removed server %d has not left yet", srv_to_leave_->get_id());
+        p_wn("previous to-be-removed server %d has not left yet",
+             srv_to_leave_->get_id());
         resp->set_result_code(cmd_result_code::SERVER_IS_LEAVING);
         return resp;
     }
@@ -421,7 +444,8 @@ ptr<resp_msg> raft_server::handle_rm_srv_req(req_msg& req) {
 }
 
 ptr<resp_msg> raft_server::handle_leave_cluster_req(req_msg& req) {
-    ptr<resp_msg> resp(cs_new<resp_msg>(state_->get_term(), msg_type::leave_cluster_response, id_, req.get_src()));
+    ptr<resp_msg> resp(cs_new<resp_msg>(
+        state_->get_term(), msg_type::leave_cluster_response, id_, req.get_src()));
     if (!config_changing_) {
         p_db("leave cluster, set steps to down to 2");
         steps_to_down_ = 2;
@@ -461,8 +485,10 @@ void raft_server::rm_srv_from_cluster(int32 srv_id) {
         cur_conf = uncommitted_config_;
     }
 
-    ptr<cluster_config> new_conf = cs_new<cluster_config>(log_store_->next_slot(), cur_conf->get_log_idx());
-    for (cluster_config::const_srv_itor it = cur_conf->get_servers().begin(); it != cur_conf->get_servers().end();
+    ptr<cluster_config> new_conf =
+        cs_new<cluster_config>(log_store_->next_slot(), cur_conf->get_log_idx());
+    for (cluster_config::const_srv_itor it = cur_conf->get_servers().begin();
+         it != cur_conf->get_servers().end();
          ++it) {
         if ((*it)->get_id() != srv_id) {
             new_conf->get_servers().push_back(*it);
@@ -479,7 +505,8 @@ void raft_server::rm_srv_from_cluster(int32 srv_id) {
     config_changing_ = true;
     uncommitted_config_ = new_conf;
     ptr<buffer> new_conf_buf(new_conf->serialize());
-    ptr<log_entry> entry(cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
+    ptr<log_entry> entry(
+        cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
 
     // FMARK: add sig
     if (flag_use_leader_sig()) {

@@ -94,7 +94,8 @@ public:
         case HISTOGRAM:
             add_value(amount);
             break;
-        default: break;
+        default:
+            break;
         }
         return *this;
     }
@@ -108,7 +109,8 @@ public:
         case HISTOGRAM:
             assert(0);
             break;
-        default: break;
+        default:
+            break;
         }
         return *this;
     }
@@ -147,8 +149,10 @@ public:
         case HISTOGRAM: {
             Histogram empty_histogram;
             *hist_ = empty_histogram;
-            break; }
-        default: break;
+            break;
+        }
+        default:
+            break;
         }
     }
 
@@ -184,4 +188,3 @@ private:
 };
 
 } // namespace nuraft
-

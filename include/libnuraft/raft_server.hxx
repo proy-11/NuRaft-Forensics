@@ -560,7 +560,8 @@ public:
      * @return `true` on success.
      *         `false` if stat does not exist, or is not histogram type.
      */
-    static bool get_stat_histogram(const std::string& name, std::map<double, uint64_t>& histogram_out);
+    static bool get_stat_histogram(const std::string& name,
+                                   std::map<double, uint64_t>& histogram_out);
 
     /**
      * Reset given stat to zero.
@@ -587,7 +588,9 @@ public:
      * @param err_msg Will contain a message if error happens.
      * @return `true` on success.
      */
-    static bool apply_config_log_entry(ptr<log_entry>& le, ptr<state_mgr>& s_mgr, std::string& err_msg);
+    static bool apply_config_log_entry(ptr<log_entry>& le,
+                                       ptr<state_mgr>& s_mgr,
+                                       std::string& err_msg);
 
     /**
      * Get the current Raft limit values.
@@ -690,7 +693,8 @@ protected:
     ptr<resp_msg> handle_cli_req_prelock(req_msg& req);
     ptr<resp_msg> handle_cli_req(req_msg& req);
     ptr<resp_msg> handle_cli_req_callback(ptr<commit_ret_elem> elem, ptr<resp_msg> resp);
-    ptr<cmd_result<ptr<buffer>>> handle_cli_req_callback_async(ptr<cmd_result<ptr<buffer>>> async_res);
+    ptr<cmd_result<ptr<buffer>>>
+    handle_cli_req_callback_async(ptr<cmd_result<ptr<buffer>>> async_res);
 
     void drop_all_pending_commit_elems();
 
@@ -735,7 +739,8 @@ protected:
     void reset_srv_to_join();
     void reset_srv_to_leave();
     ptr<req_msg> create_append_entries_req(peer& p);
-    ptr<req_msg> create_sync_snapshot_req(peer& p, ulong last_log_idx, ulong term, ulong commit_idx);
+    ptr<req_msg>
+    create_sync_snapshot_req(peer& p, ulong last_log_idx, ulong term, ulong commit_idx);
     bool check_snapshot_timeout(ptr<peer> pp);
     void destroy_user_snp_ctx(ptr<snapshot_sync_ctx> sync_ctx);
     void clear_snapshot_sync_ctx(peer& pp);
@@ -768,7 +773,9 @@ protected:
     void append_entries_in_bg();
     void append_entries_in_bg_exec();
 
-    void commit_app_log(ulong idx_to_commit, ptr<log_entry>& le, bool need_to_handle_commit_elem);
+    void commit_app_log(ulong idx_to_commit,
+                        ptr<log_entry>& le,
+                        bool need_to_handle_commit_elem);
     void commit_conf(ulong idx_to_commit, ptr<log_entry>& le);
 
     ptr<cmd_result<ptr<buffer>>> send_msg_to_leader(ptr<req_msg>& req);
@@ -796,11 +803,17 @@ protected:
     // FMARK: certificate operations
     bool push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term, ulong index);
 
-    ptr<resp_msg> handle_out_of_log_msg(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
+    ptr<resp_msg> handle_out_of_log_msg(req_msg& req,
+                                        ptr<custom_notification_msg> msg,
+                                        ptr<resp_msg> resp);
 
-    ptr<resp_msg> handle_leadership_takeover(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
+    ptr<resp_msg> handle_leadership_takeover(req_msg& req,
+                                             ptr<custom_notification_msg> msg,
+                                             ptr<resp_msg> resp);
 
-    ptr<resp_msg> handle_resignation_request(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
+    ptr<resp_msg> handle_resignation_request(req_msg& req,
+                                             ptr<custom_notification_msg> msg,
+                                             ptr<resp_msg> resp);
 
     void remove_peer_from_peers(const ptr<peer>& pp);
 

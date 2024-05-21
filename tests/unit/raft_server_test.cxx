@@ -292,14 +292,16 @@ int add_node_error_cases_test() {
     c_net->create_client(s2_addr);
 
     std::atomic<bool> invoked(false);
-    rpc_handler bad_req_handler = [&invoked](ptr<resp_msg>& resp, ptr<rpc_exception>& err) -> int {
+    rpc_handler bad_req_handler = [&invoked](ptr<resp_msg>& resp,
+                                             ptr<rpc_exception>& err) -> int {
         invoked.store(true);
         CHK_EQ(cmd_result_code::BAD_REQUEST, resp->get_result_code());
         return 0;
     };
 
     { // Attempt to add more than one server at once.
-        ptr<req_msg> req = cs_new<req_msg>((ulong)0, msg_type::add_server_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
+        ptr<req_msg> req = cs_new<req_msg>(
+            (ulong)0, msg_type::add_server_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
         for (size_t ii = 1; ii < num_srvs; ++ii) {
             RaftPkg* ff = pkgs[ii];
             ptr<srv_config> srv = ff->getTestMgr()->get_srv_config();
@@ -314,7 +316,8 @@ int add_node_error_cases_test() {
     invoked = false;
 
     { // Attempt to add server with wrong message type.
-        ptr<req_msg> req = cs_new<req_msg>((ulong)0, msg_type::add_server_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
+        ptr<req_msg> req = cs_new<req_msg>(
+            (ulong)0, msg_type::add_server_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
         RaftPkg* ff = pkgs[1];
         ptr<srv_config> srv = ff->getTestMgr()->get_srv_config();
         ptr<buffer> buf(srv->serialize());
@@ -332,7 +335,8 @@ int add_node_error_cases_test() {
         s1.raftServer->add_srv(*(s2.getTestMgr()->get_srv_config()));
 
         // Now adding S2 is in progress, add S3 to S1.
-        ptr<raft_result> ret = s1.raftServer->add_srv(*(s3.getTestMgr()->get_srv_config()));
+        ptr<raft_result> ret =
+            s1.raftServer->add_srv(*(s3.getTestMgr()->get_srv_config()));
 
         // Should fail.
         CHK_EQ(cmd_result_code::SERVER_IS_JOINING, ret->get_result_code());
@@ -371,22 +375,26 @@ int add_node_error_cases_test() {
     }
 
     { // Attempt to add S2 again.
-        ptr<raft_result> ret = s1.raftServer->add_srv(*(s2.getTestMgr()->get_srv_config()));
+        ptr<raft_result> ret =
+            s1.raftServer->add_srv(*(s2.getTestMgr()->get_srv_config()));
         CHK_EQ(cmd_result_code::SERVER_ALREADY_EXISTS, ret->get_result_code());
     }
 
     { // Attempt to add S3 to S2 (non-leader).
-        ptr<raft_result> ret = s2.raftServer->add_srv(*(s3.getTestMgr()->get_srv_config()));
+        ptr<raft_result> ret =
+            s2.raftServer->add_srv(*(s3.getTestMgr()->get_srv_config()));
         CHK_EQ(cmd_result_code::NOT_LEADER, ret->get_result_code());
     }
 
-    rpc_handler nl_handler = [&invoked](ptr<resp_msg>& resp, ptr<rpc_exception>& err) -> int {
+    rpc_handler nl_handler = [&invoked](ptr<resp_msg>& resp,
+                                        ptr<rpc_exception>& err) -> int {
         invoked.store(true);
         CHK_EQ(cmd_result_code::NOT_LEADER, resp->get_result_code());
         return 0;
     };
     { // Attempt to add S3 to S2 (non-leader), through RPC.
-        ptr<req_msg> req = cs_new<req_msg>((ulong)0, msg_type::add_server_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
+        ptr<req_msg> req = cs_new<req_msg>(
+            (ulong)0, msg_type::add_server_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
         ptr<srv_config> srv = s3.getTestMgr()->get_srv_config();
         ptr<buffer> buf(srv->serialize());
         ptr<log_entry> log(cs_new<log_entry>(0, buf, log_val_type::cluster_server));
@@ -444,7 +452,8 @@ int remove_node_test() {
     CHK_Z(make_group(pkgs));
 
     // Try to remove s3 from non leader, should return error.
-    ptr<cmd_result<ptr<buffer>>> ret = s2.raftServer->remove_srv(s3.getTestMgr()->get_srv_config()->get_id());
+    ptr<cmd_result<ptr<buffer>>> ret =
+        s2.raftServer->remove_srv(s3.getTestMgr()->get_srv_config()->get_id());
     CHK_FALSE(ret->get_accepted());
     CHK_EQ(cmd_result_code::NOT_LEADER, ret->get_result_code());
 
@@ -513,15 +522,21 @@ int remove_node_error_cases_test() {
     c_net->create_client(s2_addr);
 
     std::atomic<bool> invoked(false);
-    rpc_handler bad_req_handler = [&invoked](ptr<resp_msg>& resp, ptr<rpc_exception>& err) -> int {
+    rpc_handler bad_req_handler = [&invoked](ptr<resp_msg>& resp,
+                                             ptr<rpc_exception>& err) -> int {
         invoked.store(true);
         CHK_EQ(cmd_result_code::BAD_REQUEST, resp->get_result_code());
         return 0;
     };
 
     { // Attempt to remove more than one server at once.
-        ptr<req_msg> req =
-            cs_new<req_msg>((ulong)0, msg_type::remove_server_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
+        ptr<req_msg> req = cs_new<req_msg>((ulong)0,
+                                           msg_type::remove_server_request,
+                                           0,
+                                           0,
+                                           (ulong)0,
+                                           (ulong)0,
+                                           (ulong)0);
         for (size_t ii = 1; ii < num_srvs; ++ii) {
             RaftPkg* ff = pkgs[ii];
             ptr<srv_config> srv = ff->getTestMgr()->get_srv_config();
@@ -540,14 +555,20 @@ int remove_node_error_cases_test() {
         CHK_EQ(cmd_result_code::NOT_LEADER, ret->get_result_code());
     }
 
-    rpc_handler nl_handler = [&invoked](ptr<resp_msg>& resp, ptr<rpc_exception>& err) -> int {
+    rpc_handler nl_handler = [&invoked](ptr<resp_msg>& resp,
+                                        ptr<rpc_exception>& err) -> int {
         invoked.store(true);
         CHK_EQ(cmd_result_code::NOT_LEADER, resp->get_result_code());
         return 0;
     };
     { // Attempt to remove S3 to S2 (non-leader), through RPC.
-        ptr<req_msg> req =
-            cs_new<req_msg>((ulong)0, msg_type::remove_server_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
+        ptr<req_msg> req = cs_new<req_msg>((ulong)0,
+                                           msg_type::remove_server_request,
+                                           0,
+                                           0,
+                                           (ulong)0,
+                                           (ulong)0,
+                                           (ulong)0);
         ptr<buffer> buf(buffer::alloc(sz_int));
         buf->put(s3.myId);
         buf->pos(0);
@@ -743,7 +764,8 @@ int multiple_config_change_test() {
     s1.raftServer->remove_srv(s3.getTestMgr()->get_srv_config()->get_id());
 
     // Cannot remove multiple servers at once, should return error.
-    ptr<raft_result> ret = s1.raftServer->remove_srv(s4.getTestMgr()->get_srv_config()->get_id());
+    ptr<raft_result> ret =
+        s1.raftServer->remove_srv(s4.getTestMgr()->get_srv_config()->get_id());
     CHK_GT(0, ret->get_result_code());
 
     // Priority change is OK.
@@ -771,7 +793,8 @@ int multiple_config_change_test() {
         CHK_EQ(3, configs_out.size());
         for (auto& entry: configs_out) {
             ptr<srv_config>& s_conf = entry;
-            CHK_TRUE(s_conf->get_id() == 1 || s_conf->get_id() == 2 || s_conf->get_id() == 4);
+            CHK_TRUE(s_conf->get_id() == 1 || s_conf->get_id() == 2
+                     || s_conf->get_id() == 4);
         }
 
         // S4's priority should be 10.
@@ -1970,8 +1993,13 @@ int async_append_handler_test() {
     std::list<ulong> idx_list;
     for (auto& entry: handlers) {
         ptr<cmd_result<ptr<buffer>>> result = entry;
-        cmd_result<ptr<buffer>>::handler_type my_handler = std::bind(
-            async_handler, &idx_list, result, cmd_result_code::OK, std::placeholders::_1, std::placeholders::_2);
+        cmd_result<ptr<buffer>>::handler_type my_handler =
+            std::bind(async_handler,
+                      &idx_list,
+                      result,
+                      cmd_result_code::OK,
+                      std::placeholders::_1,
+                      std::placeholders::_2);
         result->when_ready(my_handler);
     }
 
@@ -2070,8 +2098,13 @@ int async_append_handler_cancel_test() {
     std::list<ulong> idx_list;
     for (auto& entry: handlers) {
         ptr<cmd_result<ptr<buffer>>> result = entry;
-        cmd_result<ptr<buffer>>::handler_type my_handler = std::bind(
-            async_handler, &idx_list, result, cmd_result_code::CANCELLED, std::placeholders::_1, std::placeholders::_2);
+        cmd_result<ptr<buffer>>::handler_type my_handler =
+            std::bind(async_handler,
+                      &idx_list,
+                      result,
+                      cmd_result_code::CANCELLED,
+                      std::placeholders::_1,
+                      std::placeholders::_2);
         result->when_ready(my_handler);
     }
 
@@ -2237,7 +2270,8 @@ int apply_config_test() {
     ptr<buffer> s1_conf_buf = s1_conf->serialize();
     ptr<buffer> s3_conf_buf = s3_conf->serialize();
     CHK_EQ(s1_conf_buf->size(), s3_conf_buf->size());
-    CHK_Z(memcmp(s1_conf_buf->data_begin(), s3_conf_buf->data_begin(), s1_conf_buf->size()));
+    CHK_Z(memcmp(
+        s1_conf_buf->data_begin(), s3_conf_buf->data_begin(), s1_conf_buf->size()));
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -2348,15 +2382,18 @@ int main(int argc, char** argv) {
 
     ts.doTest("leader election priority test", leader_election_priority_test);
 
-    ts.doTest("leader election with aggressive node test", leader_election_with_aggressive_node_test);
+    ts.doTest("leader election with aggressive node test",
+              leader_election_with_aggressive_node_test);
 
     ts.doTest("leadership takeover basic test", leadership_takeover_basic_test);
 
-    ts.doTest("leadership takeover with designated successor test", leadership_takeover_designated_successor_test);
+    ts.doTest("leadership takeover with designated successor test",
+              leadership_takeover_designated_successor_test);
 
     ts.doTest("leadership takeover by request test", leadership_takeover_by_request_test);
 
-    ts.doTest("leadership takeover with offline candidate test", leadership_takeover_offline_candidate_test);
+    ts.doTest("leadership takeover with offline candidate test",
+              leadership_takeover_offline_candidate_test);
 
     ts.doTest("temporary leader test", temporary_leader_test);
 

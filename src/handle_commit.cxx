@@ -62,7 +62,8 @@ void raft_server::commit(ulong target_idx) {
          quick_commit_index_.load(),
          sm_commit_index_.load());
 
-    if (log_store_->next_slot() - 1 > sm_commit_index_ && quick_commit_index_ > sm_commit_index_) {
+    if (log_store_->next_slot() - 1 > sm_commit_index_
+        && quick_commit_index_ > sm_commit_index_) {
 
         nuraft_global_mgr* mgr = nuraft_global_mgr::get_instance();
         if (mgr) {
@@ -84,7 +85,8 @@ void raft_server::commit(ulong target_idx) {
         if (role_ == srv_role::follower) {
             ulong leader_idx = leader_commit_index_.load();
             ulong local_idx = sm_commit_index_.load();
-            if (!data_fresh_.load() && leader_idx < local_idx + ctx_->get_params()->fresh_log_gap_) {
+            if (!data_fresh_.load()
+                && leader_idx < local_idx + ctx_->get_params()->fresh_log_gap_) {
                 data_fresh_.store(true);
                 cb_func::Param param(id_, leader_);
                 (void)ctx_->cb_func_.call(cb_func::BecomeFresh, &param);
@@ -103,11 +105,13 @@ void raft_server::commit_in_bg() {
 
     while (true) {
         try {
-            while (quick_commit_index_ <= sm_commit_index_ || sm_commit_index_ >= log_store_->next_slot() - 1) {
+            while (quick_commit_index_ <= sm_commit_index_
+                   || sm_commit_index_ >= log_store_->next_slot() - 1) {
                 std::unique_lock<std::mutex> lock(commit_cv_lock_);
 
                 auto wait_check = [this]() {
-                    return (log_store_->next_slot() - 1 > sm_commit_index_ && quick_commit_index_ > sm_commit_index_)
+                    return (log_store_->next_slot() - 1 > sm_commit_index_
+                            && quick_commit_index_ > sm_commit_index_)
                            || stopping_;
                 };
                 p_tr("commit_cv_ sleep\n");
@@ -162,7 +166,9 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
         return true;
     }
 
-    p_tr("commit upto %ld, curruent idx %ld\n", quick_commit_index_.load(), sm_commit_index_.load());
+    p_tr("commit upto %ld, curruent idx %ld\n",
+         quick_commit_index_.load(),
+         sm_commit_index_.load());
 
     ulong log_start_idx = log_store_->start_index();
     if (log_start_idx && sm_commit_index_ < log_start_idx - 1) {
@@ -175,15 +181,19 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
     }
 
     ptr<cluster_config> cur_config = get_config();
-    bool need_to_handle_commit_elem = (is_leader() && !cur_config->is_async_replication());
+    bool need_to_handle_commit_elem =
+        (is_leader() && !cur_config->is_async_replication());
 
     bool first_loop_exec = true;
     bool finished_in_time = true;
     timer_helper tt(timeout_ms * 1000);
-    while (sm_commit_index_ < quick_commit_index_ && sm_commit_index_ < log_store_->next_slot() - 1) {
+    while (sm_commit_index_ < quick_commit_index_
+           && sm_commit_index_ < log_store_->next_slot() - 1) {
         // NOTE: Skip timeout checking for the first loop execution.
         if (!first_loop_exec && timeout_ms && tt.timeout()) {
-            p_wn("abort commit due to timeout (%zu ms), %zu ms elapsed\n", timeout_ms, tt.get_ms());
+            p_wn("abort commit due to timeout (%zu ms), %zu ms elapsed\n",
+                 timeout_ms,
+                 tt.get_ms());
             finished_in_time = false;
             break;
         }
@@ -191,7 +201,9 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
 
         ulong index_to_commit = sm_commit_index_ + 1;
         ptr<log_entry> le = log_store_->entry_at(index_to_commit);
-        p_tr("commit upto %llu, curruent idx %llu\n", quick_commit_index_.load(), index_to_commit);
+        p_tr("commit upto %llu, curruent idx %llu\n",
+             quick_commit_index_.load(),
+             index_to_commit);
 
         if (le->get_term() == 0) {
             // LCOV_EXCL_START
@@ -227,7 +239,9 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
                  index_to_commit);
         }
     }
-    p_tr("DONE: commit upto %ld, curruent idx %ld\n", quick_commit_index_.load(), sm_commit_index_.load());
+    p_tr("DONE: commit upto %ld, curruent idx %ld\n",
+         quick_commit_index_.load(),
+         sm_commit_index_.load());
     if (role_ == srv_role::follower) {
         ulong leader_idx = leader_commit_index_.load();
         ulong local_idx = sm_commit_index_.load();
@@ -238,7 +252,8 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
             cb_func::Param param(id_, leader_);
             (void)ctx_->cb_func_.call(cb_func::BecomeStale, &param);
 
-        } else if (!data_fresh_.load() && leader_idx < local_idx + params->fresh_log_gap_) {
+        } else if (!data_fresh_.load()
+                   && leader_idx < local_idx + params->fresh_log_gap_) {
             data_fresh_.store(true);
             cb_func::Param param(id_, leader_);
             (void)ctx_->cb_func_.call(cb_func::BecomeFresh, &param);
@@ -247,7 +262,9 @@ bool raft_server::commit_in_bg_exec(size_t timeout_ms) {
     return finished_in_time;
 }
 
-void raft_server::commit_app_log(ulong idx_to_commit, ptr<log_entry>& le, bool need_to_handle_commit_elem) {
+void raft_server::commit_app_log(ulong idx_to_commit,
+                                 ptr<log_entry>& le,
+                                 bool need_to_handle_commit_elem) {
     ptr<buffer> ret_value = nullptr;
     ptr<buffer> buf = le->get_buf_ptr();
     buf->pos(0);
@@ -369,7 +386,9 @@ void raft_server::commit_conf(ulong idx_to_commit, ptr<log_entry>& le) {
     // }
 }
 
-bool raft_server::apply_config_log_entry(ptr<log_entry>& le, ptr<state_mgr>& s_mgr, std::string& err_msg) {
+bool raft_server::apply_config_log_entry(ptr<log_entry>& le,
+                                         ptr<state_mgr>& s_mgr,
+                                         std::string& err_msg) {
     if (!le.get() || !s_mgr.get()) {
         err_msg = "Invalid arguments";
         return false;
@@ -393,7 +412,8 @@ bool raft_server::apply_config_log_entry(ptr<log_entry>& le, ptr<state_mgr>& s_m
 void raft_server::snapshot_and_compact(ulong committed_idx) {
     ptr<raft_params> params = ctx_->get_params();
     if (params->snapshot_distance_ == 0
-        || (committed_idx - log_store_->start_index() + 1) < (ulong)params->snapshot_distance_) {
+        || (committed_idx - log_store_->start_index() + 1)
+               < (ulong)params->snapshot_distance_) {
         // snapshot is disabled or the log store is not long enough
         return;
     }
@@ -406,14 +426,17 @@ void raft_server::snapshot_and_compact(ulong committed_idx) {
     try {
         bool f = false;
         ptr<snapshot> local_snp = get_last_snapshot();
-        if ((!local_snp || (committed_idx - local_snp->get_last_log_idx()) >= (ulong)params->snapshot_distance_)
+        if ((!local_snp
+             || (committed_idx - local_snp->get_last_log_idx())
+                    >= (ulong)params->snapshot_distance_)
             && snp_in_progress_.compare_exchange_strong(f, true)) {
             snapshot_in_action = true;
             p_in("creating a snapshot for index %llu", committed_idx);
 
             // get the latest configuration info
             ptr<cluster_config> conf = get_config();
-            while (conf->get_log_idx() > committed_idx && conf->get_prev_log_idx() >= log_store_->start_index()) {
+            while (conf->get_log_idx() > committed_idx
+                   && conf->get_prev_log_idx() >= log_store_->start_index()) {
                 ptr<log_entry> conf_log(log_store_->entry_at(conf->get_prev_log_idx()));
                 conf = cluster_config::deserialize(conf_log->get_buf());
             }
@@ -432,7 +455,8 @@ void raft_server::snapshot_and_compact(ulong committed_idx) {
                 }
                 conf = local_snp->get_last_config();
 
-            } else if (conf->get_log_idx() > committed_idx && conf->get_prev_log_idx() == 0) {
+            } else if (conf->get_log_idx() > committed_idx
+                       && conf->get_prev_log_idx() == 0) {
                 // Modified by Jung-Sang Ahn in May, 2018:
                 //  Since we remove configure from state machine
                 //  (necessary when we clone a node to another node),
@@ -448,10 +472,18 @@ void raft_server::snapshot_and_compact(ulong committed_idx) {
             }
 
             ulong log_term_to_compact = log_store_->term_at(committed_idx);
-            ptr<snapshot> new_snapshot(cs_new<snapshot>(committed_idx, log_term_to_compact, conf));
-            p_in("create snapshot idx %ld log_term %ld\n", committed_idx, log_term_to_compact);
-            cmd_result<bool>::handler_type handler = (cmd_result<bool>::handler_type)std::bind(
-                &raft_server::on_snapshot_completed, this, new_snapshot, std::placeholders::_1, std::placeholders::_2);
+            ptr<snapshot> new_snapshot(
+                cs_new<snapshot>(committed_idx, log_term_to_compact, conf));
+            p_in("create snapshot idx %ld log_term %ld\n",
+                 committed_idx,
+                 log_term_to_compact);
+            cmd_result<bool>::handler_type handler =
+                (cmd_result<bool>::handler_type)std::bind(
+                    &raft_server::on_snapshot_completed,
+                    this,
+                    new_snapshot,
+                    std::placeholders::_1,
+                    std::placeholders::_2);
             timer_helper tt;
             state_machine_->create_snapshot(*new_snapshot, handler);
             p_in("create snapshot idx %ld log_term %ld done: %lu us elapsed\n",
@@ -471,7 +503,9 @@ void raft_server::snapshot_and_compact(ulong committed_idx) {
     }
 }
 
-void raft_server::on_snapshot_completed(ptr<snapshot>& s, bool result, ptr<std::exception>& err) {
+void raft_server::on_snapshot_completed(ptr<snapshot>& s,
+                                        bool result,
+                                        ptr<std::exception>& err) {
     do { // Dummy loop
         if (err != nilptr) {
             p_er("failed to create a snapshot due to %s", err->what());
@@ -491,7 +525,8 @@ void raft_server::on_snapshot_completed(ptr<snapshot>& s, bool result, ptr<std::
             set_last_snapshot(new_snp);
             ptr<raft_params> params = ctx_->get_params();
             if (new_snp->get_last_log_idx() > (ulong)params->reserved_log_items_) {
-                ulong compact_upto = new_snp->get_last_log_idx() - (ulong)params->reserved_log_items_;
+                ulong compact_upto =
+                    new_snp->get_last_log_idx() - (ulong)params->reserved_log_items_;
                 p_db("log_store_ compact upto %ld", compact_upto);
                 log_store_->compact(compact_upto);
             }
@@ -526,7 +561,9 @@ void raft_server::reconfigure(const ptr<cluster_config>& new_config) {
     std::vector<int32> srvs_removed;
     std::vector<ptr<srv_config>> srvs_added;
     std::list<ptr<srv_config>>& new_srvs(new_config->get_servers());
-    for (std::list<ptr<srv_config>>::const_iterator it = new_srvs.begin(); it != new_srvs.end(); ++it) {
+    for (std::list<ptr<srv_config>>::const_iterator it = new_srvs.begin();
+         it != new_srvs.end();
+         ++it) {
         peer_itor pit = peers_.find((*it)->get_id());
         if (pit == peers_.end() && id_ != (*it)->get_id()) {
             srvs_added.push_back(*it);
@@ -556,16 +593,23 @@ void raft_server::reconfigure(const ptr<cluster_config>& new_config) {
     }
 
     // ===== Adding new server =====
-    for (std::vector<ptr<srv_config>>::const_iterator it = srvs_added.begin(); it != srvs_added.end(); ++it) {
+    for (std::vector<ptr<srv_config>>::const_iterator it = srvs_added.begin();
+         it != srvs_added.end();
+         ++it) {
         ptr<srv_config> srv_added = *it;
-        timer_task<int32>::executor exec =
-            (timer_task<int32>::executor)std::bind(&raft_server::handle_hb_timeout, this, std::placeholders::_1);
-        ptr<peer> p = cs_new<peer, ptr<srv_config>&, context&, timer_task<int32>::executor&, ptr<logger>&>(
-            srv_added, *ctx_, exec, l_);
+        timer_task<int32>::executor exec = (timer_task<int32>::executor)std::bind(
+            &raft_server::handle_hb_timeout, this, std::placeholders::_1);
+        ptr<peer> p = cs_new<peer,
+                             ptr<srv_config>&,
+                             context&,
+                             timer_task<int32>::executor&,
+                             ptr<logger>&>(srv_added, *ctx_, exec, l_);
         p->set_next_log_idx(log_store_->next_slot());
 
         // FMARK: print pubkey
-        p_in("adding server %d with pubkey %s", p->get_id(), p->get_public_key_str().c_str());
+        p_in("adding server %d with pubkey %s",
+             p->get_id(),
+             p->get_public_key_str().c_str());
 
         snprintf(temp_buf,
                  1024,
@@ -590,7 +634,9 @@ void raft_server::reconfigure(const ptr<cluster_config>& new_config) {
     }
 
     // ===== Removing server =====
-    for (std::vector<int32>::const_iterator it = srvs_removed.begin(); it != srvs_removed.end(); ++it) {
+    for (std::vector<int32>::const_iterator it = srvs_removed.begin();
+         it != srvs_removed.end();
+         ++it) {
         int32 srv_removed = *it;
         if (srv_removed == id_ && !catching_up_) {
             p_in("this server (%d) has been removed from the cluster, "
@@ -679,7 +725,8 @@ void raft_server::reconfigure(const ptr<cluster_config>& new_config) {
 
     set_config(new_config);
 
-    if (uncommitted_config_ && uncommitted_config_->get_log_idx() == new_config->get_log_idx()) {
+    if (uncommitted_config_
+        && uncommitted_config_->get_log_idx() == new_config->get_log_idx()) {
         // All configs are committed.
         p_in("clearing uncommitted config at log %zu, prev %zu",
              uncommitted_config_->get_log_idx(),

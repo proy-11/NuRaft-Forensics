@@ -28,13 +28,10 @@ namespace nuraft {
 class snapshot;
 struct snapshot_sync_ctx {
 public:
-    snapshot_sync_ctx(const ptr<snapshot>& s,
-                      ulong timeout_ms,
-                      ulong offset = 0L)
+    snapshot_sync_ctx(const ptr<snapshot>& s, ulong timeout_ms, ulong offset = 0L)
         : snapshot_(s)
         , offset_(offset)
-        , user_snp_ctx_(nullptr)
-    {
+        , user_snp_ctx_(nullptr) {
         // 10 seconds by default.
         timer_.set_duration_ms(timeout_ms);
     }
@@ -67,6 +64,6 @@ public:
     timer_helper timer_;
 };
 
-}
+} // namespace nuraft
 
 #endif //_SNAPSHOT_SYNC_CTX_HXX_

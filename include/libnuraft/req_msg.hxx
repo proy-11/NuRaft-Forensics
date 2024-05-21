@@ -31,7 +31,13 @@ namespace nuraft {
 
 class req_msg : public msg_base {
 public:
-    req_msg(ulong term, msg_type type, int32 src, int32 dst, ulong last_log_term, ulong last_log_idx, ulong commit_idx)
+    req_msg(ulong term,
+            msg_type type,
+            int32 src,
+            int32 dst,
+            ulong last_log_term,
+            ulong last_log_idx,
+            ulong commit_idx)
         : msg_base(term, type, src, dst)
         , last_log_term_(last_log_term)
         , last_log_idx_(last_log_idx)

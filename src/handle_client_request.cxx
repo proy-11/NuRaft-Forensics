@@ -112,7 +112,8 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
         // FMARK: add sig
         if (flag_use_leader_sig()) {
             // timer->start_timer();
-            entries.at(i)->set_signature(this->get_signature(*entries.at(i)->serialize_sig()));
+            entries.at(i)->set_signature(
+                this->get_signature(*entries.at(i)->serialize_sig()));
             // timer->add_record("ls.init.clireq");
         }
 
@@ -125,7 +126,8 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
 
         ptr<buffer> buf = entries.at(i)->get_buf_ptr();
         buf->pos(0);
-        ret_value = state_machine_->pre_commit_ext(state_machine::ext_op_params(last_idx, buf));
+        ret_value =
+            state_machine_->pre_commit_ext(state_machine::ext_op_params(last_idx, buf));
     }
     if (num_entries) {
         log_store_->end_of_append_batch(last_idx - num_entries, num_entries);
@@ -153,7 +155,8 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
     CbReturnCode rc = ctx_->cb_func_.call(cb_func::AppendLogs, &param);
     if (rc == CbReturnCode::ReturnNull) return nullptr;
 
-    size_t sleep_us = debugging_options::get_instance().handle_cli_req_sleep_us_.load(std::memory_order_relaxed);
+    size_t sleep_us = debugging_options::get_instance().handle_cli_req_sleep_us_.load(
+        std::memory_order_relaxed);
     if (sleep_us) {
         // Sleep if the debugging option is given.
         timer_helper::sleep_us(sleep_us);
@@ -181,7 +184,10 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
             case raft_params::blocking:
             default:
                 // Blocking call: set callback function waiting for the result.
-                resp->set_cb(std::bind(&raft_server::handle_cli_req_callback, this, elem, std::placeholders::_1));
+                resp->set_cb(std::bind(&raft_server::handle_cli_req_callback,
+                                       this,
+                                       elem,
+                                       std::placeholders::_1));
                 break;
 
             case raft_params::async_handler:
@@ -189,7 +195,9 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
                 if (!elem->async_result_) {
                     elem->async_result_ = cs_new<cmd_result<ptr<buffer>>>();
                 }
-                resp->set_async_cb(std::bind(&raft_server::handle_cli_req_callback_async, this, elem->async_result_));
+                resp->set_async_cb(std::bind(&raft_server::handle_cli_req_callback_async,
+                                             this,
+                                             elem->async_result_));
                 break;
             }
         }
@@ -197,7 +205,9 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
     } else {
         // Async replication:
         //   Immediately return with the result of pre-commit.
-        p_dv("asynchronously replicated %ld, return value %p\n", last_idx, ret_value.get());
+        p_dv("asynchronously replicated %ld, return value %p\n",
+             last_idx,
+             ret_value.get());
         resp->set_ctx(ret_value);
     }
 
@@ -205,7 +215,8 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
     return resp;
 }
 
-ptr<resp_msg> raft_server::handle_cli_req_callback(ptr<commit_ret_elem> elem, ptr<resp_msg> resp) {
+ptr<resp_msg> raft_server::handle_cli_req_callback(ptr<commit_ret_elem> elem,
+                                                   ptr<resp_msg> resp) {
     p_dv("commit_ret_cv %lu %p sleep\n", elem->idx_, &elem->awaiter_);
 
     // Will wake up after timeout.
@@ -224,7 +235,10 @@ ptr<resp_msg> raft_server::handle_cli_req_callback(ptr<commit_ret_elem> elem, pt
     }
 
     if (elem->result_code_ == cmd_result_code::OK) {
-        p_dv("[OK] commit_ret_cv %lu wake up (%zu us), return value %p\n", idx, elapsed_us, ret_value.get());
+        p_dv("[OK] commit_ret_cv %lu wake up (%zu us), return value %p\n",
+             idx,
+             elapsed_us,
+             ret_value.get());
     } else {
         // Null `ret_value`, most likely timeout.
         p_wn("[NOT OK] commit_ret_cv %lu wake up (%zu us), "
@@ -246,7 +260,8 @@ ptr<resp_msg> raft_server::handle_cli_req_callback(ptr<commit_ret_elem> elem, pt
     return resp;
 }
 
-ptr<cmd_result<ptr<buffer>>> raft_server::handle_cli_req_callback_async(ptr<cmd_result<ptr<buffer>>> async_res) {
+ptr<cmd_result<ptr<buffer>>>
+raft_server::handle_cli_req_callback_async(ptr<cmd_result<ptr<buffer>>> async_res) {
     async_res->accept();
     return async_res;
 }
@@ -269,10 +284,15 @@ void raft_server::drop_all_pending_commit_elems() {
             if (max_idx < elem->idx_) {
                 max_idx = elem->idx_;
             }
-            p_db("cancelled blocking client request %zu, waited %zu us", elem->idx_, elem->timer_.get_us());
+            p_db("cancelled blocking client request %zu, waited %zu us",
+                 elem->idx_,
+                 elem->timer_.get_us());
         }
         if (!commit_ret_elems_.empty()) {
-            p_wn("cancelled %zu blocking client requests from %zu to %zu.", commit_ret_elems_.size(), min_idx, max_idx);
+            p_wn("cancelled %zu blocking client requests from %zu to %zu.",
+                 commit_ret_elems_.size(),
+                 min_idx,
+                 max_idx);
         }
         commit_ret_elems_.clear();
         return;

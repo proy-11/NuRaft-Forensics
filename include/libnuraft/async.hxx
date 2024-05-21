@@ -232,8 +232,10 @@ public:
              {cmd_result_code::TIMEOUT, "Request timeout."},
              {cmd_result_code::NOT_LEADER, "This node is not a leader."},
              {cmd_result_code::BAD_REQUEST, "Invalid request."},
-             {cmd_result_code::SERVER_ALREADY_EXISTS, "Server already exists in the cluster."},
-             {cmd_result_code::CONFIG_CHANGING, "Previous configuration change has not been committed yet."},
+             {cmd_result_code::SERVER_ALREADY_EXISTS,
+              "Server already exists in the cluster."},
+             {cmd_result_code::CONFIG_CHANGING,
+              "Previous configuration change has not been committed yet."},
              {cmd_result_code::SERVER_IS_JOINING, "Other server is being added."},
              {cmd_result_code::SERVER_NOT_FOUND, "Cannot find server."},
              {cmd_result_code::CANNOT_REMOVE_LEADER, "Cannot remove leader."},
@@ -286,7 +288,8 @@ private:
 };
 
 // For backward compatibility.
-template <typename T, typename TE = ptr<std::exception>> using async_result = cmd_result<T, TE>;
+template <typename T, typename TE = ptr<std::exception>>
+using async_result = cmd_result<T, TE>;
 
 } // namespace nuraft
 

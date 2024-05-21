@@ -45,7 +45,8 @@ public:
         if (rem > 0) ss << "\n";
         for (auto& ent: records) {
             rem--;
-            ss << "    \"" << ent.first << "\": " << ent.second << (rem > 0 ? ",\n" : "\n");
+            ss << "    \"" << ent.first << "\": " << ent.second
+               << (rem > 0 ? ",\n" : "\n");
         }
         ss << "}";
         return ss.str();

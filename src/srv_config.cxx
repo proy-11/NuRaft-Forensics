@@ -51,7 +51,8 @@ ptr<srv_config> srv_config::deserialize(buffer_serializer& bs) {
 
 ptr<buffer> srv_config::serialize() const {
     // FMARK: save public key
-    size_t total_size = sz_int + sz_int + (endpoint_.length() + 1) + (aux_.length() + 1) + 1 + sz_int + sz_ulong;
+    size_t total_size = sz_int + sz_int + (endpoint_.length() + 1) + (aux_.length() + 1)
+                        + 1 + sz_int + sz_ulong;
     ptr<buffer> keybuf;
     if (public_key_ != nullptr) {
         keybuf = public_key_->tobuf();

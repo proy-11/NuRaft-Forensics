@@ -27,29 +27,25 @@ limitations under the License.
 using namespace nuraft;
 
 class raft_client {
-    public:
-    raft_client() : logger_(nullptr),
-        state_machine_(cs_new<echo_state_machine>()),
-        state_manager_(cs_new<inmem_state_mgr>(1, "localhost:12345")),
-        asio_opt_(),
-        params_(),
-        launcher_(),
-        server_()
-    {}
+public:
+    raft_client()
+        : logger_(nullptr)
+        , state_machine_(cs_new<echo_state_machine>())
+        , state_manager_(cs_new<inmem_state_mgr>(1, "localhost:12345"))
+        , asio_opt_()
+        , params_()
+        , launcher_()
+        , server_() {}
 
     ~raft_client() {}
 
     bool initialise_raft_server() {
         int port_number = 12345;
-        server_ = launcher_.init(state_machine_,
-                                                state_manager_,
-                                                logger_,
-                                                port_number,
-                                                asio_opt_,
-                                                params_);
+        server_ = launcher_.init(
+            state_machine_, state_manager_, logger_, port_number, asio_opt_, params_);
 
         while (!server_->is_initialized()) {
-            std::this_thread::sleep_for( std::chrono::milliseconds(100) );
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
         return true;
@@ -63,32 +59,29 @@ class raft_client {
         server_->append_entries({log});
     }
 
-    void shutdown() {
-        launcher_.shutdown();
-    }
+    void shutdown() { launcher_.shutdown(); }
 
-    private:
-        ptr<logger> logger_;
+private:
+    ptr<logger> logger_;
 
-        ptr<state_machine> state_machine_;
+    ptr<state_machine> state_machine_;
 
-        ptr<state_mgr> state_manager_;
+    ptr<state_mgr> state_manager_;
 
-        asio_service::options asio_opt_; 
+    asio_service::options asio_opt_;
 
-        raft_params params_;
+    raft_params params_;
 
-        raft_launcher launcher_;
-        
-        ptr<raft_server> server_;
+    raft_launcher launcher_;
+
+    ptr<raft_server> server_;
 };
 
 int main(int argc, char** argv) {
     raft_client client;
-    if(client.initialise_raft_server()) {
+    if (client.initialise_raft_server()) {
         client.append_log_entries();
     }
     client.shutdown();
     return 0;
 }
-

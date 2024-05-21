@@ -50,7 +50,8 @@ public:
 
     ptr<std::vector<ptr<log_entry>>> log_entries(ulong start, ulong end);
 
-    ptr<std::vector<ptr<log_entry>>> log_entries_ext(ulong start, ulong end, int64 batch_size_hint_in_bytes = 0);
+    ptr<std::vector<ptr<log_entry>>>
+    log_entries_ext(ulong start, ulong end, int64 batch_size_hint_in_bytes = 0);
 
     ptr<log_entry> entry_at(ulong index);
 

@@ -35,7 +35,10 @@ void peer::send_req(ptr<peer> myself, ptr<req_msg>& req, rpc_handler& handler) {
     }
 
     if (req) {
-        p_tr("send req %d -> %d, type %s", req->get_src(), req->get_dst(), msg_type_to_string(req->get_type()).c_str());
+        p_tr("send req %d -> %d, type %s",
+             req->get_src(),
+             req->get_dst(),
+             msg_type_to_string(req->get_type()).c_str());
     }
 
     ptr<rpc_result> pending = cs_new<rpc_result>(handler);
@@ -51,8 +54,14 @@ void peer::send_req(ptr<peer> myself, ptr<req_msg>& req, rpc_handler& handler) {
         }
         rpc_local = rpc_;
     }
-    rpc_handler h = (rpc_handler)std::bind(
-        &peer::handle_rpc_result, this, myself, rpc_local, req, pending, std::placeholders::_1, std::placeholders::_2);
+    rpc_handler h = (rpc_handler)std::bind(&peer::handle_rpc_result,
+                                           this,
+                                           myself,
+                                           rpc_local,
+                                           req,
+                                           pending,
+                                           std::placeholders::_1,
+                                           std::placeholders::_2);
     if (rpc_local) {
         rpc_local->send(req, h);
     }
@@ -192,7 +201,8 @@ bool peer::recreate_rpc(ptr<srv_config>& config, context& ctx) {
     std::lock_guard<std::mutex> l(rpc_protector_);
 
     bool backoff_timer_disabled =
-        debugging_options::get_instance().disable_reconn_backoff_.load(std::memory_order_relaxed);
+        debugging_options::get_instance().disable_reconn_backoff_.load(
+            std::memory_order_relaxed);
     if (backoff_timer_disabled) {
         p_tr("reconnection back-off timer is disabled");
     }
