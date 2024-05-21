@@ -26,8 +26,7 @@ namespace nuraft {
 struct timer_helper {
     timer_helper(size_t duration_us = 0, bool fire_first_event = false)
         : duration_us_(duration_us)
-        , first_event_fired_(!fire_first_event)
-    {
+        , first_event_fired_(!fire_first_event) {
         reset();
     }
 
@@ -58,13 +57,9 @@ struct timer_helper {
         duration_us_ = us;
     }
 
-    void set_duration_ms(size_t ms) {
-        set_duration_us(ms * 1000);
-    }
+    void set_duration_ms(size_t ms) { set_duration_us(ms * 1000); }
 
-    void set_duration_sec(size_t sec) {
-        set_duration_us(sec * 1000000);
-    }
+    void set_duration_sec(size_t sec) { set_duration_us(sec * 1000000); }
 
     uint64_t get_us() {
         std::lock_guard<std::mutex> l(lock_);
@@ -132,5 +127,4 @@ struct timer_helper {
     mutable std::mutex lock_;
 };
 
-}
-
+} // namespace nuraft

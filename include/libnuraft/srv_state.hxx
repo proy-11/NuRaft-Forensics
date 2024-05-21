@@ -36,14 +36,12 @@ public:
     srv_state()
         : term_(0L)
         , voted_for_(-1)
-        , election_timer_allowed_(true)
-        {}
+        , election_timer_allowed_(true) {}
 
     srv_state(ulong term, int voted_for, bool et_allowed)
         : term_(term)
         , voted_for_(voted_for)
-        , election_timer_allowed_(et_allowed)
-        {}
+        , election_timer_allowed_(et_allowed) {}
 
     /**
      * Callback function type for increasing term.
@@ -51,7 +49,7 @@ public:
      * @param Current term.
      * @return New term, it should be greater than current term.
      */
-    using inc_term_func = std::function< ulong(ulong) >;
+    using inc_term_func = std::function<ulong(ulong)>;
 
     __nocopy__(srv_state);
 
@@ -80,17 +78,11 @@ public:
         return cs_new<srv_state>(term, voted_for, et_allowed);
     }
 
-    void set_inc_term_func(inc_term_func to) {
-        inc_term_cb_ = to;
-    }
+    void set_inc_term_func(inc_term_func to) { inc_term_cb_ = to; }
 
-    ulong get_term() const {
-        return term_;
-    }
+    ulong get_term() const { return term_; }
 
-    void set_term(ulong term) {
-        term_ = term;
-    }
+    void set_term(ulong term) { term_ = term; }
 
     void inc_term() {
         if (inc_term_cb_) {
@@ -102,25 +94,15 @@ public:
         term_++;
     }
 
-    int get_voted_for() const {
-        return voted_for_;
-    }
+    int get_voted_for() const { return voted_for_; }
 
-    void set_voted_for(int voted_for) {
-        voted_for_ = voted_for;
-    }
+    void set_voted_for(int voted_for) { voted_for_ = voted_for; }
 
-    bool is_election_timer_allowed() const {
-        return election_timer_allowed_;
-    }
+    bool is_election_timer_allowed() const { return election_timer_allowed_; }
 
-    void allow_election_timer(bool to) {
-        election_timer_allowed_ = to;
-    }
+    void allow_election_timer(bool to) { election_timer_allowed_ = to; }
 
-    ptr<buffer> serialize() const {
-        return serialize_v1p(CURRENT_VERSION);
-    }
+    ptr<buffer> serialize() const { return serialize_v1p(CURRENT_VERSION); }
 
     ptr<buffer> serialize_v0() const {
         ptr<buffer> buf = buffer::alloc(sz_ulong + sz_int);
@@ -136,15 +118,13 @@ public:
         // term             8 bytes
         // voted_for        4 bytes
         // election timer   1 byte
-        ptr<buffer> buf = buffer::alloc( sizeof(uint8_t) +
-                                         sizeof(uint64_t) +
-                                         sizeof(int32_t) +
-                                         sizeof(uint8_t) );
+        ptr<buffer> buf = buffer::alloc(sizeof(uint8_t) + sizeof(uint64_t)
+                                        + sizeof(int32_t) + sizeof(uint8_t));
         buffer_serializer bs(buf);
         bs.put_u8(version);
         bs.put_u64(term_);
         bs.put_i32(voted_for_);
-        bs.put_u8( election_timer_allowed_ ? 1 : 0 );
+        bs.put_u8(election_timer_allowed_ ? 1 : 0);
         return buf;
     }
 
@@ -171,9 +151,9 @@ private:
      * Custom callback function for increasing term.
      * If not given, term will be increased by 1.
      */
-    std::function< ulong(ulong) > inc_term_cb_;
+    std::function<ulong(ulong)> inc_term_cb_;
 };
 
-}
+} // namespace nuraft
 
 #endif

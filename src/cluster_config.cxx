@@ -25,7 +25,8 @@ namespace nuraft {
 ptr<buffer> cluster_config::serialize() const {
     size_t sz = 2 * sz_ulong + sz_int + sz_byte;
     std::vector<ptr<buffer>> srv_buffs;
-    for (cluster_config::const_srv_itor it = servers_.begin(); it != servers_.end(); ++it) {
+    for (cluster_config::const_srv_itor it = servers_.begin(); it != servers_.end();
+         ++it) {
         ptr<buffer> buf = (*it)->serialize();
         srv_buffs.push_back(buf);
         sz += buf->size();
@@ -66,7 +67,7 @@ ptr<cluster_config> cluster_config::deserialize(buffer_serializer& bs) {
 
     int32 cnt = bs.get_i32();
     ptr<cluster_config> conf = cs_new<cluster_config>(log_idx, prev_log_idx, ec);
-    while (cnt -- > 0) {
+    while (cnt-- > 0) {
         conf->get_servers().push_back(srv_config::deserialize(bs));
     }
 
@@ -75,5 +76,4 @@ ptr<cluster_config> cluster_config::deserialize(buffer_serializer& bs) {
     return conf;
 }
 
-} // namespace nuraft;
-
+} // namespace nuraft

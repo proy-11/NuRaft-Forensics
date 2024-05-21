@@ -49,39 +49,24 @@ public:
         , last_log_term_(last_log_term)
         , size_(size)
         , last_config_(last_config)
-        , type_(_type)
-        {}
+        , type_(_type) {}
 
     __nocopy__(snapshot);
 
 public:
-    ulong get_last_log_idx() const {
-        return last_log_idx_;
-    }
+    ulong get_last_log_idx() const { return last_log_idx_; }
 
-    ulong get_last_log_term() const {
-        return last_log_term_;
-    }
+    ulong get_last_log_term() const { return last_log_term_; }
 
-    ulong size() const {
-        return size_;
-    }
+    ulong size() const { return size_; }
 
-    void set_size(ulong size) {
-        size_ = size;
-    }
+    void set_size(ulong size) { size_ = size; }
 
-    type get_type() const {
-        return type_;
-    }
+    type get_type() const { return type_; }
 
-    void set_type(type src) {
-        type_ = src;
-    }
+    void set_type(type src) { type_ = src; }
 
-    const ptr<cluster_config>& get_last_config() const {
-        return last_config_;
-    }
+    const ptr<cluster_config>& get_last_config() const { return last_config_; }
 
     static ptr<snapshot> deserialize(buffer& buf);
 
@@ -97,6 +82,6 @@ private:
     type type_;
 };
 
-}
+} // namespace nuraft
 
 #endif

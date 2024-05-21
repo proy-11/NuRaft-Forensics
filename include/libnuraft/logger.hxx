@@ -73,7 +73,7 @@ public:
      *
      * @return Current log level.
      */
-    virtual int  get_level() { return 6; }
+    virtual int get_level() { return 6; }
 
     /**
      * Put a log with level, line number, function name,
@@ -100,6 +100,6 @@ public:
                              const std::string& log_line) {}
 };
 
-}
+} // namespace nuraft
 
 #endif //_LOGGER_HXX_

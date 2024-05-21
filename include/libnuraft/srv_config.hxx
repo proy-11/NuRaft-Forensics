@@ -41,8 +41,7 @@ public:
         , dc_id_(0)
         , endpoint_(endpoint)
         , learner_(false)
-        , priority_(INIT_PRIORITY)
-        {}
+        , priority_(INIT_PRIORITY) {}
 
     srv_config(int32 id,
                int32 dc_id,
@@ -55,8 +54,7 @@ public:
         , endpoint_(endpoint)
         , aux_(aux)
         , learner_(learner)
-        , priority_(priority)
-        {}
+        , priority_(priority) {}
 
     __nocopy__(srv_config);
 

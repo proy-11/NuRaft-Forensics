@@ -27,7 +27,7 @@ namespace nuraft {
 // === FakeNetworkBase
 
 FakeNetworkBase::FakeNetworkBase() {
-    myLog = new SimpleLogger("./base.log", 1024, 32*1024*1024, 10);
+    myLog = new SimpleLogger("./base.log", 1024, 32 * 1024 * 1024, 10);
     myLog->setLogLevel(6);
     myLog->setDispLevel(-1);
     myLog->setCrashDumpPath("./", true);
@@ -61,16 +61,13 @@ FakeNetwork* FakeNetworkBase::findNetwork(const std::string& endpoint) {
     return (entry->second).get();
 }
 
-
 // === FakeNetwork
 
-FakeNetwork::FakeNetwork(const std::string& _endpoint,
-                         ptr<FakeNetworkBase>& _base)
+FakeNetwork::FakeNetwork(const std::string& _endpoint, ptr<FakeNetworkBase>& _base)
     : myEndpoint(_endpoint)
     , base(_base)
     , handler(nullptr)
-    , online(true)
-{}
+    , online(true) {}
 
 ptr<rpc_client> FakeNetwork::create_client(const std::string& endpoint) {
     FakeNetwork* dst_net = base->findNetwork(endpoint);
@@ -90,9 +87,7 @@ ptr<rpc_client> FakeNetwork::create_client(const std::string& endpoint) {
     return ret;
 }
 
-void FakeNetwork::listen(ptr<msg_handler>& _handler) {
-    handler = _handler;
-}
+void FakeNetwork::listen(ptr<msg_handler>& _handler) { handler = _handler; }
 
 ptr<resp_msg> FakeNetwork::gotMsg(ptr<req_msg>& msg) {
     ptr<resp_msg> resp = raft_server_handler::process_req(handler.get(), *msg);
@@ -103,7 +98,7 @@ bool FakeNetwork::execReqResp(const std::string& endpoint) {
     if (endpoint.empty()) {
         // Do the same thing to all.
 
-        std::map< std::string, ptr<FakeClient> > clients_clone;
+        std::map<std::string, ptr<FakeClient>> clients_clone;
 
         // WARNING:
         //   As a result of processing req or resp, client re-connection
@@ -111,7 +106,8 @@ bool FakeNetwork::execReqResp(const std::string& endpoint) {
         //   `FakeClient` is being removed in the middle of processing,
         //   we should maintain the copy of the list to keep their
         //   reference counter greater than 0.
-        {   std::lock_guard<std::mutex> ll(clientsLock);
+        {
+            std::lock_guard<std::mutex> ll(clientsLock);
             clients_clone = clients;
         }
         for (auto& entry: clients_clone) {
@@ -121,7 +117,8 @@ bool FakeNetwork::execReqResp(const std::string& endpoint) {
         }
 
         // Same as above.
-        {   std::lock_guard<std::mutex> ll(clientsLock);
+        {
+            std::lock_guard<std::mutex> ll(clientsLock);
             clients_clone = clients;
         }
         for (auto& entry: clients_clone) {
@@ -146,9 +143,7 @@ ptr<FakeClient> FakeNetwork::findClient(const std::string& endpoint) {
     return entry->second;
 }
 
-bool FakeNetwork::delieverReqTo(const std::string& endpoint,
-                                bool random_order)
-{
+bool FakeNetwork::delieverReqTo(const std::string& endpoint, bool random_order) {
     // this:                    source (sending request)
     // conn->dstNet (endpoint): destination (sending response)
     ptr<FakeClient> conn = findClient(endpoint);
@@ -162,27 +157,30 @@ bool FakeNetwork::delieverReqTo(const std::string& endpoint,
     ReqPkg& pkg = *pkg_entry;
 
     SimpleLogger* ll = base->getLogger();
-    _log_info(ll, "[BEGIN] send/process %s -> %s, %s",
-              myEndpoint.c_str(), endpoint.c_str(),
-              msg_type_to_string( pkg.req->get_type() ).c_str() );
+    _log_info(ll,
+              "[BEGIN] send/process %s -> %s, %s",
+              myEndpoint.c_str(),
+              endpoint.c_str(),
+              msg_type_to_string(pkg.req->get_type()).c_str());
 
-    ptr<resp_msg> resp = conn->dstNet->gotMsg( pkg.req );
-    _log_info(ll, "[END] send/process %s -> %s, %s",
-              myEndpoint.c_str(), endpoint.c_str(),
-              msg_type_to_string( pkg.req->get_type() ).c_str() );
+    ptr<resp_msg> resp = conn->dstNet->gotMsg(pkg.req);
+    _log_info(ll,
+              "[END] send/process %s -> %s, %s",
+              myEndpoint.c_str(),
+              endpoint.c_str(),
+              msg_type_to_string(pkg.req->get_type()).c_str());
 
-    conn->pendingResps.push_back( FakeNetwork::RespPkg(resp, pkg.whenDone) );
+    conn->pendingResps.push_back(FakeNetwork::RespPkg(resp, pkg.whenDone));
     conn->pendingReqs.erase(pkg_entry);
     return true;
 }
 
 void FakeNetwork::delieverAllTo(const std::string& endpoint) {
-    while (delieverReqTo(endpoint));
+    while (delieverReqTo(endpoint))
+        ;
 }
 
-bool FakeNetwork::makeReqFail(const std::string& endpoint,
-                              bool random_order)
-{
+bool FakeNetwork::makeReqFail(const std::string& endpoint, bool random_order) {
     // this:                    source (sending request)
     // conn->dstNet (endpoint): destination (sending response)
     ptr<FakeClient> conn = findClient(endpoint);
@@ -193,33 +191,33 @@ bool FakeNetwork::makeReqFail(const std::string& endpoint,
     ReqPkg& pkg = *pkg_entry;
 
     SimpleLogger* ll = base->getLogger();
-    _log_info(ll, "[BEGIN] make request %s -> %s failed, %s",
-              myEndpoint.c_str(), endpoint.c_str(),
-              msg_type_to_string( pkg.req->get_type() ).c_str() );
+    _log_info(ll,
+              "[BEGIN] make request %s -> %s failed, %s",
+              myEndpoint.c_str(),
+              endpoint.c_str(),
+              msg_type_to_string(pkg.req->get_type()).c_str());
 
     ptr<resp_msg> rsp; // empty.
-    ptr<rpc_exception> exp
-        ( cs_new<rpc_exception>
-          ( sstrfmt( "failed to send request to peer %d" )
-                   .fmt( pkg.req->get_dst() ),
-            pkg.req ) );
-    pkg.whenDone( rsp, exp );
+    ptr<rpc_exception> exp(cs_new<rpc_exception>(
+        sstrfmt("failed to send request to peer %d").fmt(pkg.req->get_dst()), pkg.req));
+    pkg.whenDone(rsp, exp);
 
-    _log_info(ll, "[END] make request %s -> %s failed, %s",
-              myEndpoint.c_str(), endpoint.c_str(),
-              msg_type_to_string( pkg.req->get_type() ).c_str() );
+    _log_info(ll,
+              "[END] make request %s -> %s failed, %s",
+              myEndpoint.c_str(),
+              endpoint.c_str(),
+              msg_type_to_string(pkg.req->get_type()).c_str());
 
     conn->pendingReqs.erase(pkg_entry);
     return true;
 }
 
 void FakeNetwork::makeReqFailAll(const std::string& endpoint) {
-    while (makeReqFail(endpoint));
+    while (makeReqFail(endpoint))
+        ;
 }
 
-bool FakeNetwork::handleRespFrom(const std::string& endpoint,
-                                 bool random_order)
-{
+bool FakeNetwork::handleRespFrom(const std::string& endpoint, bool random_order) {
     // this:        source (sending request)
     // endpoint:    destination (sending response)
     ptr<FakeClient> conn = findClient(endpoint);
@@ -232,16 +230,20 @@ bool FakeNetwork::handleRespFrom(const std::string& endpoint,
     // Copy shared pointer for the case of reconnection,
     // as it drops all resps.
     RespPkg pkg = *pkg_entry;
-    _log_info(ll, "[BEGIN] deliver response %s -> %s, %s",
-              endpoint.c_str(), myEndpoint.c_str(),
-              msg_type_to_string( pkg.resp->get_type() ).c_str() );
+    _log_info(ll,
+              "[BEGIN] deliver response %s -> %s, %s",
+              endpoint.c_str(),
+              myEndpoint.c_str(),
+              msg_type_to_string(pkg.resp->get_type()).c_str());
 
     ptr<rpc_exception> exp;
-    pkg.whenDone( pkg.resp, exp );
+    pkg.whenDone(pkg.resp, exp);
 
-    _log_info(ll, "[END] deliver response %s -> %s, %s",
-              endpoint.c_str(), myEndpoint.c_str(),
-              msg_type_to_string( pkg.resp->get_type() ).c_str() );
+    _log_info(ll,
+              "[END] deliver response %s -> %s, %s",
+              endpoint.c_str(),
+              myEndpoint.c_str(),
+              msg_type_to_string(pkg.resp->get_type()).c_str());
 
     conn->pendingResps.erase(pkg_entry);
 
@@ -257,7 +259,8 @@ bool FakeNetwork::handleRespFrom(const std::string& endpoint,
 }
 
 void FakeNetwork::handleAllFrom(const std::string& endpoint) {
-    while (handleRespFrom(endpoint));
+    while (handleRespFrom(endpoint))
+        ;
 }
 
 size_t FakeNetwork::getNumPendingReqs(const std::string& endpoint) {
@@ -272,9 +275,7 @@ size_t FakeNetwork::getNumPendingResps(const std::string& endpoint) {
     return conn->pendingResps.size();
 }
 
-void FakeNetwork::stop() {
-    handler = nullptr;
-}
+void FakeNetwork::stop() { handler = nullptr; }
 
 void FakeNetwork::shutdown() {
     std::lock_guard<std::mutex> ll(clientsLock);
@@ -285,29 +286,26 @@ void FakeNetwork::shutdown() {
     clients.clear();
 }
 
-
 // === FakeClient
 static std::atomic<uint64_t> fake_client_id_counter(1);
 
-FakeClient::FakeClient(FakeNetwork* mother,
-                       FakeNetwork* dst)
+FakeClient::FakeClient(FakeNetwork* mother, FakeNetwork* dst)
     : myId(fake_client_id_counter.fetch_add(1))
     , motherNet(mother)
-    , dstNet(dst)
-{}
+    , dstNet(dst) {}
 
 FakeClient::~FakeClient() {}
 
 void FakeClient::send(ptr<req_msg>& req,
                       rpc_handler& when_done,
-                      uint64_t /*send_timeout_ms*/)
-{
+                      uint64_t /*send_timeout_ms*/) {
     SimpleLogger* ll = motherNet->getBase()->getLogger();
-    _log_info(ll, "got request %s -> %s, %s",
+    _log_info(ll,
+              "got request %s -> %s, %s",
               motherNet->getEndpoint().c_str(),
               dstNet->getEndpoint().c_str(),
-              msg_type_to_string( req->get_type() ).c_str() );
-    pendingReqs.push_back( FakeNetwork::ReqPkg(req, when_done) );
+              msg_type_to_string(req->get_type()).c_str());
+    pendingReqs.push_back(FakeNetwork::ReqPkg(req, when_done));
 }
 
 void FakeClient::dropPackets() {
@@ -320,41 +318,35 @@ bool FakeClient::isDstOnline() {
     return dstNet->isOnline();
 }
 
-uint64_t FakeClient::get_id() const {
-    return myId;
-}
+uint64_t FakeClient::get_id() const { return myId; }
 
-bool FakeClient::is_abandoned() const {
-    return false;
-}
-
+bool FakeClient::is_abandoned() const { return false; }
 
 // === FakeTimer
 
-FakeTimer::FakeTimer(const std::string& endpoint,
-                     SimpleLogger* logger)
+FakeTimer::FakeTimer(const std::string& endpoint, SimpleLogger* logger)
     : myEndpoint(endpoint)
-    , myLog(logger)
-    {}
+    , myLog(logger) {}
 
 void FakeTimer::schedule(ptr<delayed_task>& task, int32 milliseconds) {
     std::lock_guard<std::mutex> l(tasksLock);
-    _log_info( myLog, " --- schedule timer for %s %d %p ---",
-               myEndpoint.c_str(), task->get_type(), task.get() );
+    _log_info(myLog,
+              " --- schedule timer for %s %d %p ---",
+              myEndpoint.c_str(),
+              task->get_type(),
+              task.get());
     task->reset();
     tasks.push_back(task);
 }
 
-void FakeTimer::cancel(ptr<delayed_task>& task) {
-    cancel_impl(task);
-}
+void FakeTimer::cancel(ptr<delayed_task>& task) { cancel_impl(task); }
 
 void FakeTimer::invoke(int type) {
-    _log_info( myLog, " --- invoke timer tasks for %s %d ---",
-               myEndpoint.c_str(), type);
+    _log_info(myLog, " --- invoke timer tasks for %s %d ---", myEndpoint.c_str(), type);
 
-    std::list< ptr<delayed_task> > tasks_to_invoke;
-    {   std::lock_guard<std::mutex> l(tasksLock);
+    std::list<ptr<delayed_task>> tasks_to_invoke;
+    {
+        std::lock_guard<std::mutex> l(tasksLock);
         auto entry = tasks.begin();
         while (entry != tasks.end()) {
             ptr<delayed_task> cur_task = *entry;
@@ -397,10 +389,11 @@ void FakeTimer::cancel_impl(ptr<delayed_task>& task) {
         if (cur_task.get() == task.get()) {
             entry = tasks.erase(entry);
             cur_task->cancel();
-            _log_info( myLog, " --- cancel timer for %s %d %p ---",
-                       myEndpoint.c_str(),
-                       cur_task->get_type(),
-                       cur_task.get() );
+            _log_info(myLog,
+                      " --- cancel timer for %s %d %p ---",
+                      myEndpoint.c_str(),
+                      cur_task->get_type(),
+                      cur_task.get());
 
         } else {
             entry++;
@@ -408,5 +401,4 @@ void FakeTimer::cancel_impl(ptr<delayed_task>& task) {
     }
 }
 
-}  // namespace nuraft;
-
+} // namespace nuraft

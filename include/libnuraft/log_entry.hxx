@@ -42,27 +42,18 @@ public:
         : term_(term)
         , value_type_(value_type)
         , buff_(buff)
-        , timestamp_us_(log_timestamp)
-        {}
+        , timestamp_us_(log_timestamp) {}
 
     __nocopy__(log_entry);
 
 public:
-    ulong get_term() const {
-        return term_;
-    }
+    ulong get_term() const { return term_; }
 
-    void set_term(ulong term) {
-        term_ = term;
-    }
+    void set_term(ulong term) { term_ = term; }
 
-    log_val_type get_val_type() const {
-        return value_type_;
-    }
+    log_val_type get_val_type() const { return value_type_; }
 
-    bool is_buf_null() const {
-        return (buff_.get()) ? false : true;
-    }
+    bool is_buf_null() const { return (buff_.get()) ? false : true; }
 
     buffer& get_buf() const {
         // We accept nil buffer, but in that case,
@@ -80,25 +71,17 @@ public:
         return *buff_;
     }
 
-    ptr<buffer> get_buf_ptr() const {
-        return buff_;
-    }
+    ptr<buffer> get_buf_ptr() const { return buff_; }
 
-    uint64_t get_timestamp() const {
-        return timestamp_us_;
-    }
+    uint64_t get_timestamp() const { return timestamp_us_; }
 
-    void set_timestamp(uint64_t t) {
-        timestamp_us_ = t;
-    }
+    void set_timestamp(uint64_t t) { timestamp_us_ = t; }
 
     ptr<buffer> serialize() {
         buff_->pos(0);
-        ptr<buffer> buf = buffer::alloc( sizeof(ulong) +
-                                         sizeof(char) +
-                                         buff_->size() );
+        ptr<buffer> buf = buffer::alloc(sizeof(ulong) + sizeof(char) + buff_->size());
         buf->put(term_);
-        buf->put( (static_cast<byte>(value_type_)) );
+        buf->put((static_cast<byte>(value_type_)));
         buf->put(*buff_);
         buf->pos(0);
         return buf;
@@ -141,7 +124,6 @@ private:
     uint64_t timestamp_us_;
 };
 
-}
+} // namespace nuraft
 
 #endif //_LOG_ENTRY_HXX_
-

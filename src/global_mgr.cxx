@@ -35,9 +35,7 @@ public:
         return instance;
     }
 
-    nuraft_global_mgr* get() {
-        return internal_.get();
-    }
+    nuraft_global_mgr* get() { return internal_.get(); }
 
     bool create() {
         if (internal_.get()) {
@@ -46,16 +44,15 @@ public:
         }
         // C++11 doesn't have `make_unique`.
         internal_ =
-            std::move( std::unique_ptr<nuraft_global_mgr>( new nuraft_global_mgr() ) );
+            std::move(std::unique_ptr<nuraft_global_mgr>(new nuraft_global_mgr()));
         return true;
     }
 
-    void clear() {
-        internal_.reset();
-    }
+    void clear() { internal_.reset(); }
 
 private:
-    ngm_singleton() : internal_(nullptr) {}
+    ngm_singleton()
+        : internal_(nullptr) {}
 
     std::unique_ptr<nuraft_global_mgr> internal_;
 };
@@ -65,12 +62,9 @@ struct nuraft_global_mgr::worker_handle {
         : id_(id)
         , thread_(nullptr)
         , stopping_(false)
-        , status_(SLEEPING)
-        {}
+        , status_(SLEEPING) {}
 
-    ~worker_handle() {
-        shutdown();
-    }
+    ~worker_handle() { shutdown(); }
 
     void shutdown() {
         stopping_ = true;
@@ -97,8 +91,7 @@ struct nuraft_global_mgr::worker_handle {
 
 nuraft_global_mgr::nuraft_global_mgr()
     : asio_service_(nullptr)
-    , thread_id_counter_(0)
-    {}
+    , thread_id_counter_(0) {}
 
 nuraft_global_mgr::~nuraft_global_mgr() {
     for (auto& entry: append_workers_) {
@@ -127,9 +120,7 @@ nuraft_global_mgr* nuraft_global_mgr::init(const nuraft_global_config& config) {
     return mgr;
 }
 
-void nuraft_global_mgr::shutdown() {
-    ngm_singleton::get_instance().clear();
-}
+void nuraft_global_mgr::shutdown() { ngm_singleton::get_instance().clear(); }
 
 nuraft_global_mgr* nuraft_global_mgr::get_instance() {
     return ngm_singleton::get_instance().get();
@@ -137,20 +128,16 @@ nuraft_global_mgr* nuraft_global_mgr::get_instance() {
 
 void nuraft_global_mgr::init_thread_pool() {
     for (size_t ii = 0; ii < config_.num_commit_threads_; ++ii) {
-        ptr<worker_handle> w_hdl =
-            cs_new<worker_handle>( thread_id_counter_.fetch_add(1) );
-        w_hdl->thread_ = cs_new<std::thread>( &nuraft_global_mgr::commit_worker_loop,
-                                              this,
-                                              w_hdl );
+        ptr<worker_handle> w_hdl = cs_new<worker_handle>(thread_id_counter_.fetch_add(1));
+        w_hdl->thread_ =
+            cs_new<std::thread>(&nuraft_global_mgr::commit_worker_loop, this, w_hdl);
         commit_workers_.push_back(w_hdl);
     }
 
     for (size_t ii = 0; ii < config_.num_append_threads_; ++ii) {
-        ptr<worker_handle> w_hdl =
-            cs_new<worker_handle>( thread_id_counter_.fetch_add(1) );
-        w_hdl->thread_ = cs_new<std::thread>( &nuraft_global_mgr::append_worker_loop,
-                                              this,
-                                              w_hdl );
+        ptr<worker_handle> w_hdl = cs_new<worker_handle>(thread_id_counter_.fetch_add(1));
+        w_hdl->thread_ =
+            cs_new<std::thread>(&nuraft_global_mgr::append_worker_loop, this, w_hdl);
         append_workers_.push_back(w_hdl);
     }
 }
@@ -320,8 +307,8 @@ void nuraft_global_mgr::commit_worker_loop(ptr<worker_handle> handle) {
             continue;
         }
 
-        if ( target->quick_commit_index_ <= target->sm_commit_index_ ||
-             target->log_store_->next_slot() - 1 <= target->sm_commit_index_ ) {
+        if (target->quick_commit_index_ <= target->sm_commit_index_
+            || target->log_store_->next_slot() - 1 <= target->sm_commit_index_) {
             // State machine's commit index is large enough not to execute commit
             // (see the comment in `commit_in_bg()`).
             continue;
@@ -387,11 +374,9 @@ void nuraft_global_mgr::append_worker_loop(ptr<worker_handle> handle) {
         // that can be queued in the meantime.
         skip_sleeping = true;
 
-        p_tr("executed append_entries by global worker, queue length %zu",
-             queue_length);
+        p_tr("executed append_entries by global worker, queue length %zu", queue_length);
         target->append_entries_in_bg_exec();
     }
 }
 
-} // namespace nuraft;
-
+} // namespace nuraft

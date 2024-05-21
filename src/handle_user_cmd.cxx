@@ -53,72 +53,61 @@ struct raft_server::auto_fwd_pkg {
     EventAwaiter ea_;
 };
 
-ptr< cmd_result< ptr<buffer> > > raft_server::add_srv(const srv_config& srv)
-{
+ptr<cmd_result<ptr<buffer>>> raft_server::add_srv(const srv_config& srv) {
     ptr<buffer> buf(srv.serialize());
-    ptr<log_entry> log( cs_new<log_entry>
-                        ( 0, buf, log_val_type::cluster_server ) );
-    ptr<req_msg> req = cs_new<req_msg>
-                       ( (ulong)0, msg_type::add_server_request, 0, 0,
-                         (ulong)0, (ulong)0, (ulong)0 );
+    ptr<log_entry> log(cs_new<log_entry>(0, buf, log_val_type::cluster_server));
+    ptr<req_msg> req = cs_new<req_msg>(
+        (ulong)0, msg_type::add_server_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
     req->log_entries().push_back(log);
     return send_msg_to_leader(req);
 }
 
-ptr< cmd_result< ptr<buffer> > > raft_server::remove_srv(const int srv_id)
-{
+ptr<cmd_result<ptr<buffer>>> raft_server::remove_srv(const int srv_id) {
     ptr<buffer> buf(buffer::alloc(sz_int));
     buf->put(srv_id);
     buf->pos(0);
     ptr<log_entry> log(cs_new<log_entry>(0, buf, log_val_type::cluster_server));
-    ptr<req_msg> req = cs_new<req_msg>
-                       ( (ulong)0, msg_type::remove_server_request, 0, 0,
-                         (ulong)0, (ulong)0, (ulong)0 );
+    ptr<req_msg> req = cs_new<req_msg>(
+        (ulong)0, msg_type::remove_server_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
     req->log_entries().push_back(log);
     return send_msg_to_leader(req);
 }
 
-ptr< cmd_result< ptr<buffer> > > raft_server::append_entries
-                                 ( const std::vector< ptr<buffer> >& logs )
-{
+ptr<cmd_result<ptr<buffer>>>
+raft_server::append_entries(const std::vector<ptr<buffer>>& logs) {
     return append_entries_ext(logs, req_ext_params());
 }
 
-ptr< cmd_result< ptr<buffer> > > raft_server::append_entries_ext
-                                 ( const std::vector< ptr<buffer> >& logs,
-                                   const req_ext_params& ext_params )
-{
+ptr<cmd_result<ptr<buffer>>>
+raft_server::append_entries_ext(const std::vector<ptr<buffer>>& logs,
+                                const req_ext_params& ext_params) {
     if (logs.size() == 0) {
         ptr<buffer> result(nullptr);
         p_in("return null as log size is zero\n");
-        return cs_new< cmd_result< ptr<buffer> > >(result);
+        return cs_new<cmd_result<ptr<buffer>>>(result);
     }
 
-    ptr<req_msg> req = cs_new<req_msg>
-                       ( (ulong)0, msg_type::client_request, 0, 0,
-                         (ulong)0, (ulong)0, (ulong)0 ) ;
+    ptr<req_msg> req = cs_new<req_msg>(
+        (ulong)0, msg_type::client_request, 0, 0, (ulong)0, (ulong)0, (ulong)0);
     for (auto it = logs.begin(); it != logs.end(); ++it) {
         ptr<buffer> buf = *it;
         // Just in case when user forgot to reset the position.
         buf->pos(0);
-        ptr<log_entry> log( cs_new<log_entry>
-                            ( 0, *it, log_val_type::app_log ) );
+        ptr<log_entry> log(cs_new<log_entry>(0, *it, log_val_type::app_log));
         req->log_entries().push_back(log);
     }
 
     return send_msg_to_leader(req, ext_params);
 }
 
-ptr< cmd_result< ptr<buffer> > > raft_server::send_msg_to_leader
-                                 ( ptr<req_msg>& req,
-                                   const req_ext_params& ext_params )
-{
+ptr<cmd_result<ptr<buffer>>>
+raft_server::send_msg_to_leader(ptr<req_msg>& req, const req_ext_params& ext_params) {
     int32 leader_id = leader_;
     ptr<buffer> result = nullptr;
     if (leader_id == -1) {
         p_in("return null as leader does not exist in the current group");
-        ptr< cmd_result< ptr<buffer> > > ret =
-            cs_new< cmd_result< ptr<buffer> > >(result, cmd_result_code::NOT_LEADER);
+        ptr<cmd_result<ptr<buffer>>> ret =
+            cs_new<cmd_result<ptr<buffer>>>(result, cmd_result_code::NOT_LEADER);
         return ret;
     }
 
@@ -126,12 +115,12 @@ ptr< cmd_result< ptr<buffer> > > raft_server::send_msg_to_leader
         ptr<resp_msg> resp = process_req(*req, ext_params);
         if (!resp) {
             p_in("server returns null");
-            ptr< cmd_result< ptr<buffer> > > ret =
-                cs_new< cmd_result< ptr<buffer> > >(result, cmd_result_code::BAD_REQUEST);
+            ptr<cmd_result<ptr<buffer>>> ret =
+                cs_new<cmd_result<ptr<buffer>>>(result, cmd_result_code::BAD_REQUEST);
             return ret;
         }
 
-        ptr< cmd_result< ptr<buffer> > > ret = nullptr;
+        ptr<cmd_result<ptr<buffer>>> ret = nullptr;
         if (resp->has_cb()) {
             // Blocking mode:
             //   If callback function exists, get new response message
@@ -155,23 +144,22 @@ ptr< cmd_result< ptr<buffer> > > raft_server::send_msg_to_leader
         if (!ret) {
             // In blocking mode,
             // we already have result when we reach here.
-            ret = cs_new< cmd_result< ptr<buffer> > >
-                  ( result, resp->get_accepted(), resp->get_result_code() );
+            ret = cs_new<cmd_result<ptr<buffer>>>(
+                result, resp->get_accepted(), resp->get_result_code());
         }
         return ret;
     }
     if (!ctx_->get_params()->auto_forwarding_) {
         // Auto-forwarding is disabled, return error.
-        ptr< cmd_result< ptr<buffer> > > ret =
-            cs_new< cmd_result< ptr<buffer> > >(result, cmd_result_code::NOT_LEADER);
+        ptr<cmd_result<ptr<buffer>>> ret =
+            cs_new<cmd_result<ptr<buffer>>>(result, cmd_result_code::NOT_LEADER);
         return ret;
     }
 
     // Otherwise: re-direct request to the current leader
     //            (not recommended).
     ptr<raft_params> params = ctx_->get_params();
-    size_t max_conns =
-        std::max(1, params->auto_forwarding_max_connections_);
+    size_t max_conns = std::max(1, params->auto_forwarding_max_connections_);
     bool is_blocking_mode = (params->return_method_ == raft_params::blocking);
 
     ptr<cluster_config> c_conf = get_config();
@@ -184,11 +172,11 @@ ptr< cmd_result< ptr<buffer> > > raft_server::send_msg_to_leader
             cur_pkg = cs_new<auto_fwd_pkg>();
             auto_fwd_pkgs_[leader_id] = cur_pkg;
             p_tr("auto forwarding pkg for leader %d not found, created %p",
-                 leader_id, cur_pkg.get());
+                 leader_id,
+                 cur_pkg.get());
         } else {
             cur_pkg = entry->second;
-            p_tr("auto forwarding pkg for leader %d exists %p",
-                 leader_id, cur_pkg.get());
+            p_tr("auto forwarding pkg for leader %d exists %p", leader_id, cur_pkg.get());
         }
     }
 
@@ -200,16 +188,15 @@ ptr< cmd_result< ptr<buffer> > > raft_server::send_msg_to_leader
         if (e_rpc == cur_pkg->rpc_client_idle_.end()) {
             // Idle connection doesn't exist,
             // check the total number of connections.
-            p_tr( "no connection available, idle %zu, in-use %zu, max %zu",
-                   cur_pkg->rpc_client_idle_.size(),
-                   cur_pkg->rpc_client_in_use_.size(),
-                   max_conns );
-            if ( cur_pkg->rpc_client_idle_.size() +
-                 cur_pkg->rpc_client_in_use_.size() < max_conns ) {
+            p_tr("no connection available, idle %zu, in-use %zu, max %zu",
+                 cur_pkg->rpc_client_idle_.size(),
+                 cur_pkg->rpc_client_in_use_.size(),
+                 max_conns);
+            if (cur_pkg->rpc_client_idle_.size() + cur_pkg->rpc_client_in_use_.size()
+                < max_conns) {
                 // We can create more connections.
                 ptr<srv_config> srv_conf = c_conf->get_server(leader_id);
-                rpc_cli = ctx_->rpc_cli_factory_->create_client
-                          ( srv_conf->get_endpoint() );
+                rpc_cli = ctx_->rpc_cli_factory_->create_client(srv_conf->get_endpoint());
                 cur_pkg->rpc_client_in_use_.insert(rpc_cli);
                 p_tr("created a new connection %p", rpc_cli.get());
 
@@ -228,7 +215,7 @@ ptr< cmd_result< ptr<buffer> > > raft_server::send_msg_to_leader
                     // Async mode, put it into the queue, and return immediately.
                     auto_fwd_req_resp req_resp_pair;
                     req_resp_pair.req = req;
-                    req_resp_pair.resp = cs_new< cmd_result< ptr<buffer> > >();
+                    req_resp_pair.resp = cs_new<cmd_result<ptr<buffer>>>();
 
                     auto_lock(auto_fwd_reqs_lock_);
                     auto_fwd_reqs_.push_back(req_resp_pair);
@@ -243,30 +230,28 @@ ptr< cmd_result< ptr<buffer> > > raft_server::send_msg_to_leader
             if (rpc_cli->is_abandoned()) {
                 // Abandoned connection, need to reconnect.
                 ptr<srv_config> srv_conf = c_conf->get_server(leader_id);
-                rpc_cli = ctx_->rpc_cli_factory_->create_client
-                          ( srv_conf->get_endpoint() );
+                rpc_cli = ctx_->rpc_cli_factory_->create_client(srv_conf->get_endpoint());
             }
             cur_pkg->rpc_client_idle_.pop_front();
             cur_pkg->rpc_client_in_use_.insert(rpc_cli);
             p_tr("idle connection %p", rpc_cli.get());
         }
         break;
-    } while(true);
+    } while (true);
 
     if (!rpc_cli) {
-        return cs_new< cmd_result< ptr<buffer> > >(result);
+        return cs_new<cmd_result<ptr<buffer>>>(result);
     }
 
-    ptr< cmd_result< ptr<buffer> > >
-        presult( cs_new< cmd_result< ptr<buffer> > >() );
+    ptr<cmd_result<ptr<buffer>>> presult(cs_new<cmd_result<ptr<buffer>>>());
 
-    rpc_handler handler = std::bind( &raft_server::auto_fwd_resp_handler,
-                                     this,
-                                     presult,
-                                     cur_pkg,
-                                     rpc_cli,
-                                     std::placeholders::_1,
-                                     std::placeholders::_2 );
+    rpc_handler handler = std::bind(&raft_server::auto_fwd_resp_handler,
+                                    this,
+                                    presult,
+                                    cur_pkg,
+                                    rpc_cli,
+                                    std::placeholders::_1,
+                                    std::placeholders::_2);
     rpc_cli->send(req, handler, params->auto_forwarding_req_timeout_);
 
     if (params->return_method_ == raft_params::blocking) {
@@ -276,22 +261,20 @@ ptr< cmd_result< ptr<buffer> > > raft_server::send_msg_to_leader
     return presult;
 }
 
-void raft_server::auto_fwd_release_rpc_cli( ptr<auto_fwd_pkg> cur_pkg,
-                                            ptr<rpc_client> rpc_cli )
-{
+void raft_server::auto_fwd_release_rpc_cli(ptr<auto_fwd_pkg> cur_pkg,
+                                           ptr<rpc_client> rpc_cli) {
     ptr<raft_params> params = ctx_->get_params();
-    size_t max_conns =
-        std::max(1, params->auto_forwarding_max_connections_);
+    size_t max_conns = std::max(1, params->auto_forwarding_max_connections_);
     bool is_blocking_mode = (params->return_method_ == raft_params::blocking);
 
     auto put_back_to_idle_list = [&cur_pkg, &rpc_cli, max_conns, this]() {
         cur_pkg->rpc_client_in_use_.erase(rpc_cli);
         cur_pkg->rpc_client_idle_.push_front(rpc_cli);
-        p_tr( "release connection %p, idle %zu, in-use %zu, max %zu",
-              rpc_cli.get(),
-              cur_pkg->rpc_client_idle_.size(),
-              cur_pkg->rpc_client_in_use_.size(),
-              max_conns );
+        p_tr("release connection %p, idle %zu, in-use %zu, max %zu",
+             rpc_cli.get(),
+             cur_pkg->rpc_client_idle_.size(),
+             cur_pkg->rpc_client_in_use_.size(),
+             max_conns);
     };
 
     std::unique_lock<std::mutex> l(cur_pkg->lock_);
@@ -307,17 +290,17 @@ void raft_server::auto_fwd_release_rpc_cli( ptr<auto_fwd_pkg> cur_pkg,
         if (!auto_fwd_reqs_.empty()) {
             auto_fwd_req_resp entry = *auto_fwd_reqs_.begin();
             auto_fwd_reqs_.pop_front();
-            p_tr( "found waiting request in the queue, remaining elems %zu",
-                  auto_fwd_reqs_.size() );
+            p_tr("found waiting request in the queue, remaining elems %zu",
+                 auto_fwd_reqs_.size());
             ll.unlock();
 
-            rpc_handler handler = std::bind( &raft_server::auto_fwd_resp_handler,
-                                             this,
-                                             entry.resp,
-                                             cur_pkg,
-                                             rpc_cli,
-                                             std::placeholders::_1,
-                                             std::placeholders::_2 );
+            rpc_handler handler = std::bind(&raft_server::auto_fwd_resp_handler,
+                                            this,
+                                            entry.resp,
+                                            cur_pkg,
+                                            rpc_cli,
+                                            std::placeholders::_1,
+                                            std::placeholders::_2);
 
             // Should be unlocked before calling `send`, as resp handler can be
             // invoked in the same thread in case of error.
@@ -332,12 +315,11 @@ void raft_server::auto_fwd_release_rpc_cli( ptr<auto_fwd_pkg> cur_pkg,
     }
 }
 
-void raft_server::auto_fwd_resp_handler( ptr<cmd_result<ptr<buffer>>> presult,
-                                         ptr<auto_fwd_pkg> cur_pkg,
-                                         ptr<rpc_client> rpc_cli,
-                                         ptr<resp_msg>& resp,
-                                         ptr<rpc_exception>& err )
-{
+void raft_server::auto_fwd_resp_handler(ptr<cmd_result<ptr<buffer>>> presult,
+                                        ptr<auto_fwd_pkg> cur_pkg,
+                                        ptr<rpc_client> rpc_cli,
+                                        ptr<resp_msg>& resp,
+                                        ptr<rpc_exception>& err) {
     ptr<buffer> resp_ctx(nullptr);
     ptr<std::exception> perr;
     if (err) {
@@ -375,5 +357,4 @@ void raft_server::cleanup_auto_fwd_pkgs() {
     auto_fwd_pkgs_.clear();
 }
 
-} // namespace nuraft;
-
+} // namespace nuraft

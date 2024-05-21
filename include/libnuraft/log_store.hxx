@@ -114,8 +114,8 @@ public:
      * @return The log entries between [start, end) and limited by the total size
      *         given by the batch_size_hint_in_bytes.
      */
-    virtual ptr<std::vector<ptr<log_entry>>> log_entries_ext(
-            ulong start, ulong end, int64 batch_size_hint_in_bytes = 0) {
+    virtual ptr<std::vector<ptr<log_entry>>>
+    log_entries_ext(ulong start, ulong end, int64 batch_size_hint_in_bytes = 0) {
         return log_entries(start, end);
     }
 
@@ -184,6 +184,6 @@ public:
     virtual ulong last_durable_index() { return next_slot() - 1; }
 };
 
-}
+} // namespace nuraft
 
 #endif //_LOG_STORE_HXX_

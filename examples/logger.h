@@ -36,7 +36,7 @@ limitations under the License.
 #include <signal.h>
 #include <stdarg.h>
 #if defined(__linux__) || defined(__APPLE__)
-    #include <sys/time.h>
+#include <sys/time.h>
 #endif
 
 // To suppress false alarms by thread sanitizer,
@@ -51,34 +51,31 @@ limitations under the License.
 // 5: Debug   [DEBG]
 // 6: Trace   [TRAC]
 
-
 // printf style log macro
-#define _log_(level, l, ...)        \
+#define _log_(level, l, ...)            \
     if (l && l->getLogLevel() >= level) \
-        (l)->put(level, __FILE__, __func__, __LINE__, __VA_ARGS__)
+    (l)->put(level, __FILE__, __func__, __LINE__, __VA_ARGS__)
 
-#define _log_sys(l, ...)    _log_(SimpleLogger::SYS,     l, __VA_ARGS__)
-#define _log_fatal(l, ...)  _log_(SimpleLogger::FATAL,   l, __VA_ARGS__)
-#define _log_err(l, ...)    _log_(SimpleLogger::ERROR,   l, __VA_ARGS__)
-#define _log_warn(l, ...)   _log_(SimpleLogger::WARNING, l, __VA_ARGS__)
-#define _log_info(l, ...)   _log_(SimpleLogger::INFO,    l, __VA_ARGS__)
-#define _log_debug(l, ...)  _log_(SimpleLogger::DEBUG,   l, __VA_ARGS__)
-#define _log_trace(l, ...)  _log_(SimpleLogger::TRACE,   l, __VA_ARGS__)
-
+#define _log_sys(l, ...) _log_(SimpleLogger::SYS, l, __VA_ARGS__)
+#define _log_fatal(l, ...) _log_(SimpleLogger::FATAL, l, __VA_ARGS__)
+#define _log_err(l, ...) _log_(SimpleLogger::ERROR, l, __VA_ARGS__)
+#define _log_warn(l, ...) _log_(SimpleLogger::WARNING, l, __VA_ARGS__)
+#define _log_info(l, ...) _log_(SimpleLogger::INFO, l, __VA_ARGS__)
+#define _log_debug(l, ...) _log_(SimpleLogger::DEBUG, l, __VA_ARGS__)
+#define _log_trace(l, ...) _log_(SimpleLogger::TRACE, l, __VA_ARGS__)
 
 // stream log macro
 #define _stream_(level, l)              \
     if (l && l->getLogLevel() >= level) \
-        l->eos() = l->stream(level, l, __FILE__, __func__, __LINE__)
+    l->eos() = l->stream(level, l, __FILE__, __func__, __LINE__)
 
-#define _s_sys(l)   _stream_(SimpleLogger::SYS,     l)
-#define _s_fatal(l) _stream_(SimpleLogger::FATAL,   l)
-#define _s_err(l)   _stream_(SimpleLogger::ERROR,   l)
-#define _s_warn(l)  _stream_(SimpleLogger::WARNING, l)
-#define _s_info(l)  _stream_(SimpleLogger::INFO,    l)
-#define _s_debug(l) _stream_(SimpleLogger::DEBUG,   l)
-#define _s_trace(l) _stream_(SimpleLogger::TRACE,   l)
-
+#define _s_sys(l) _stream_(SimpleLogger::SYS, l)
+#define _s_fatal(l) _stream_(SimpleLogger::FATAL, l)
+#define _s_err(l) _stream_(SimpleLogger::ERROR, l)
+#define _s_warn(l) _stream_(SimpleLogger::WARNING, l)
+#define _s_info(l) _stream_(SimpleLogger::INFO, l)
+#define _s_debug(l) _stream_(SimpleLogger::DEBUG, l)
+#define _s_trace(l) _stream_(SimpleLogger::TRACE, l)
 
 // Do printf style log, but print logs in `lv1` level during normal time,
 // once in given `interval_ms` interval, print a log in `lv2` level.
@@ -86,79 +83,81 @@ limitations under the License.
 //
 // This function is global throughout the process, so that
 // multiple threads will share the interval.
-#define _timed_log_g(l, interval_ms, lv1, lv2, ...)                     \
-{                                                                       \
-    _timed_log_definition(static);                                      \
-    _timed_log_body(l, interval_ms, lv1, lv2, __VA_ARGS__);             \
-}
-
-// Same as `_timed_log_g` but per-thread level.
-#define _timed_log_t(l, interval_ms, lv1, lv2, ...)                     \
-{                                                                       \
-    _timed_log_definition(thread_local);                                \
-    _timed_log_body(l, interval_ms, lv1, lv2, __VA_ARGS__);             \
-}
-
-#define _timed_log_definition(prefix)                                   \
-    prefix std::mutex timer_lock;                                       \
-    prefix bool first_event_fired = false;                              \
-    prefix std::chrono::system_clock::time_point last_timeout =         \
-        std::chrono::system_clock::now();                               \
-
-#define _timed_log_body(l, interval_ms, lv1, lv2, ...)                  \
-    std::chrono::system_clock::time_point cur =                         \
-        std::chrono::system_clock::now();                               \
-    bool timeout = false;                                               \
-    {   std::lock_guard<std::mutex> l(timer_lock);                      \
-        std::chrono::duration<double> elapsed = cur - last_timeout;     \
-        if ( elapsed.count() * 1000 > interval_ms ||                    \
-             !first_event_fired ) {                                     \
-            cur = std::chrono::system_clock::now();                     \
-            elapsed = cur - last_timeout;                               \
-            if ( elapsed.count() * 1000 > interval_ms ||                \
-                 !first_event_fired ) {                                 \
-                timeout = first_event_fired = true;                     \
-                last_timeout = cur;                                     \
-            }                                                           \
-        }                                                               \
-    }                                                                   \
-    if (timeout) {                                                      \
-        _log_(lv2, l, __VA_ARGS__);                                     \
-    } else {                                                            \
-        _log_(lv1, l, __VA_ARGS__);                                     \
+#define _timed_log_g(l, interval_ms, lv1, lv2, ...)             \
+    {                                                           \
+        _timed_log_definition(static);                          \
+        _timed_log_body(l, interval_ms, lv1, lv2, __VA_ARGS__); \
     }
 
+// Same as `_timed_log_g` but per-thread level.
+#define _timed_log_t(l, interval_ms, lv1, lv2, ...)             \
+    {                                                           \
+        _timed_log_definition(thread_local);                    \
+        _timed_log_body(l, interval_ms, lv1, lv2, __VA_ARGS__); \
+    }
+
+#define _timed_log_definition(prefix)                           \
+    prefix std::mutex timer_lock;                               \
+    prefix bool first_event_fired = false;                      \
+    prefix std::chrono::system_clock::time_point last_timeout = \
+        std::chrono::system_clock::now();
+
+#define _timed_log_body(l, interval_ms, lv1, lv2, ...)                            \
+    std::chrono::system_clock::time_point cur = std::chrono::system_clock::now(); \
+    bool timeout = false;                                                         \
+    {                                                                             \
+        std::lock_guard<std::mutex> l(timer_lock);                                \
+        std::chrono::duration<double> elapsed = cur - last_timeout;               \
+        if (elapsed.count() * 1000 > interval_ms || !first_event_fired) {         \
+            cur = std::chrono::system_clock::now();                               \
+            elapsed = cur - last_timeout;                                         \
+            if (elapsed.count() * 1000 > interval_ms || !first_event_fired) {     \
+                timeout = first_event_fired = true;                               \
+                last_timeout = cur;                                               \
+            }                                                                     \
+        }                                                                         \
+    }                                                                             \
+    if (timeout) {                                                                \
+        _log_(lv2, l, __VA_ARGS__);                                               \
+    } else {                                                                      \
+        _log_(lv1, l, __VA_ARGS__);                                               \
+    }
 
 class SimpleLoggerMgr;
 class SimpleLogger {
     friend class SimpleLoggerMgr;
+
 public:
     static const int MSG_SIZE = 4096;
     static const std::memory_order MOR = std::memory_order_relaxed;
 
     enum Levels {
-        SYS         = 0,
-        FATAL       = 1,
-        ERROR       = 2,
-        WARNING     = 3,
-        INFO        = 4,
-        DEBUG       = 5,
-        TRACE       = 6,
-        UNKNOWN     = 99,
+        SYS = 0,
+        FATAL = 1,
+        ERROR = 2,
+        WARNING = 3,
+        INFO = 4,
+        DEBUG = 5,
+        TRACE = 6,
+        UNKNOWN = 99,
     };
 
     class LoggerStream : public std::ostream {
     public:
-        LoggerStream() : std::ostream(&buf), level(0), logger(nullptr)
-                       , file(nullptr), func(nullptr), line(0) {}
+        LoggerStream()
+            : std::ostream(&buf)
+            , level(0)
+            , logger(nullptr)
+            , file(nullptr)
+            , func(nullptr)
+            , line(0) {}
 
-        template<typename T>
-        inline LoggerStream& operator<<(const T& data) {
+        template <typename T> inline LoggerStream& operator<<(const T& data) {
             sStream << data;
             return *this;
         }
 
-        using MyCout = std::basic_ostream< char, std::char_traits<char> >;
+        using MyCout = std::basic_ostream<char, std::char_traits<char>>;
         typedef MyCout& (*EndlFunc)(MyCout&);
         inline LoggerStream& operator<<(EndlFunc func) {
             func(sStream);
@@ -167,8 +166,7 @@ public:
 
         inline void put() {
             if (logger) {
-                logger->put( level, file, func, line,
-                             "%s", sStream.str().c_str() );
+                logger->put(level, file, func, line, "%s", sStream.str().c_str());
             }
         }
 
@@ -176,8 +174,7 @@ public:
                                SimpleLogger* _logger,
                                const char* _file,
                                const char* _func,
-                               size_t _line)
-        {
+                               size_t _line) {
             sStream.str(std::string());
             level = _level;
             logger = _logger;
@@ -200,14 +197,17 @@ public:
     public:
         EndOfStmt() {}
         EndOfStmt(LoggerStream& src) { src.put(); }
-        EndOfStmt& operator=(LoggerStream& src) { src.put(); return *this; }
+        EndOfStmt& operator=(LoggerStream& src) {
+            src.put();
+            return *this;
+        }
     };
 
-    LoggerStream& stream( int level,
-                          SimpleLogger* logger,
-                          const char* file,
-                          const char* func,
-                          size_t line ) {
+    LoggerStream& stream(int level,
+                         SimpleLogger* logger,
+                         const char* file,
+                         const char* func,
+                         size_t line) {
         thread_local LoggerStream msg;
         msg.setLogInfo(level, logger, file, func, line);
         return msg;
@@ -221,10 +221,10 @@ public:
 private:
     struct LogElem {
         enum Status {
-            CLEAN       = 0,
-            WRITING     = 1,
-            DIRTY       = 2,
-            FLUSHING    = 3,
+            CLEAN = 0,
+            WRITING = 1,
+            DIRTY = 2,
+            FLUSHING = 3,
         };
 
         LogElem();
@@ -245,14 +245,13 @@ private:
 
 public:
     SimpleLogger(const std::string& file_path,
-                 size_t max_log_elems           = 4096,
-                 uint64_t log_file_size_limit   = 32*1024*1024,
-                 uint32_t max_log_files         = 16);
+                 size_t max_log_elems = 4096,
+                 uint64_t log_file_size_limit = 32 * 1024 * 1024,
+                 uint32_t max_log_files = 16);
     ~SimpleLogger();
 
     static void setCriticalInfo(const std::string& info_str);
-    static void setCrashDumpPath(const std::string& path,
-                                 bool origin_only = true);
+    static void setCrashDumpPath(const std::string& path, bool origin_only = true);
     static void setStackTraceOriginOnly(bool origin_only);
     static void logStackBacktrace();
 
@@ -271,7 +270,7 @@ public:
     void setDispLevel(int level);
     void setMaxLogFiles(size_t max_log_files);
 
-    inline int getLogLevel()  const { return curLogLevel.load(MOR); }
+    inline int getLogLevel() const { return curLogLevel.load(MOR); }
     inline int getDispLevel() const { return curDispLevel.load(MOR); }
 
     void put(int level,
@@ -284,8 +283,7 @@ public:
 
 private:
     void calcTzGap();
-    void findMinMaxRevNum(size_t& min_revnum_out,
-                          size_t& max_revnum_out);
+    void findMinMaxRevNum(size_t& min_revnum_out, size_t& max_revnum_out);
     void findMinMaxRevNumInternal(bool& min_revnum_initialized,
                                   size_t& min_revnum,
                                   size_t& max_revnum,
@@ -340,7 +338,10 @@ public:
     };
 
     struct RawStackInfo {
-        RawStackInfo() : tidHash(0), kernelTid(0), crashOrigin(false) {}
+        RawStackInfo()
+            : tidHash(0)
+            , kernelTid(0)
+            , crashOrigin(false) {}
         uint32_t tidHash;
         uint64_t kernelTid;
         std::vector<void*> stackPtrs;
@@ -360,7 +361,7 @@ public:
     static void flushWorker();
     static void compressWorker();
 
-    void logStackBacktrace(size_t timeout_ms = 60*1000);
+    void logStackBacktrace(size_t timeout_ms = 60 * 1000);
     void flushCriticalInfo();
     void enableOnlyOneDisplayer();
     void flushAllLoggers() { flushAllLoggers(0, std::string()); }
@@ -374,8 +375,7 @@ public:
     void sleepCompressor(size_t ms);
     bool chkTermination() const;
     void setCriticalInfo(const std::string& info_str);
-    void setCrashDumpPath(const std::string& path,
-                          bool origin_only);
+    void setCrashDumpPath(const std::string& path, bool origin_only);
     void setStackTraceOriginOnly(bool origin_only);
 
     /**

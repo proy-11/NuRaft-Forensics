@@ -19,7 +19,7 @@ limitations under the License.
 
 using namespace nuraft;
 
-using raft_result = cmd_result< ptr<buffer> >;
+using raft_result = cmd_result<ptr<buffer>>;
 
 struct server_stuff {
     server_stuff()
@@ -29,8 +29,7 @@ struct server_stuff {
         , raft_logger_(nullptr)
         , sm_(nullptr)
         , smgr_(nullptr)
-        , raft_instance_(nullptr)
-        {}
+        , raft_instance_(nullptr) {}
 
     void reset() {
         raft_logger_.reset();
@@ -68,46 +67,37 @@ struct server_stuff {
 };
 static server_stuff stuff;
 
-
-void add_server(const std::string& cmd,
-                const std::vector<std::string>& tokens)
-{
+void add_server(const std::string& cmd, const std::vector<std::string>& tokens) {
     if (tokens.size() < 3) {
         std::cout << "too few arguments" << std::endl;
         return;
     }
 
     int server_id_to_add = atoi(tokens[1].c_str());
-    if ( !server_id_to_add || server_id_to_add == stuff.server_id_ ) {
+    if (!server_id_to_add || server_id_to_add == stuff.server_id_) {
         std::cout << "wrong server id: " << server_id_to_add << std::endl;
         return;
     }
 
     std::string endpoint_to_add = tokens[2];
-    srv_config srv_conf_to_add( server_id_to_add, endpoint_to_add );
+    srv_config srv_conf_to_add(server_id_to_add, endpoint_to_add);
     ptr<raft_result> ret = stuff.raft_instance_->add_srv(srv_conf_to_add);
     if (!ret->get_accepted()) {
-        std::cout << "failed to add server: "
-                  << ret->get_result_code() << std::endl;
+        std::cout << "failed to add server: " << ret->get_result_code() << std::endl;
         return;
     }
-    std::cout << "async request is in progress (check with `list` command)"
-              << std::endl;
+    std::cout << "async request is in progress (check with `list` command)" << std::endl;
 }
 
-void server_list(const std::string& cmd,
-                 const std::vector<std::string>& tokens)
-{
-    std::vector< ptr<srv_config> > configs;
+void server_list(const std::string& cmd, const std::vector<std::string>& tokens) {
+    std::vector<ptr<srv_config>> configs;
     stuff.raft_instance_->get_srv_config_all(configs);
 
     int leader_id = stuff.raft_instance_->get_leader();
 
     for (auto& entry: configs) {
         ptr<srv_config>& srv = entry;
-        std::cout
-            << "server id " << srv->get_id()
-            << ": " << srv->get_endpoint();
+        std::cout << "server id " << srv->get_id() << ": " << srv->get_endpoint();
         if (srv->get_id() == leader_id) {
             std::cout << " (LEADER)";
         }
@@ -120,9 +110,10 @@ bool do_cmd(const std::vector<std::string>& tokens);
 std::vector<std::string> tokenize(const char* str, char c = ' ') {
     std::vector<std::string> tokens;
     do {
-        const char *begin = str;
-        while(*str != c && *str) str++;
-        if (begin != str) tokens.push_back( std::string(begin, str) );
+        const char* begin = str;
+        while (*str != c && *str)
+            str++;
+        if (begin != str) tokens.push_back(std::string(begin, str));
     } while (0 != *str++);
 
     return tokens;
@@ -149,15 +140,12 @@ void loop() {
 
 void init_raft(ptr<state_machine> sm_instance) {
     // Logger.
-    std::string log_file_name = "./srv" +
-                                std::to_string( stuff.server_id_ ) +
-                                ".log";
-    ptr<logger_wrapper> log_wrap = cs_new<logger_wrapper>( log_file_name, 4 );
+    std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
+    ptr<logger_wrapper> log_wrap = cs_new<logger_wrapper>(log_file_name, 4);
     stuff.raft_logger_ = log_wrap;
 
     // State machine.
-    stuff.smgr_ = cs_new<inmem_state_mgr>( stuff.server_id_,
-                                           stuff.endpoint_ );
+    stuff.smgr_ = cs_new<inmem_state_mgr>(stuff.server_id_, stuff.endpoint_);
     // State manager.
     stuff.sm_ = sm_instance;
 
@@ -189,15 +177,12 @@ void init_raft(ptr<state_machine> sm_instance) {
     params.return_method_ = CALL_TYPE;
 
     // Initialize Raft server.
-    stuff.raft_instance_ = stuff.launcher_.init(stuff.sm_,
-                                                stuff.smgr_,
-                                                stuff.raft_logger_,
-                                                stuff.port_,
-                                                asio_opt,
-                                                params);
+    stuff.raft_instance_ = stuff.launcher_.init(
+        stuff.sm_, stuff.smgr_, stuff.raft_logger_, stuff.port_, asio_opt, params);
     if (!stuff.raft_instance_) {
         std::cerr << "Failed to initialize launcher (see the message "
-                     "in the log file)." << std::endl;
+                     "in the log file)."
+                  << std::endl;
         log_wrap.reset();
         exit(-1);
     }
@@ -205,7 +190,7 @@ void init_raft(ptr<state_machine> sm_instance) {
     // Wait until Raft server is ready (upto 5 seconds).
     const size_t MAX_TRY = 20;
     std::cout << "init Raft instance ";
-    for (size_t ii=0; ii<MAX_TRY; ++ii) {
+    for (size_t ii = 0; ii < MAX_TRY; ++ii) {
         if (stuff.raft_instance_->is_initialized()) {
             std::cout << " done" << std::endl;
             return;
@@ -233,8 +218,8 @@ void set_server_info(int argc, char** argv) {
     // Get server ID.
     stuff.server_id_ = atoi(argv[1]);
     if (stuff.server_id_ < 1) {
-        std::cerr << "wrong server id (should be >= 1): "
-                  << stuff.server_id_ << std::endl;
+        std::cerr << "wrong server id (should be >= 1): " << stuff.server_id_
+                  << std::endl;
         usage(argc, argv);
     }
 
@@ -248,12 +233,10 @@ void set_server_info(int argc, char** argv) {
 
     stuff.port_ = atoi(str.substr(pos + 1).c_str());
     if (stuff.port_ < 1000) {
-        std::cerr << "wrong port (should be >= 1000): "
-                  << stuff.port_ << std::endl;
+        std::cerr << "wrong port (should be >= 1000): " << stuff.port_ << std::endl;
         usage(argc, argv);
     }
 
     stuff.addr_ = str.substr(0, pos);
     stuff.endpoint_ = stuff.addr_ + ":" + std::to_string(stuff.port_);
 }
-

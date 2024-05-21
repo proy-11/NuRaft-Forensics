@@ -42,13 +42,14 @@ public:
      * @return Raft server instance.
      *         `nullptr` on any errors.
      */
-    ptr<raft_server> init(ptr<state_machine> sm,
-                          ptr<state_mgr> smgr,
-                          ptr<logger> lg,
-                          int port_number,
-                          const asio_service::options& asio_options,
-                          const raft_params& params,
-                          const raft_server::init_options& opt = raft_server::init_options());
+    ptr<raft_server>
+    init(ptr<state_machine> sm,
+         ptr<state_mgr> smgr,
+         ptr<logger> lg,
+         int port_number,
+         const asio_service::options& asio_options,
+         const raft_params& params,
+         const raft_server::init_options& opt = raft_server::init_options());
 
     /**
      * Shutdown Raft server and ASIO service.
@@ -87,5 +88,4 @@ private:
     ptr<raft_server> raft_instance_;
 };
 
-}
-
+} // namespace nuraft

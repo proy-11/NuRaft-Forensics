@@ -96,8 +96,7 @@ struct raft_params {
         , grace_period_of_lagging_state_machine_(0)
         , use_bg_thread_for_snapshot_io_(false)
         , use_full_consensus_among_healthy_members_(false)
-        , parallel_log_appending_(false)
-        {}
+        , parallel_log_appending_(false) {}
 
     /**
      * Election timeout upper bound in milliseconds
@@ -340,7 +339,6 @@ struct raft_params {
         return *this;
     }
 
-
     /**
      * Return heartbeat interval.
      * If given heartbeat interval is smaller than a specific value
@@ -349,9 +347,8 @@ struct raft_params {
      * @return Heartbeat interval in millisecond.
      */
     int max_hb_interval() const {
-        return std::max
-               ( heart_beat_interval_,
-                 election_timeout_lower_bound_ - (heart_beat_interval_ / 2) );
+        return std::max(heart_beat_interval_,
+                        election_timeout_lower_bound_ - (heart_beat_interval_ / 2));
     }
 
 public:
@@ -606,6 +603,6 @@ public:
     bool parallel_log_appending_;
 };
 
-}
+} // namespace nuraft
 
 #endif //_RAFT_PARAMS_HXX_

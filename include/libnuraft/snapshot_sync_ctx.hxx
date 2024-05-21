@@ -115,7 +115,7 @@ public:
      */
     bool push(ptr<raft_server> r,
               ptr<peer> p,
-              std::function< void(ptr<resp_msg>&, ptr<rpc_exception>&) >& h);
+              std::function<void(ptr<resp_msg>&, ptr<rpc_exception>&)>& h);
 
     /**
      * Invoke IO thread.
@@ -172,7 +172,7 @@ private:
     /**
      * Request queue. Allow only one request per peer at a time.
      */
-    std::list< ptr<io_queue_elem> > queue_;
+    std::list<ptr<io_queue_elem>> queue_;
 
     /**
      * Lock for `queue_`.
@@ -180,6 +180,6 @@ private:
     std::mutex queue_lock_;
 };
 
-}
+} // namespace nuraft
 
 #endif //_SNAPSHOT_SYNC_CTX_HXX_
