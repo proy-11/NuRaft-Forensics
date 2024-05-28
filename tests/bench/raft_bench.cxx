@@ -167,7 +167,8 @@ struct server_stuff {
 
 int init_raft(server_stuff& stuff, int complexity) {
     // Create logger for this server.
-    std::string log_file_name = global_workdir.string() + "/srv" + std::to_string(stuff.server_id_) + ".log";
+    std::string log_file_name =
+        global_workdir.string() + "/srv" + std::to_string(stuff.server_id_) + ".log";
     // std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
 
     _msg("Writing log to %s\n", log_file_name.c_str());
@@ -537,11 +538,9 @@ bench_config parse_config(int argc, char** argv) {
         exit(0);
     }
 
-
     iarg++;
     std::string workdir(argv[iarg]);
     global_workdir = workdir;
-
 
     if (srv_id > 1) {
         // Follower.

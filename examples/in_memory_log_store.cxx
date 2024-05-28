@@ -34,12 +34,18 @@ inmem_log_store::inmem_log_store()
 inmem_log_store::~inmem_log_store() {}
 
 ptr<log_entry> inmem_log_store::make_clone(const ptr<log_entry>& entry) {
-    // ptr<buffer> prev = entry->get_prev_ptr() == nullptr ? nullptr : buffer::clone(*entry->get_prev_ptr()); // FMARK: RN: prev_ removed
-    ptr<buffer> sig = entry->get_sig_ptr() == nullptr ? nullptr : buffer::clone(*entry->get_sig_ptr());
+    // ptr<buffer> prev = entry->get_prev_ptr() == nullptr ? nullptr :
+    // buffer::clone(*entry->get_prev_ptr()); // FMARK: RN: prev_ removed
+    ptr<buffer> sig =
+        entry->get_sig_ptr() == nullptr ? nullptr : buffer::clone(*entry->get_sig_ptr());
 
     ptr<log_entry> clone =
-        // cs_new<log_entry>(entry->get_term(), buffer::clone(entry->get_buf()), entry->get_val_type(), prev, sig);
-        cs_new<log_entry>(entry->get_term(), buffer::clone(entry->get_buf()), entry->get_val_type(), sig);
+        // cs_new<log_entry>(entry->get_term(), buffer::clone(entry->get_buf()),
+        // entry->get_val_type(), prev, sig);
+        cs_new<log_entry>(entry->get_term(),
+                          buffer::clone(entry->get_buf()),
+                          entry->get_val_type(),
+                          sig);
     return clone;
 }
 
@@ -65,7 +71,9 @@ ptr<log_entry> inmem_log_store::last_entry() const {
     return make_clone(entry->second);
 }
 
-ptr<log_entry> inmem_log_store::last_app_log_entry() { return entry_at(last_app_log_idx_); }
+ptr<log_entry> inmem_log_store::last_app_log_entry() {
+    return entry_at(last_app_log_idx_);
+}
 
 ulong inmem_log_store::append(ptr<log_entry>& entry) {
     ptr<log_entry> clone = make_clone(entry);
@@ -147,7 +155,8 @@ inmem_log_store::log_entries_ext(ulong start, ulong end, int64 batch_size_hint_i
         }
         ret->push_back(make_clone(src));
         accum_size += src->get_buf().size();
-        if (batch_size_hint_in_bytes && accum_size >= (ulong)batch_size_hint_in_bytes) break;
+        if (batch_size_hint_in_bytes && accum_size >= (ulong)batch_size_hint_in_bytes)
+            break;
     }
     return ret;
 }

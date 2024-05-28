@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 **************************************************************************/
 
-#include "raft_server.hxx"
 #include "stat_mgr.hxx"
+#include "raft_server.hxx"
 
 #include <fstream>
 #include <iostream>
@@ -30,20 +30,13 @@ stat_elem::stat_elem(Type _type, const std::string& _name)
     , stat_name_(_name)
     , counter_(0)
     , gauge_(0)
-    , hist_( ( _type == HISTOGRAM )
-             ? ( new Histogram() )
-             : nullptr )
-    {}
+    , hist_((_type == HISTOGRAM) ? (new Histogram()) : nullptr) {}
 
-stat_elem::~stat_elem() {
-    delete hist_;
-}
-
+stat_elem::~stat_elem() { delete hist_; }
 
 // === stat_mgr ===============================================================
 
-stat_mgr::stat_mgr() {
-}
+stat_mgr::stat_mgr() {}
 
 stat_mgr::~stat_mgr() {
     std::unique_lock<std::mutex> l(stat_map_lock_);
@@ -85,7 +78,7 @@ stat_elem* stat_mgr::create_stat(stat_elem::Type type, const std::string& stat_n
         delete elem;
         return entry->second;
     }
-    stat_map_.insert( std::make_pair(stat_name, elem) );
+    stat_map_.insert(std::make_pair(stat_name, elem));
     return elem;
 }
 
@@ -115,7 +108,6 @@ void stat_mgr::reset_all_stats() {
     }
 }
 
-
 // === raft_server ============================================================
 
 uint64_t raft_server::get_stat_counter(const std::string& name) {
@@ -143,7 +135,7 @@ int64_t raft_server::get_stat_gauge(const std::string& name) {
 }
 
 bool raft_server::get_stat_histogram(const std::string& name,
-                                     std::map<double, uint64_t>& histogram_out ) {
+                                     std::map<double, uint64_t>& histogram_out) {
     stat_elem* elem = stat_mgr::get_instance()->get_stat(name);
     if (!elem) return false;
     if (elem->get_type() != stat_elem::HISTOGRAM) return false;
@@ -151,7 +143,7 @@ bool raft_server::get_stat_histogram(const std::string& name,
     for (HistItr& entry: *elem->get_histogram()) {
         uint64_t cnt = entry.getCount();
         if (cnt) {
-            histogram_out.insert( std::make_pair(entry.getUpperBound(), cnt) );
+            histogram_out.insert(std::make_pair(entry.getUpperBound(), cnt));
         }
     }
     return true;
@@ -161,9 +153,6 @@ void raft_server::reset_stat(const std::string& name) {
     stat_mgr::get_instance()->reset_stat(name);
 }
 
-void raft_server::reset_all_stats() {
-    stat_mgr::get_instance()->reset_all_stats();
-}
+void raft_server::reset_all_stats() { stat_mgr::get_instance()->reset_all_stats(); }
 
 } // namespace nuraft
-

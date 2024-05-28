@@ -24,54 +24,57 @@ limitations under the License.
 #include "openssl_ecdsa.hxx"
 #include "tracer.hxx"
 
-#include <unordered_set>
 #include <sstream>
+#include <unordered_set>
 namespace nuraft {
-peer::peer(ptr<srv_config>& config, const context& ctx, timer_task<int32>::executor& hb_exec, ptr<logger>& logger)
-        : config_(config)
-        , scheduler_(ctx.scheduler_)
-        , rpc_(ctx.rpc_cli_factory_->create_client(config->get_endpoint()))
-        , current_hb_interval_(ctx.get_params()->heart_beat_interval_)
-        , hb_interval_(ctx.get_params()->heart_beat_interval_)
-        , rpc_backoff_(ctx.get_params()->rpc_failure_backoff_)
-        , max_hb_interval_(ctx.get_params()->max_hb_interval())
-        , next_log_idx_(0)
-        , last_accepted_log_idx_(0)
-        , next_batch_size_hint_in_bytes_(0)
-        , matched_idx_(0)
-        , busy_flag_(false)
-        , pending_commit_flag_(false)
-        , hb_enabled_(false)
-        , hb_task_(cs_new<timer_task<int32>, timer_task<int32>::executor&, int32>(
-              hb_exec, config->get_id(), timer_task_type::heartbeat_timer))
-        , snp_sync_ctx_(nullptr)
-        , lock_()
-        , long_pause_warnings_(0)
-        , network_recoveries_(0)
-        , manual_free_(false)
-        , rpc_errs_(0)
-        , last_sent_idx_(0)
-        , cnt_not_applied_(0)
-        , leave_requested_(false)
-        , hb_cnt_since_leave_(0)
-        , stepping_down_(false)
-        , reconn_scheduled_(false)
-        , reconn_backoff_(0)
-        , suppress_following_error_(false)
-        , abandoned_(false)
-        , rsv_msg_(nullptr)
-        , rsv_msg_handler_(nullptr)
-        , l_(logger)
-        , public_key(nullptr) {
-        reset_ls_timer();
-        reset_resp_timer();
-        reset_active_timer();
+peer::peer(ptr<srv_config>& config,
+           const context& ctx,
+           timer_task<int32>::executor& hb_exec,
+           ptr<logger>& logger)
+    : config_(config)
+    , scheduler_(ctx.scheduler_)
+    , rpc_(ctx.rpc_cli_factory_->create_client(config->get_endpoint()))
+    , current_hb_interval_(ctx.get_params()->heart_beat_interval_)
+    , hb_interval_(ctx.get_params()->heart_beat_interval_)
+    , rpc_backoff_(ctx.get_params()->rpc_failure_backoff_)
+    , max_hb_interval_(ctx.get_params()->max_hb_interval())
+    , next_log_idx_(0)
+    , last_accepted_log_idx_(0)
+    , next_batch_size_hint_in_bytes_(0)
+    , matched_idx_(0)
+    , busy_flag_(false)
+    , pending_commit_flag_(false)
+    , hb_enabled_(false)
+    , hb_task_(cs_new<timer_task<int32>, timer_task<int32>::executor&, int32>(
+          hb_exec, config->get_id(), timer_task_type::heartbeat_timer))
+    , snp_sync_ctx_(nullptr)
+    , lock_()
+    , long_pause_warnings_(0)
+    , network_recoveries_(0)
+    , manual_free_(false)
+    , rpc_errs_(0)
+    , last_sent_idx_(0)
+    , cnt_not_applied_(0)
+    , leave_requested_(false)
+    , hb_cnt_since_leave_(0)
+    , stepping_down_(false)
+    , reconn_scheduled_(false)
+    , reconn_backoff_(0)
+    , suppress_following_error_(false)
+    , abandoned_(false)
+    , rsv_msg_(nullptr)
+    , rsv_msg_handler_(nullptr)
+    , l_(logger)
+    , public_key(nullptr) {
+    reset_ls_timer();
+    reset_resp_timer();
+    reset_active_timer();
 
-        // FMARK: set public key if configured
-        if (config != nullptr) {
-            set_public_key(config->get_public_key());
-        }
+    // FMARK: set public key if configured
+    if (config != nullptr) {
+        set_public_key(config->get_public_key());
     }
+}
 
 void peer::send_req(ptr<peer> myself, ptr<req_msg>& req, rpc_handler& handler) {
     if (abandoned_) {
@@ -80,7 +83,10 @@ void peer::send_req(ptr<peer> myself, ptr<req_msg>& req, rpc_handler& handler) {
     }
 
     if (req) {
-        p_tr("send req %d -> %d, type %s", req->get_src(), req->get_dst(), msg_type_to_string(req->get_type()).c_str());
+        p_tr("send req %d -> %d, type %s",
+             req->get_src(),
+             req->get_dst(),
+             msg_type_to_string(req->get_type()).c_str());
     }
 
     ptr<rpc_result> pending = cs_new<rpc_result>(handler);
@@ -96,8 +102,14 @@ void peer::send_req(ptr<peer> myself, ptr<req_msg>& req, rpc_handler& handler) {
         }
         rpc_local = rpc_;
     }
-    rpc_handler h = (rpc_handler)std::bind(
-        &peer::handle_rpc_result, this, myself, rpc_local, req, pending, std::placeholders::_1, std::placeholders::_2);
+    rpc_handler h = (rpc_handler)std::bind(&peer::handle_rpc_result,
+                                           this,
+                                           myself,
+                                           rpc_local,
+                                           req,
+                                           pending,
+                                           std::placeholders::_1,
+                                           std::placeholders::_2);
     if (rpc_local) {
         rpc_local->send(req, h);
     }
@@ -115,15 +127,16 @@ void peer::handle_rpc_result(ptr<peer> myself,
                              ptr<rpc_result>& pending_result,
                              ptr<resp_msg>& resp,
                              ptr<rpc_exception>& err) {
-    std::unordered_set<int> msg_types_to_free({msg_type::append_entries_request,
-                                               msg_type::install_snapshot_request,
-                                               msg_type::request_vote_request,
-                                               msg_type::pre_vote_request,
-                                               msg_type::leave_cluster_request,
-                                               msg_type::custom_notification_request,
-                                               msg_type::reconnect_request,
-                                               msg_type::priority_change_request,
-                                               msg_type::broadcast_leader_certificate_request});
+    std::unordered_set<int> msg_types_to_free(
+        {msg_type::append_entries_request,
+         msg_type::install_snapshot_request,
+         msg_type::request_vote_request,
+         msg_type::pre_vote_request,
+         msg_type::leave_cluster_request,
+         msg_type::custom_notification_request,
+         msg_type::reconnect_request,
+         msg_type::priority_change_request,
+         msg_type::broadcast_leader_certificate_request});
 
     if (abandoned_) {
         p_in("peer %d has been shut down, ignore response.", config_->get_id());
@@ -238,7 +251,8 @@ bool peer::recreate_rpc(ptr<srv_config>& config, context& ctx) {
     std::lock_guard<std::mutex> l(rpc_protector_);
 
     bool backoff_timer_disabled =
-        debugging_options::get_instance().disable_reconn_backoff_.load(std::memory_order_relaxed);
+        debugging_options::get_instance().disable_reconn_backoff_.load(
+            std::memory_order_relaxed);
     if (backoff_timer_disabled) {
         p_tr("reconnection back-off timer is disabled");
     }
@@ -304,7 +318,7 @@ bool peer::verify_signature(ptr<buffer> msg, ptr<buffer> sig) {
 }
 
 /**
-* FMARK:
+ * FMARK:
  * @brief Set the public key
  *
  * @param pubkey public key

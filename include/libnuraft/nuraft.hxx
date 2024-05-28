@@ -28,8 +28,8 @@ limitations under the License.
 #include "callback.hxx"
 #include "cluster_config.hxx"
 #include "context.hxx"
-#include "delayed_task_scheduler.hxx"
 #include "delayed_task.hxx"
+#include "delayed_task_scheduler.hxx"
 #include "error_code.hxx"
 #include "global_mgr.hxx"
 #include "log_entry.hxx"
@@ -38,8 +38,8 @@ limitations under the License.
 #include "ptr.hxx"
 #include "raft_params.hxx"
 #include "raft_server.hxx"
-#include "rpc_cli_factory.hxx"
 #include "rpc_cli.hxx"
+#include "rpc_cli_factory.hxx"
 #include "rpc_listener.hxx"
 #include "snapshot.hxx"
 #include "srv_config.hxx"
@@ -49,4 +49,3 @@ limitations under the License.
 #include "timer_task.hxx"
 
 #include "launcher.hxx"
-

@@ -31,7 +31,13 @@ namespace nuraft {
 
 class req_msg : public msg_base {
 public:
-    req_msg(ulong term, msg_type type, int32 src, int32 dst, ulong last_log_term, ulong last_log_idx, ulong commit_idx)
+    req_msg(ulong term,
+            msg_type type,
+            int32 src,
+            int32 dst,
+            ulong last_log_term,
+            ulong last_log_idx,
+            ulong commit_idx)
         : msg_base(term, type, src, dst)
         , last_log_term_(last_log_term)
         , last_log_idx_(last_log_idx)
@@ -56,10 +62,10 @@ public:
 
     ptr<certificate> get_certificate() { return cc_; }
 
-
     // FMARK: serialize/deserialize
-    ptr<buffer> serialize(){
-        size_t total_size = sizeof(ulong) * 3 + sizeof(ulong) + sizeof(msg_type) + sizeof(int32);
+    ptr<buffer> serialize() {
+        size_t total_size =
+            sizeof(ulong) * 3 + sizeof(ulong) + sizeof(msg_type) + sizeof(int32);
         ptr<buffer> buf = buffer::alloc(total_size);
         buf->put(last_log_term_);
         buf->put(last_log_idx_);
@@ -78,7 +84,8 @@ public:
         ulong term = buf.get_ulong();
         msg_type type = static_cast<msg_type>(buf.get_byte());
         int32 src = buf.get_int();
-        return cs_new<req_msg>(term, type, src, 0, last_log_term, last_log_idx, commit_idx);
+        return cs_new<req_msg>(
+            term, type, src, 0, last_log_term, last_log_idx, commit_idx);
     }
 
 private:

@@ -562,7 +562,8 @@ public:
      * @return `true` on success.
      *         `false` if stat does not exist, or is not histogram type.
      */
-    static bool get_stat_histogram(const std::string& name, std::map<double, uint64_t>& histogram_out);
+    static bool get_stat_histogram(const std::string& name,
+                                   std::map<double, uint64_t>& histogram_out);
 
     /**
      * Reset given stat to zero.
@@ -589,7 +590,9 @@ public:
      * @param err_msg Will contain a message if error happens.
      * @return `true` on success.
      */
-    static bool apply_config_log_entry(ptr<log_entry>& le, ptr<state_mgr>& s_mgr, std::string& err_msg);
+    static bool apply_config_log_entry(ptr<log_entry>& le,
+                                       ptr<state_mgr>& s_mgr,
+                                       std::string& err_msg);
 
     /**
      * Get the current Raft limit values.
@@ -698,7 +701,8 @@ protected:
     ptr<resp_msg> handle_cli_req_prelock(req_msg& req);
     ptr<resp_msg> handle_cli_req(req_msg& req);
     ptr<resp_msg> handle_cli_req_callback(ptr<commit_ret_elem> elem, ptr<resp_msg> resp);
-    ptr<cmd_result<ptr<buffer>>> handle_cli_req_callback_async(ptr<cmd_result<ptr<buffer>>> async_res);
+    ptr<cmd_result<ptr<buffer>>>
+    handle_cli_req_callback_async(ptr<cmd_result<ptr<buffer>>> async_res);
 
     void drop_all_pending_commit_elems();
 
@@ -743,7 +747,8 @@ protected:
     void reset_srv_to_join();
     void reset_srv_to_leave();
     ptr<req_msg> create_append_entries_req(peer& p);
-    ptr<req_msg> create_sync_snapshot_req(peer& p, ulong last_log_idx, ulong term, ulong commit_idx);
+    ptr<req_msg>
+    create_sync_snapshot_req(peer& p, ulong last_log_idx, ulong term, ulong commit_idx);
     bool check_snapshot_timeout(ptr<peer> pp);
     void destroy_user_snp_ctx(ptr<snapshot_sync_ctx> sync_ctx);
     void clear_snapshot_sync_ctx(peer& pp);
@@ -776,7 +781,9 @@ protected:
     void append_entries_in_bg();
     void append_entries_in_bg_exec();
 
-    void commit_app_log(ulong idx_to_commit, ptr<log_entry>& le, bool need_to_handle_commit_elem);
+    void commit_app_log(ulong idx_to_commit,
+                        ptr<log_entry>& le,
+                        bool need_to_handle_commit_elem);
     void commit_conf(ulong idx_to_commit, ptr<log_entry>& le);
 
     ptr<cmd_result<ptr<buffer>>> send_msg_to_leader(ptr<req_msg>& req);
@@ -797,18 +804,26 @@ protected:
     ulong store_log_entry(ptr<log_entry>& entry, ulong index = 0);
 
     // FMARK: crypto checks
-    bool match_log_entry(std::vector<ptr<log_entry>>& entries, ulong index, ptr<buffer> target_hash);
+    bool match_log_entry(std::vector<ptr<log_entry>>& entries,
+                         ulong index,
+                         ptr<buffer> target_hash);
     ssize_t check_leader_sig(std::vector<ptr<log_entry>>& entries, int32 signer);
     int32 validate_commitment_certificate(ptr<certificate> cert, ptr<log_entry> entry);
 
     // FMARK: certificate operations
     bool push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term, ulong index);
 
-    ptr<resp_msg> handle_out_of_log_msg(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
+    ptr<resp_msg> handle_out_of_log_msg(req_msg& req,
+                                        ptr<custom_notification_msg> msg,
+                                        ptr<resp_msg> resp);
 
-    ptr<resp_msg> handle_leadership_takeover(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
+    ptr<resp_msg> handle_leadership_takeover(req_msg& req,
+                                             ptr<custom_notification_msg> msg,
+                                             ptr<resp_msg> resp);
 
-    ptr<resp_msg> handle_resignation_request(req_msg& req, ptr<custom_notification_msg> msg, ptr<resp_msg> resp);
+    ptr<resp_msg> handle_resignation_request(req_msg& req,
+                                             ptr<custom_notification_msg> msg,
+                                             ptr<resp_msg> resp);
 
     // FMARK: for leader elections
     void send_leader_certificate(int32 peer_id, ptr<leader_certificate> tmp_lc);
@@ -821,7 +836,7 @@ protected:
     bool verify_and_save_leader_certificate(req_msg& req, ptr<buffer> lc_buffer);
 
     ptr<resp_msg> handle_leader_certificate_request(req_msg& req);
-    
+
     void handle_leader_certificate_resp(resp_msg& resp);
 
     bool save_and_clean_election_list(ulong threshold);
@@ -829,7 +844,8 @@ protected:
     std::string get_election_list_file_name(const std::string& data_dir);
 
     /**
-     * @brief check whether the term has been verified with a valid leader certificate. Use server_id = -1 to check for arbitary server.
+     * @brief check whether the term has been verified with a valid leader certificate.
+     * Use server_id = -1 to check for arbitary server.
      */
     bool term_verified(ulong term, int32 server_id);
 
@@ -876,35 +892,34 @@ protected:
      */
     std::mutex cert_lock_;
 
-
     /**
      * @brief FMARK: leader certificate
-     * 
+     *
      */
     ptr<leader_certificate> leader_cert_;
 
-
     /**
      * @brief FMARK: election list (term, leader_certificate)
-     * 
+     *
      */
     std::unordered_map<ulong, ptr<leader_certificate>> election_list_;
 
     /**
      * @brief FMARK: election list lock
-     * 
+     *
      */
     std::mutex election_list_lock_;
 
     /**
-     * @brief FMARK: terms that have been verified with valid leader certificates. Map of term to server ID.
-     * 
+     * @brief FMARK: terms that have been verified with valid leader certificates. Map of
+     * term to server ID.
+     *
      */
     std::unordered_map<ulong, int32> verified_terms_;
 
     // FMARK: RN: hash pointer cache (deque of <index, pointer>)
     // the following two saved pointers are deprecated
-    // ptr<buffer> last_log_hash_; 
+    // ptr<buffer> last_log_hash_;
     // ptr<buffer> last_committed_log_hash_;
     std::map<ulong, ptr<buffer>> hash_cache_;
     std::mutex hash_cache_lock_;
