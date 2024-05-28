@@ -1407,9 +1407,6 @@ protected:
 
     fault_type fault_type_;
 
-    std::atomic<bool> is_under_attack_;
-
-    fault_type fault_type_;
 
     // FMARK: RN (deprecated)
     // std::mutex last_log_hash_lock_;

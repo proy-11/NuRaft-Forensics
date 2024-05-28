@@ -1984,16 +1984,6 @@ void raft_server::set_fault_type(const fault_type &f) { fault_type_ = f; }
 
 fault_type raft_server::get_fault_type() { return fault_type_; }
 
-void raft_server::initiate_attack() { is_under_attack_.store(true); }
-
-void raft_server::stop_attack() { is_under_attack_.store(false); }
-
-bool raft_server::get_is_under_attack() { return is_under_attack_.load(); }
-
-void raft_server::set_fault_type(const fault_type &f) { fault_type_ = f; }
-
-fault_type raft_server::get_fault_type() { return fault_type_; }
-
 bool raft_server::flag_use_election_list() {
     return get_current_params().use_election_list_;
 }
