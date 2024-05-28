@@ -733,35 +733,6 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                      prev_idx,
                      conflict);
 
-                // p_wn("Current NUM ENTRIES = %llu", log_store_->next_slot());
-                // for (size_t k = 0; k < log_store_->next_slot(); k++) {
-                //     p_wn("Current ENTRY %lld (%d): %s",
-                //          k,
-                //          log_store_->entry_at(k)->get_val_type(),
-                //          tobase64(*create_hash(log_store_->entry_at(k), k)).c_str());
-                // }
-
-                // p_wn("RECV NUM ENTRIES = %llu", log_size);
-                // for (size_t k = 0; k < log_size; k++) {
-                //     // p_wn("RECV REQ ENTRY %lld (%d): %s (%s)",
-                //     //      k,
-                //     //      req.log_entries()[k]->get_val_type(),
-                //     //      tobase64(*create_hash(req.log_entries()[k], k + log_idx +
-                //     1)).c_str(),
-                //     //      req.log_entries()[k]->get_val_type() ==
-                //     log_val_type::app_log
-                //     //          ? req.log_entries()[k]->get_prev_ptr() == nullptr
-                //     //                ? "null"
-                //     //                :
-                //     tobase64(*req.log_entries()[k]->get_prev_ptr()).c_str()
-                //     //          : "");
-                //     p_wn("RECV REQ ENTRY %lld (%d): %s",
-                //         k,
-                //         req.log_entries()[k]->get_val_type(),
-                //         tobase64(*create_hash(req.log_entries()[k], k + log_idx +
-                //         1)).c_str());
-                // }
-
                 resp->set_result_code(cmd_result_code::BAD_CHAIN);
                 return resp;
             } else {

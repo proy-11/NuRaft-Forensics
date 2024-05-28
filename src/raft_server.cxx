@@ -264,59 +264,6 @@ raft_server::raft_server(context* ctx, const init_options& opt)
         }
     }
 
-    // if (flag_use_leader_sig() || flag_use_cc() ||  flag_use_ptr()) {
-    //     p_in("SET PEERS START\n");
-    //     for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
-    //             ptr<peer> pp = it->second;
-    //             p_in("Setting key info for Peer id %d", pp->get_id());
-    //             ptr<srv_config> serv = nullptr;
-    //             if(pp != nullptr) {
-    //                 serv = c_conf->get_server(pp->get_id());
-    //             }
-
-    //             p_in("Reached 1");
-    //             if(pp != nullptr && serv != nullptr) {
-    //                 p_in("Reached 2");
-    //                 try {
-    //                     if(!serv->get_private_key_string().empty()) {
-    //                         p_in("Reached 3");
-    //                         ptr<seckey_intf> priv_key =
-    //                         cs_new<seckey_t>(serv->get_private_key_string());
-    //                         p_in("Reached 4");
-    //                         if(priv_key != nullptr) {
-    //                             p_in("Reached 5");
-    //                             serv->set_private_key(priv_key);
-    //                             p_in("Reached 6");
-    //                             ptr<pubkey_intf> pub_key = priv_key->derive();
-    //                             p_in("Reached 7");
-    //                             if(pub_key != nullptr) {
-    //                                 p_in("Reached 8");
-    //                                 serv->set_public_key(pub_key);
-    //                                 p_in("Reached 9");
-    //                                 pp->set_public_key(pub_key);
-    //                                 p_in("Reached 10");
-    //                             }
-    //                         }
-    //                         // p_tr("PEER Server private key: %s",
-    //                         serv->get_private_key()->str().c_str());
-    //                         // serv->set_public_key(serv->get_private_key()->derive());
-    //                         // p_tr("PEER Server public key: %s",
-    //                         serv->get_public_key()->str().c_str());
-
-    //                         // p_tr("Setting PEER public key for server %d",
-    //                         serv->get_id());
-    //                         // if(!serv->get_public_key()) {
-    //                             // pp->set_public_key(serv->get_public_key());
-    //                         // }
-    //                     }
-    //                 } catch (crypto_exception& e) {
-    //                     p_er("cannot load private key, exception (%s)", e.what());
-    //                 }
-    //             }
-    //     }
-    //     p_in("SET PEERS END\n");
-    // }
-
     if (opt.start_server_in_constructor_) {
         start_server(opt.skip_initial_election_timeout_);
     }

@@ -20,7 +20,7 @@ bool raft_server::save_and_clean_election_list(ulong threshold) {
             return false;
         }
         if (!boost::filesystem::exists(dir)) {
-            boost::filesystem::create_directory(dir); // TODO: handle error
+            boost::filesystem::create_directory(dir);
         }
         temp_list = std::move(election_list_);
         filename =
@@ -29,7 +29,6 @@ bool raft_server::save_and_clean_election_list(ulong threshold) {
     }
 
     // in case of writing failure, we will not be able to recover the election list
-    // TODO: handle this case
     std::ofstream file(filename, std::ios::binary);
     if (!file.is_open()) {
         p_er("cannot open file %s for saving election list", filename.c_str());
