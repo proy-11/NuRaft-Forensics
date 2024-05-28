@@ -2,19 +2,23 @@
 NuRaft-Forensics
 ======
 
-NuRaft library with forensics support (TODO) and benchmarker. 
+NuRaft library with forensics support.
 
-Issues
-------
-* ~~some test cases fail~~ all accompanied test cases pass but more tests may be needed
-* leader certificates are broadcasted casually. The just-elected leader does not wait for the followers to acknowledge the certificate before becoming a leader
-* election list contains only the leader certificate if the election is held. For certain situations, a peer may become a leader without an election.
-* synchronization needs to be tested (only run in single-threaded-ish mode)
+Forensics
+---------
+### Log Replication
+Several fields are maintained and shared during log replication for forensics purposes:
 
-Features
---------
-### New features added in this project ###
-* [Benchmarker](client/README.md)
+- Hash Pointers: a hash pointer cache (`hash_cache_`) is maintained in each node to store the hash pointer of log entries between the last committed entry and the last appended entry. Any `append_entries` request whose last entry is within the cache will include the hash pointer in the first entry in the request. Followers will verify the hash pointer before appending the entries to their logs. On failure, the follower will set the result code to `cmd_result_code::BAD_CHAIN`.
+- Leader Signature (`leader_sig_` field in `log_entry` class)
+- Commitment Certificate (`commit_cert_`: CC of the latest committed log entry, `working_certs_`: CCs still waiting for followers to acknowledge)
+
+
+### Leader Election
+Leader certificates are first stored in memory and then written to disk when the number of certificates in memory reaches a certain threshold. The threshold is configured by `election_list_max_` in `include/libnuraft/raft_params.hxx`. The default value is `10`. On shutdown, a final write to disk is performed. The certificates lists are written to `[forensics_dir]/el_[timestamp]_p[node_id].dat`.
+
+#### Election list Parser
+An easy-to-use Python parser is provided in `scripts/forensics/election_list.py`.
 
 
 How to Build
