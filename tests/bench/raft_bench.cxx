@@ -607,9 +607,9 @@ void usage(int argc, char** argv) {
 }
 
 bench_config parse_config(int argc, char** argv) {
-    // 0      1           2          3          4               5
-    // <exec> <server ID> <endpoint> <duration> <complexity>    <workdir>
-    // 6      7             8              9         10
+    // 0      1           2          3          4            5        6               7
+    // <exec> <server ID> <endpoint> <duration> <complexity> <fault>  <cluster size>  <workdir>
+    // 8      9             10              11         12
     // <IOPS> <# pipelines> <payload size> <S2 addr> <S3 addr> ...
     if (argc < 6) usage(argc, argv);
 
