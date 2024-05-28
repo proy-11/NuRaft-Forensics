@@ -1701,15 +1701,16 @@ ulong raft_server::store_log_entry(ptr<log_entry>& entry, ulong index) {
                 // previous hash is in cachef
                 prev_hash = hash_cache_[log_index - 1];
             }
-            lock.unlock();
-            if (entry->get_val_type() == log_val_type::app_log)
-                hash_cache_[log_index] = create_hash(entry, prev_hash, log_index);
-            else
+            ptr<buffer> hash = nullptr;
+            if (entry->get_val_type() == log_val_type::app_log) {
+                hash = create_hash(entry, prev_hash, log_index);
+                hash_cache_[log_index] = hash;
+            } else
                 hash_cache_[log_index] = prev_hash;
             p_in("hash cache updated for log index %zu -> %s",
                  log_index,
-                 (hash_cache_[log_index] != nullptr)
-                     ? tobase64(*hash_cache_[log_index]).c_str()
+                 (hash != nullptr)
+                     ? tobase64(*hash).c_str()
                      : "null");
         }
     }
@@ -1808,10 +1809,7 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries,
         for (auto& it: hash_cache_to_update) {
             hash_cache_[it.first] = it.second;
             p_in("hash cache updated for log index %zu -> %s",
-                 it.first,
-                 (hash_cache_[it.first] != nullptr)
-                     ? tobase64(*hash_cache_[it.first]).c_str()
-                     : "null");
+                 it.first, (it.second != nullptr) ? tobase64(*it.second).c_str() : "null");
         }
     }
     return ret;
@@ -1834,7 +1832,7 @@ ssize_t raft_server::check_leader_sig(std::vector<ptr<log_entry>>& entries,
 
     for (ulong i = 0; i < (ulong)entries.size(); i++) {
         if (entries[i]->get_val_type() != log_val_type::app_log) continue;
-        p_in("Verifying signature");
+        p_tr("Verifying signature");
         if (!entries[i]->serialize_sig()) {
             p_in("log entry msg is null");
         }

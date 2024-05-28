@@ -469,7 +469,6 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
         std::unique_lock<std::mutex> guard(hash_cache_lock_);
         if (hash_cache_.find(adjusted_end_idx - 1) != hash_cache_.end()
             && hash_cache_[adjusted_end_idx - 1] != nullptr) {
-            guard.unlock();
             hash_ptr_buf = buffer::clone(*hash_cache_[adjusted_end_idx - 1]);
             p_in("hash pointer (%s) found for idx %zu",
                  tobase64(*hash_ptr_buf).c_str(),
@@ -761,13 +760,13 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                     }
                 } else {
                     p_wn("cannot find original log entry %zu -- current chain length "
-                         "%zu, request range %zu ~ %zu",
+                         "%zu, request range %zu ~ %zu. CC not verified!",
                          idx,
                          log_store_->next_slot() - 1,
                          ri_min,
                          ri_max);
-                    resp->set_result_code(cmd_result_code::BAD_CC);
-                    return resp;
+                    // resp->set_result_code(cmd_result_code::BAD_CC);
+                    // return resp;
                 }
                 // timer->add_record("cc.check");
             }
