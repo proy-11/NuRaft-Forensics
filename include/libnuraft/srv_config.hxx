@@ -38,7 +38,10 @@ public:
     const static int32 INIT_PRIORITY = 1;
 
     // FMARK: add pubkey
-    srv_config(int32 id, const std::string& endpoint, ptr<pubkey_intf> pubkey = nullptr, std::string private_key = "")
+    srv_config(int32 id,
+               const std::string& endpoint,
+               ptr<pubkey_intf> pubkey = nullptr,
+               std::string private_key = "")
         : id_(id)
         , dc_id_(0)
         , endpoint_(endpoint)
@@ -98,7 +101,7 @@ public:
 
     void set_private_key(ptr<seckey_intf> priv_key);
 
-    std::string get_private_key_string()  { return private_key_string_; }
+    std::string get_private_key_string() { return private_key_string_; }
 
 private:
     /**

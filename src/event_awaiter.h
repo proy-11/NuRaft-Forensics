@@ -27,27 +27,17 @@ limitations under the License.
 
 class EventAwaiter {
 private:
-    enum class AS {
-        idle    = 0x0,
-        ready   = 0x1,
-        waiting = 0x2,
-        done    = 0x3
-    };
+    enum class AS { idle = 0x0, ready = 0x1, waiting = 0x2, done = 0x3 };
 
 public:
-    EventAwaiter() : status(AS::idle) {}
+    EventAwaiter()
+        : status(AS::idle) {}
 
-    void reset() {
-        status.store(AS::idle);
-    }
+    void reset() { status.store(AS::idle); }
 
-    void wait() {
-        wait_us(0);
-    }
+    void wait() { wait_us(0); }
 
-    void wait_ms(size_t time_ms) {
-        wait_us(time_ms * 1000);
-    }
+    void wait_ms(size_t time_ms) { wait_us(time_ms * 1000); }
 
     void wait_us(size_t time_us) {
         AS expected = AS::idle;
@@ -94,5 +84,3 @@ private:
     std::mutex cvLock;
     std::condition_variable cv;
 };
-
-

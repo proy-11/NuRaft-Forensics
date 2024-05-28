@@ -102,7 +102,10 @@ int make_group_test() {
         uint64_t last_log_idx = s1.raftServer->get_last_log_idx();
         CHK_EQ(srv_id, pi.id_);
         CHK_EQ(last_log_idx, pi.last_log_idx_);
-        _msg("srv %d: %lu, responeded %.1f ms ago\n", pi.id_, pi.last_log_idx_, pi.last_succ_resp_us_ / 1000.0);
+        _msg("srv %d: %lu, responeded %.1f ms ago\n",
+             pi.id_,
+             pi.last_log_idx_,
+             pi.last_succ_resp_us_ / 1000.0);
     }
 
     // Sleep a while and get all info.
@@ -113,7 +116,10 @@ int make_group_test() {
     for (raft_server::peer_info& pi: v_pi) {
         uint64_t last_log_idx = s1.raftServer->get_last_log_idx();
         CHK_EQ(last_log_idx, pi.last_log_idx_);
-        _msg("srv %d: %lu, responeded %.1f ms ago\n", pi.id_, pi.last_log_idx_, pi.last_succ_resp_us_ / 1000.0);
+        _msg("srv %d: %lu, responeded %.1f ms ago\n",
+             pi.id_,
+             pi.last_log_idx_,
+             pi.last_succ_resp_us_ / 1000.0);
     }
 
     s1.raftServer->shutdown();
@@ -238,7 +244,8 @@ static std::unordered_map<std::string, std::string> resp_map;
 static std::mutex req_map_lock;
 static std::mutex resp_map_lock;
 
-std::string test_write_req_meta(std::atomic<size_t>* count, const asio_service::meta_cb_params& params) {
+std::string test_write_req_meta(std::atomic<size_t>* count,
+                                const asio_service::meta_cb_params& params) {
     static std::mutex lock;
     std::lock_guard<std::mutex> l(lock);
 
@@ -300,7 +307,8 @@ bool test_read_req_meta(std::atomic<size_t>* count,
     return true;
 }
 
-std::string test_write_resp_meta(std::atomic<size_t>* count, const asio_service::meta_cb_params& params) {
+std::string test_write_resp_meta(std::atomic<size_t>* count,
+                                 const asio_service::meta_cb_params& params) {
     static std::mutex lock;
     std::lock_guard<std::mutex> l(lock);
 
@@ -381,9 +389,15 @@ int message_meta_test() {
     _msg("launching asio-raft servers with meta callback\n");
     for (RaftAsioPkg* rr: pkgs) {
         rr->setMetaCallback(
-            std::bind(test_read_req_meta, &read_req_cb_count, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_read_req_meta,
+                      &read_req_cb_count,
+                      std::placeholders::_1,
+                      std::placeholders::_2),
             std::bind(test_write_req_meta, &write_req_cb_count, std::placeholders::_1),
-            std::bind(test_read_resp_meta, &read_resp_cb_count, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_read_resp_meta,
+                      &read_resp_cb_count,
+                      std::placeholders::_1,
+                      std::placeholders::_2),
             std::bind(test_write_resp_meta, &write_resp_cb_count, std::placeholders::_1),
             true);
     }
@@ -414,8 +428,12 @@ int message_meta_test() {
     CHK_GT(write_req_cb_count.load(), 0);
     CHK_GT(read_resp_cb_count.load(), 0);
     CHK_GT(write_resp_cb_count.load(), 0);
-    _msg("read req callback %zu, write req callback %zu\n", read_req_cb_count.load(), write_req_cb_count.load());
-    _msg("read resp callback %zu, write resp callback %zu\n", read_resp_cb_count.load(), write_resp_cb_count.load());
+    _msg("read req callback %zu, write req callback %zu\n",
+         read_req_cb_count.load(),
+         write_req_cb_count.load());
+    _msg("read resp callback %zu, write resp callback %zu\n",
+         read_resp_cb_count.load(),
+         write_resp_cb_count.load());
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -455,9 +473,15 @@ int message_meta_random_denial_test() {
     _msg("launching asio-raft servers with meta callback\n");
     for (RaftAsioPkg* rr: pkgs) {
         rr->setMetaCallback(
-            std::bind(test_read_meta_random_denial, &start_denial, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_read_meta_random_denial,
+                      &start_denial,
+                      std::placeholders::_1,
+                      std::placeholders::_2),
             std::bind(test_write_req_meta, &write_req_cb_count, std::placeholders::_1),
-            std::bind(test_read_meta_random_denial, &start_denial, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_read_meta_random_denial,
+                      &start_denial,
+                      std::placeholders::_1,
+                      std::placeholders::_2),
             std::bind(test_write_resp_meta, &write_resp_cb_count, std::placeholders::_1),
             true);
     }
@@ -494,7 +518,8 @@ int message_meta_random_denial_test() {
     return 0;
 }
 
-std::string test_write_empty_meta(std::atomic<size_t>* count, const asio_service::meta_cb_params& params) {
+std::string test_write_empty_meta(std::atomic<size_t>* count,
+                                  const asio_service::meta_cb_params& params) {
     if (count) (*count)++;
     return std::string();
 }
@@ -531,9 +556,15 @@ int empty_meta_test(bool always_invoke_cb) {
     _msg("launching asio-raft servers with meta callback\n");
     for (RaftAsioPkg* rr: pkgs) {
         rr->setMetaCallback(
-            std::bind(test_read_empty_meta, &read_req_cb_count, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_read_empty_meta,
+                      &read_req_cb_count,
+                      std::placeholders::_1,
+                      std::placeholders::_2),
             std::bind(test_write_empty_meta, &write_req_cb_count, std::placeholders::_1),
-            std::bind(test_read_empty_meta, &read_resp_cb_count, std::placeholders::_1, std::placeholders::_2),
+            std::bind(test_read_empty_meta,
+                      &read_resp_cb_count,
+                      std::placeholders::_1,
+                      std::placeholders::_2),
             std::bind(test_write_empty_meta, &write_resp_cb_count, std::placeholders::_1),
             always_invoke_cb);
     }
@@ -570,8 +601,12 @@ int empty_meta_test(bool always_invoke_cb) {
     }
     CHK_GT(write_req_cb_count, 0);
     CHK_GT(write_resp_cb_count, 0);
-    _msg("read req callback %zu, write req callback %zu\n", read_req_cb_count.load(), write_req_cb_count.load());
-    _msg("read resp callback %zu, write resp callback %zu\n", read_resp_cb_count.load(), write_resp_cb_count.load());
+    _msg("read req callback %zu, write req callback %zu\n",
+         read_req_cb_count.load(),
+         write_req_cb_count.load());
+    _msg("read resp callback %zu, write resp callback %zu\n",
+         read_resp_cb_count.load(),
+         write_resp_cb_count.load());
 
     s1.raftServer->shutdown();
     s2.raftServer->shutdown();
@@ -602,10 +637,18 @@ int response_hint_test(bool with_meta) {
     for (RaftAsioPkg* ee: pkgs) {
         if (with_meta) {
             ee->setMetaCallback(
-                std::bind(test_read_req_meta, &read_req_cb_count, std::placeholders::_1, std::placeholders::_2),
-                std::bind(test_write_req_meta, &write_req_cb_count, std::placeholders::_1),
-                std::bind(test_read_resp_meta, &read_resp_cb_count, std::placeholders::_1, std::placeholders::_2),
-                std::bind(test_write_resp_meta, &write_resp_cb_count, std::placeholders::_1),
+                std::bind(test_read_req_meta,
+                          &read_req_cb_count,
+                          std::placeholders::_1,
+                          std::placeholders::_2),
+                std::bind(
+                    test_write_req_meta, &write_req_cb_count, std::placeholders::_1),
+                std::bind(test_read_resp_meta,
+                          &read_resp_cb_count,
+                          std::placeholders::_1,
+                          std::placeholders::_2),
+                std::bind(
+                    test_write_resp_meta, &write_resp_cb_count, std::placeholders::_1),
                 true);
         }
     }
@@ -689,9 +732,12 @@ int response_hint_test(bool with_meta) {
         CHK_GT(write_req_cb_count.load(), 0);
         CHK_GT(read_resp_cb_count.load(), 0);
         CHK_GT(write_resp_cb_count.load(), 0);
-        _msg("read req callback %zu, write req callback %zu\n", read_req_cb_count.load(), write_req_cb_count.load());
-        _msg(
-            "read resp callback %zu, write resp callback %zu\n", read_resp_cb_count.load(), write_resp_cb_count.load());
+        _msg("read req callback %zu, write req callback %zu\n",
+             read_req_cb_count.load(),
+             write_req_cb_count.load());
+        _msg("read resp callback %zu, write resp callback %zu\n",
+             read_resp_cb_count.load(),
+             write_resp_cb_count.load());
     }
 
     s1.raftServer->shutdown();
@@ -703,8 +749,10 @@ int response_hint_test(bool with_meta) {
     return 0;
 }
 
-static void
-async_handler(std::list<ulong>* idx_list, std::mutex* idx_list_lock, ptr<buffer>& result, ptr<std::exception>& err) {
+static void async_handler(std::list<ulong>* idx_list,
+                          std::mutex* idx_list_lock,
+                          ptr<buffer>& result,
+                          ptr<std::exception>& err) {
     result->pos(0);
     ulong idx = result->get_ulong();
     if (idx_list) {
@@ -751,7 +799,11 @@ int async_append_handler_test() {
         ptr<cmd_result<ptr<buffer>>> ret = s1.raftServer->append_entries({msg});
 
         cmd_result<ptr<buffer>>::handler_type my_handler =
-            std::bind(async_handler, &idx_list, &idx_list_lock, std::placeholders::_1, std::placeholders::_2);
+            std::bind(async_handler,
+                      &idx_list,
+                      &idx_list_lock,
+                      std::placeholders::_1,
+                      std::placeholders::_2);
         ret->when_ready(my_handler);
 
         handlers.push_back(ret);
@@ -805,7 +857,8 @@ int async_append_handler_with_order_inversion_test() {
 
     // Set debugging parameter to inject sleep so as to mimic the thread
     // execution order inversion.
-    debugging_options::get_instance().handle_cli_req_sleep_us_ = RaftAsioPkg::HEARTBEAT_MS * 1500;
+    debugging_options::get_instance().handle_cli_req_sleep_us_ =
+        RaftAsioPkg::HEARTBEAT_MS * 1500;
 
     TestSuite::GcFunc gcf([]() { // Auto rollback.
         debugging_options::get_instance().handle_cli_req_sleep_us_ = 0;
@@ -817,7 +870,8 @@ int async_append_handler_with_order_inversion_test() {
         ptr<buffer> msg = buffer::alloc(test_msg.size() + 1);
         msg->put(test_msg);
         ptr<cmd_result<ptr<buffer>>> ret = s1.raftServer->append_entries({msg});
-        ret->when_ready([&handler_invoked](cmd_result<ptr<buffer>>& result, ptr<std::exception>& err) -> int {
+        ret->when_ready([&handler_invoked](cmd_result<ptr<buffer>>& result,
+                                           ptr<std::exception>& err) -> int {
             CHK_NONNULL(result.get());
             handler_invoked = true;
             return 0;
@@ -1266,7 +1320,8 @@ int auto_forwarding_timeout_test() {
     raft_server::init_options opt;
 
     /// Make leader quite slow
-    opt.raft_callback_ = [](cb_func::Type type, cb_func::Param* param) -> cb_func::ReturnCode {
+    opt.raft_callback_ = [](cb_func::Type type,
+                            cb_func::Param* param) -> cb_func::ReturnCode {
         if (type == cb_func::Type::AppendLogs) {
             TestSuite::sleep_ms(150);
         }
@@ -1941,7 +1996,8 @@ int main(int argc, char** argv) {
 
     ts.doTest("async append handler test", async_append_handler_test);
 
-    ts.doTest("async append handler with order inversion test", async_append_handler_with_order_inversion_test);
+    ts.doTest("async append handler with order inversion test",
+              async_append_handler_with_order_inversion_test);
 
     ts.doTest("auto quorum size test", auto_quorum_size_test);
 
@@ -1955,9 +2011,11 @@ int main(int argc, char** argv) {
 
     ts.doTest("auto forwarding timeout test", auto_forwarding_timeout_test);
 
-    ts.doTest("auto forwarding test", auto_forwarding_test, TestRange<bool>({false, true}));
+    ts.doTest(
+        "auto forwarding test", auto_forwarding_test, TestRange<bool>({false, true}));
 
-    ts.doTest("enforced state machine catch-up test", enforced_state_machine_catchup_test);
+    ts.doTest("enforced state machine catch-up test",
+              enforced_state_machine_catchup_test);
 
     ts.doTest("enforced state machine catch-up with term increment test",
               enforced_state_machine_catchup_with_term_inc_test);
@@ -1970,11 +2028,13 @@ int main(int argc, char** argv) {
               snapshot_read_failure_for_lagging_server_test,
               TestRange<size_t>({1, 5}));
 
-    ts.doTest("snapshot context timeout normal test", snapshot_context_timeout_normal_test);
+    ts.doTest("snapshot context timeout normal test",
+              snapshot_context_timeout_normal_test);
 
     ts.doTest("snapshot context timeout join test", snapshot_context_timeout_join_test);
 
-    ts.doTest("snapshot context timeout removed server test", snapshot_context_timeout_removed_server_test);
+    ts.doTest("snapshot context timeout removed server test",
+              snapshot_context_timeout_removed_server_test);
 
 #ifdef ENABLE_RAFT_STATS
     _msg("raft stats: ENABLED\n");

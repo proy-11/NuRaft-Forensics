@@ -34,7 +34,13 @@ using resp_async_cb = std::function<ptr<cmd_result<ptr<buffer>>>()>;
 
 class resp_msg : public msg_base {
 public:
-    resp_msg(ulong term, msg_type type, int32 src, int32 dst, ulong next_idx = 0L, bool accepted = false, bool lc_needed = false)
+    resp_msg(ulong term,
+             msg_type type,
+             int32 src,
+             int32 dst,
+             ulong next_idx = 0L,
+             bool accepted = false,
+             bool lc_needed = false)
         : msg_base(term, type, src, dst)
         , next_idx_(next_idx)
         , next_batch_size_hint_in_bytes_(0)
@@ -52,9 +58,13 @@ public:
 public:
     ulong get_next_idx() const { return next_idx_; }
 
-    int64 get_next_batch_size_hint_in_bytes() const { return next_batch_size_hint_in_bytes_; }
+    int64 get_next_batch_size_hint_in_bytes() const {
+        return next_batch_size_hint_in_bytes_;
+    }
 
-    void set_next_batch_size_hint_in_bytes(int64 bytes) { next_batch_size_hint_in_bytes_ = bytes; }
+    void set_next_batch_size_hint_in_bytes(int64 bytes) {
+        next_batch_size_hint_in_bytes_ = bytes;
+    }
 
     bool get_accepted() const { return accepted_; }
 
@@ -65,9 +75,7 @@ public:
 
     bool get_lc_needed() const { return lc_needed_; }
 
-    void need_lc() {
-        lc_needed_ = true;
-    }
+    void need_lc() { lc_needed_ = true; }
 
     void set_ctx(ptr<buffer> src) { ctx_ = src; }
 

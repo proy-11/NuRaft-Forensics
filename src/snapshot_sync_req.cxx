@@ -39,8 +39,7 @@ ptr<snapshot_sync_req> snapshot_sync_req::deserialize(buffer_serializer& bs) {
         size_t sz = bs.size() - bs.pos();
         b = buffer::alloc(sz);
         ::memcpy(b->data(), src, sz);
-    }
-    else {
+    } else {
         b = buffer::alloc(0);
     }
 
@@ -49,7 +48,8 @@ ptr<snapshot_sync_req> snapshot_sync_req::deserialize(buffer_serializer& bs) {
 
 ptr<buffer> snapshot_sync_req::serialize() {
     ptr<buffer> snp_buf = snapshot_->serialize();
-    ptr<buffer> buf = buffer::alloc(snp_buf->size() + sz_ulong + sz_byte + (data_->size() - data_->pos()));
+    ptr<buffer> buf = buffer::alloc(snp_buf->size() + sz_ulong + sz_byte
+                                    + (data_->size() - data_->pos()));
     buf->put(*snp_buf);
     buf->put(offset_);
     buf->put(done_ ? (byte)1 : (byte)0);
@@ -58,4 +58,4 @@ ptr<buffer> snapshot_sync_req::serialize() {
     return buf;
 }
 
-} // namespace nuraft;
+} // namespace nuraft

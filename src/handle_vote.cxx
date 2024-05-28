@@ -23,10 +23,10 @@ limitations under the License.
 #include "cluster_config.hxx"
 #include "event_awaiter.h"
 #include "handle_custom_notification.hxx"
+#include "leader_certificate.hxx"
 #include "peer.hxx"
 #include "state_mgr.hxx"
 #include "tracer.hxx"
-#include "leader_certificate.hxx"
 
 #include <cassert>
 #include <sstream>
@@ -35,11 +35,10 @@ namespace nuraft {
 
 bool raft_server::check_cond_for_zp_election() {
     ptr<raft_params> params = ctx_->get_params();
-    if ( params->allow_temporary_zero_priority_leader_ &&
-         target_priority_ == 1 &&
-         my_priority_ == 0 &&
-         priority_change_timer_.get_ms() >
-            (uint64_t)params->heart_beat_interval_ * 20 ) {
+    if (params->allow_temporary_zero_priority_leader_ && target_priority_ == 1
+        && my_priority_ == 0
+        && priority_change_timer_.get_ms()
+               > (uint64_t)params->heart_beat_interval_ * 20) {
         return true;
     }
     return false;
@@ -51,7 +50,7 @@ void raft_server::request_prevote() {
     for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
         ptr<peer> pp = it->second;
         if (!is_regular_member(pp)) continue;
-        ptr<srv_config> s_config = c_config->get_server( pp->get_id() );
+        ptr<srv_config> s_config = c_config->get_server(pp->get_id());
 
         if (s_config) {
             bool recreate = false;
@@ -65,13 +64,13 @@ void raft_server::request_prevote() {
 
                 // Or if it is not active long time, reconnect as well.
                 int32 last_active_time_ms = pp->get_active_timer_us() / 1000;
-                if ( last_active_time_ms >
-                         params->heart_beat_interval_ *
-                             raft_server::raft_limits_.reconnect_limit_ ) {
-                    p_wn( "connection to peer %d is not active long time: %zu ms, "
-                          "need reconnection for prevote",
-                          pp->get_id(),
-                          last_active_time_ms );
+                if (last_active_time_ms
+                    > params->heart_beat_interval_
+                          * raft_server::raft_limits_.reconnect_limit_) {
+                    p_wn("connection to peer %d is not active long time: %zu ms, "
+                         "need reconnection for prevote",
+                         pp->get_id(),
+                         last_active_time_ms);
                     recreate = true;
                 }
             }
@@ -102,9 +101,8 @@ void raft_server::request_prevote() {
         }
     }
     int num_voting_members = get_num_voting_members();
-    if ( params->auto_adjust_quorum_for_small_cluster_ &&
-         num_voting_members == 2 &&
-         pre_vote_.failure_count_ > raft_server::raft_limits_.vote_limit_ ) {
+    if (params->auto_adjust_quorum_for_small_cluster_ && num_voting_members == 2
+        && pre_vote_.failure_count_ > raft_server::raft_limits_.vote_limit_) {
         // 2-node cluster's pre-vote failed due to offline node.
         p_wn("2-node cluster's pre-vote is failing long time, "
              "adjust quorum to 1");
@@ -120,12 +118,14 @@ void raft_server::request_prevote() {
     // Count for myself.
     pre_vote_.dead_++;
 
-    if ( my_priority_ < target_priority_ ) {
-        if ( check_cond_for_zp_election() ) {
+    if (my_priority_ < target_priority_) {
+        if (check_cond_for_zp_election()) {
             p_in("[PRIORITY] temporarily allow election for zero-priority member");
         } else {
             p_in("[PRIORITY] will not initiate pre-vote due to priority: "
-                 "target %d, mine %d", target_priority_, my_priority_);
+                 "target %d, mine %d",
+                 target_priority_,
+                 my_priority_);
             restart_election_timer();
             return;
         }
@@ -133,10 +133,13 @@ void raft_server::request_prevote() {
 
     p_in("[PRE-VOTE INIT] my id %d, my role %s, term %ld, log idx %ld, "
          "log term %ld, priority (target %d / mine %d)\n",
-         id_, srv_role_to_string(role_).c_str(),
-         state_->get_term(), log_store_->next_slot() - 1,
+         id_,
+         srv_role_to_string(role_).c_str(),
+         state_->get_term(),
+         log_store_->next_slot() - 1,
          term_for_log(log_store_->next_slot() - 1),
-         target_priority_, my_priority_);
+         target_priority_,
+         my_priority_);
 
     for (peer_itor it = peers_.begin(); it != peers_.end(); ++it) {
         ptr<peer> pp = it->second;
@@ -145,19 +148,19 @@ void raft_server::request_prevote() {
             continue;
         }
 
-        ptr<req_msg> req( cs_new<req_msg>
-                          ( state_->get_term(),
-                            msg_type::pre_vote_request,
-                            id_,
-                            pp->get_id(),
-                            term_for_log(log_store_->next_slot() - 1),
-                            log_store_->next_slot() - 1,
-                            quick_commit_index_.load() ) );
+        ptr<req_msg> req(cs_new<req_msg>(state_->get_term(),
+                                         msg_type::pre_vote_request,
+                                         id_,
+                                         pp->get_id(),
+                                         term_for_log(log_store_->next_slot() - 1),
+                                         log_store_->next_slot() - 1,
+                                         quick_commit_index_.load()));
         if (pp->make_busy()) {
             pp->send_req(pp, req, resp_handler_);
         } else {
             p_wn("failed to send prevote request: peer %d (%s) is busy",
-                 pp->get_id(), pp->get_endpoint().c_str());
+                 pp->get_id(),
+                 pp->get_endpoint().c_str());
         }
     }
 }
@@ -166,38 +169,39 @@ void raft_server::initiate_vote(bool force_vote) {
     p_tr("Voting initiated");
     int grace_period = ctx_->get_params()->grace_period_of_lagging_state_machine_;
     ulong cur_term = state_->get_term();
-    if ( !force_vote &&
-         grace_period &&
-         sm_commit_index_ < lagging_sm_target_index_ ) {
+    if (!force_vote && grace_period && sm_commit_index_ < lagging_sm_target_index_) {
         p_in("grace period option is enabled, and state machine needs catch-up: "
              "%lu vs. %lu",
              sm_commit_index_.load(),
              lagging_sm_target_index_.load());
         if (vote_init_timer_term_ != cur_term) {
             p_in("grace period: %d, term increment detected %lu vs. %lu, reset timer",
-                grace_period, vote_init_timer_term_.load(), cur_term);
+                 grace_period,
+                 vote_init_timer_term_.load(),
+                 cur_term);
             vote_init_timer_.set_duration_ms(grace_period);
             vote_init_timer_.reset();
             vote_init_timer_term_ = cur_term;
         }
 
-        if ( vote_init_timer_term_ == cur_term &&
-             !vote_init_timer_.timeout() ) {
+        if (vote_init_timer_term_ == cur_term && !vote_init_timer_.timeout()) {
             // Grace period, do not initiate vote.
             p_in("grace period: %d, term %lu, waited %lu ms, skip initiating vote",
-                 grace_period, cur_term, vote_init_timer_.get_ms());
+                 grace_period,
+                 cur_term,
+                 vote_init_timer_.get_ms());
             return;
 
         } else {
             p_in("grace period: %d, no new leader detected for term %lu for %lu ms",
-                 grace_period, cur_term, vote_init_timer_.get_ms());
+                 grace_period,
+                 cur_term,
+                 vote_init_timer_.get_ms());
         }
     }
 
-    if ( my_priority_ >= target_priority_ ||
-         force_vote ||
-         check_cond_for_zp_election() ||
-         get_quorum_for_election() == 0 ) {
+    if (my_priority_ >= target_priority_ || force_vote || check_cond_for_zp_election()
+        || get_quorum_for_election() == 0) {
         // Request vote when
         //  1) my priority satisfies the target, OR
         //  2) I'm the only node in the group.
@@ -227,10 +231,13 @@ void raft_server::request_vote(bool force_vote) {
 
     p_in("[VOTE INIT] my id %d, my role %s, term %ld, log idx %ld, "
          "log term %ld, priority (target %d / mine %d)\n",
-         id_, srv_role_to_string(role_).c_str(),
-         state_->get_term(), log_store_->next_slot() - 1,
+         id_,
+         srv_role_to_string(role_).c_str(),
+         state_->get_term(),
+         log_store_->next_slot() - 1,
          term_for_log(log_store_->next_slot() - 1),
-         target_priority_, my_priority_);
+         target_priority_,
+         my_priority_);
 
     // is this the only server?
     if (votes_granted_ > get_quorum_for_election()) {
@@ -246,14 +253,13 @@ void raft_server::request_vote(bool force_vote) {
             // Do not send voting request to learner.
             continue;
         }
-        ptr<req_msg> req = cs_new<req_msg>
-                           ( state_->get_term(),
-                             msg_type::request_vote_request,
-                             id_,
-                             pp->get_id(),
-                             term_for_log(log_store_->next_slot() - 1),
-                             log_store_->next_slot() - 1,
-                             quick_commit_index_.load() );
+        ptr<req_msg> req = cs_new<req_msg>(state_->get_term(),
+                                           msg_type::request_vote_request,
+                                           id_,
+                                           pp->get_id(),
+                                           term_for_log(log_store_->next_slot() - 1),
+                                           log_store_->next_slot() - 1,
+                                           quick_commit_index_.load());
         if (force_vote) {
             // Add a special log entry to let receivers ignore the priority.
 
@@ -267,19 +273,21 @@ void raft_server::request_vote(bool force_vote) {
         }
 
         if (it == peers_.begin()) {
-            // FMARK: set request field of leader_cert_ to the serialized vote request (only saved once)
+            // FMARK: set request field of leader_cert_ to the serialized vote request
+            // (only saved once)
             leader_cert_->set_request(req->serialize());
         }
 
-        p_db( "send %s to server %d with term %llu",
-              msg_type_to_string(req->get_type()).c_str(),
-              it->second->get_id(),
-              state_->get_term() );
+        p_db("send %s to server %d with term %llu",
+             msg_type_to_string(req->get_type()).c_str(),
+             it->second->get_id(),
+             state_->get_term());
         if (pp->make_busy()) {
             pp->send_req(pp, req, resp_handler_);
         } else {
             p_wn("failed to send vote request: peer %d (%s) is busy",
-                 pp->get_id(), pp->get_endpoint().c_str());
+                 pp->get_id(),
+                 pp->get_endpoint().c_str());
         }
     }
 }
@@ -289,27 +297,27 @@ ptr<resp_msg> raft_server::handle_vote_req(req_msg& req) {
          "last idx: req %ld / mine %ld, term: req %ld / mine %ld\n"
          "priority: target %d / mine %d, voted_for %d",
          srv_role_to_string(role_).c_str(),
-         req.get_src(), req.get_last_log_term(), log_store_->last_entry()->get_term(),
-         req.get_last_log_idx(), log_store_->next_slot()-1,
-         req.get_term(), state_->get_term(),
-         target_priority_, my_priority_, state_->get_voted_for());
+         req.get_src(),
+         req.get_last_log_term(),
+         log_store_->last_entry()->get_term(),
+         req.get_last_log_idx(),
+         log_store_->next_slot() - 1,
+         req.get_term(),
+         state_->get_term(),
+         target_priority_,
+         my_priority_,
+         state_->get_voted_for());
 
-    ptr<resp_msg> resp( cs_new<resp_msg>
-                        ( state_->get_term(),
-                          msg_type::request_vote_response,
-                          id_,
-                          req.get_src() ) );
+    ptr<resp_msg> resp(cs_new<resp_msg>(
+        state_->get_term(), msg_type::request_vote_response, id_, req.get_src()));
 
-    bool log_okay =
-        req.get_last_log_term() > log_store_->last_entry()->get_term() ||
-        ( req.get_last_log_term() == log_store_->last_entry()->get_term() &&
-          log_store_->next_slot() - 1 <= req.get_last_log_idx() );
+    bool log_okay = req.get_last_log_term() > log_store_->last_entry()->get_term()
+                    || (req.get_last_log_term() == log_store_->last_entry()->get_term()
+                        && log_store_->next_slot() - 1 <= req.get_last_log_idx());
 
     bool grant =
-        req.get_term() == state_->get_term() &&
-        log_okay &&
-        ( state_->get_voted_for() == req.get_src() ||
-          state_->get_voted_for() == -1 );
+        req.get_term() == state_->get_term() && log_okay
+        && (state_->get_voted_for() == req.get_src() || state_->get_voted_for() == -1);
 
     bool force_vote = (req.log_entries().size() > 0);
     if (force_vote) {
@@ -320,10 +328,8 @@ ptr<resp_msg> raft_server::handle_vote_req(req_msg& req) {
         ptr<cluster_config> c_conf = get_config();
         for (auto& entry: c_conf->get_servers()) {
             srv_config* s_conf = entry.get();
-            if ( !force_vote &&
-                 s_conf->get_id() == req.get_src() &&
-                 s_conf->get_priority() &&
-                 s_conf->get_priority() < target_priority_ ) {
+            if (!force_vote && s_conf->get_id() == req.get_src() && s_conf->get_priority()
+                && s_conf->get_priority() < target_priority_) {
                 // NOTE:
                 //   If zero-priority member initiates leader election,
                 //   that is intentionally triggered by the flag in
@@ -331,15 +337,18 @@ ptr<resp_msg> raft_server::handle_vote_req(req_msg& req) {
                 //   priority.
                 p_in("I (%d) could vote for peer %d, "
                      "but priority %d is lower than %d",
-                     id_, s_conf->get_id(),
-                     s_conf->get_priority(), target_priority_);
+                     id_,
+                     s_conf->get_id(),
+                     s_conf->get_priority(),
+                     target_priority_);
                 p_in("decision: X (deny)\n");
                 return resp;
             }
         }
 
         p_in("decision: O (grant), voted_for %d, term %zu",
-             req.get_src(), resp->get_term());
+             req.get_src(),
+             resp->get_term());
         resp->accept(log_store_->next_slot());
         // FMARK: set signature field of resp to my signature of the vote request
         resp->set_signature(get_signature(*req.serialize()), 0);
@@ -362,15 +371,19 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
         // Vote response for other term. Should ignore it.
         p_in("[VOTE RESP] from peer %d, my role %s, "
              "but different resp term %zu. ignore it.",
-             resp.get_src(), srv_role_to_string(role_).c_str(), resp.get_term());
+             resp.get_src(),
+             srv_role_to_string(role_).c_str(),
+             resp.get_term());
         return;
     }
     votes_responded_ += 1;
 
     if (resp.get_accepted()) {
         // FMARK: Save the signature in the vote response to my leader certificate.
-        if (!peers_[resp.get_src()]->verify_signature(leader_cert_->get_request(), resp.get_signature())) {
-            p_er("Invalid vote response, signature mismatch. Vote from peer %d.", resp.get_src());
+        if (!peers_[resp.get_src()]->verify_signature(leader_cert_->get_request(),
+                                                      resp.get_signature())) {
+            p_er("Invalid vote response, signature mismatch. Vote from peer %d.",
+                 resp.get_src());
             return;
         }
         votes_granted_ += 1;
@@ -387,10 +400,14 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
     p_in("[VOTE RESP] peer %d (%s), resp term %zu, my role %s, "
          "granted %d, responded %d, "
          "num voting members %d, quorum %d\n",
-         resp.get_src(), (resp.get_accepted()) ? "O" : "X", resp.get_term(),
+         resp.get_src(),
+         (resp.get_accepted()) ? "O" : "X",
+         resp.get_term(),
          srv_role_to_string(role_).c_str(),
-         (int)votes_granted_, (int)votes_responded_,
-         get_num_voting_members(), election_quorum_size);
+         (int)votes_granted_,
+         (int)votes_responded_,
+         get_num_voting_members(),
+         election_quorum_size);
 
     if (votes_granted_ >= election_quorum_size) {
         p_in("Server is elected as leader for term %zu", state_->get_term());
@@ -403,21 +420,21 @@ void raft_server::handle_vote_resp(resp_msg& resp) {
 
 /**
  * @brief FMARK: send leader certificate to one peer
- * 
+ *
  */
-void raft_server::send_leader_certificate(int32 peer_id, ptr<leader_certificate> tmp_lc){
+void raft_server::send_leader_certificate(int32 peer_id, ptr<leader_certificate> tmp_lc) {
     ptr<peer> pp = peers_[peer_id];
     send_leader_certificate(pp, tmp_lc);
 }
 
-void raft_server::send_leader_certificate(ptr<peer>& pp, ptr<leader_certificate> tmp_lc){
+void raft_server::send_leader_certificate(ptr<peer>& pp, ptr<leader_certificate> tmp_lc) {
     ptr<req_msg> req(cs_new<req_msg>(state_->get_term(),
-                                        msg_type::broadcast_leader_certificate_request,
-                                        id_,
-                                        pp->get_id(),
-                                        term_for_log(log_store_->next_slot() - 1),
-                                        log_store_->next_slot() - 1,
-                                        quick_commit_index_.load()));
+                                     msg_type::broadcast_leader_certificate_request,
+                                     id_,
+                                     pp->get_id(),
+                                     term_for_log(log_store_->next_slot() - 1),
+                                     log_store_->next_slot() - 1,
+                                     quick_commit_index_.load()));
     ptr<log_entry> lc_msg_le =
         cs_new<log_entry>(0, tmp_lc->serialize(), log_val_type::custom);
     req->log_entries().push_back(lc_msg_le);
@@ -448,8 +465,9 @@ void raft_server::broadcast_leader_certificate() {
 
     save_verified_term(term_, get_id());
 
-    if (flag_save_election_list()){
-        if (save_and_clean_election_list(get_election_list_max())) p_in("Election list saved, memory cleaned");
+    if (flag_save_election_list()) {
+        if (save_and_clean_election_list(get_election_list_max()))
+            p_in("Election list saved, memory cleaned");
     }
 
     p_in("Broadcast Leader Certificates to all other peers");
@@ -460,31 +478,35 @@ void raft_server::broadcast_leader_certificate() {
 
 /**
  * @brief FMARK: verify and save leader certificate
- * 
+ *
  */
 
-bool raft_server::verify_and_save_leader_certificate(req_msg& req, ptr<buffer> lc_buffer){
+bool raft_server::verify_and_save_leader_certificate(req_msg& req,
+                                                     ptr<buffer> lc_buffer) {
     ulong term_ = req.get_term();
     ptr<leader_certificate> lc = leader_certificate::deserialize(*lc_buffer);
     // ulong lc_term = req_msg::deserialize(*lc->get_request())->get_term();
 
     if (lc->get_request() == nullptr) {
-        p_wn("Empty leader certificate request, can still be valid if no election was held for this term");
+        p_wn("Empty leader certificate request, can still be valid if no election was "
+             "held for this term");
     } else {
 
         ptr<req_msg> lc_req = req_msg::deserialize(*lc->get_request());
         ulong lc_term = lc_req->get_term();
-        p_tr("Received leader certificate request from peer %d, term %ld, last log term %ld, last log index %ld, commit index %ld",
-            req.get_src(),
-            lc_term,
-            lc_req->get_last_log_term(),
-            lc_req->get_last_log_idx(),
-            lc_req->get_commit_idx());
+        p_tr("Received leader certificate request from peer %d, term %ld, last log term "
+             "%ld, last log index %ld, commit index %ld",
+             req.get_src(),
+             lc_term,
+             lc_req->get_last_log_term(),
+             lc_req->get_last_log_idx(),
+             lc_req->get_commit_idx());
 
         if (lc_term < state_->get_term()) {
-            p_er("Invalid leader certificate request, term mismatch. LC from elected server has term %d. My term %ld.",
-                lc_term,
-                state_->get_term());
+            p_er("Invalid leader certificate request, term mismatch. LC from elected "
+                 "server has term %d. My term %ld.",
+                 lc_term,
+                 state_->get_term());
             return false;
         }
 
@@ -495,21 +517,23 @@ bool raft_server::verify_and_save_leader_certificate(req_msg& req, ptr<buffer> l
         for (auto& sig: sigs) {
             if (sig.first == id_) continue;
             if (peers_.find(sig.first) == peers_.end()) {
-                p_er("Received signature from non-existing peer %d, accept the signature...", sig.first);
+                p_er("Received signature from non-existing peer %d, accept the "
+                     "signature...",
+                     sig.first);
                 continue;
             }
-            if (!peers_.find(sig.first)->second->verify_signature(lc->get_request(), sig.second)){
-                p_er("Invalid leader certificate request, signature mismatch. LC from elected server %d. Mismatched signature from peer %d.",
-                    req.get_src(),
-                    sig.first);
+            if (!peers_.find(sig.first)->second->verify_signature(lc->get_request(),
+                                                                  sig.second)) {
+                p_er("Invalid leader certificate request, signature mismatch. LC from "
+                     "elected server %d. Mismatched signature from peer %d.",
+                     req.get_src(),
+                     sig.first);
                 return false;
             }
         }
     }
 
-
-    p_tr("Saving the leader certificate from peer %d to my election list",
-            req.get_src());
+    p_tr("Saving the leader certificate from peer %d to my election list", req.get_src());
     {
         std::lock_guard<std::mutex> guard(election_list_lock_);
         election_list_[term_] = lc;
@@ -519,7 +543,8 @@ bool raft_server::verify_and_save_leader_certificate(req_msg& req, ptr<buffer> l
 
     if (flag_save_election_list()) {
         p_tr("Saving the election list to file");
-        if (save_and_clean_election_list(get_election_list_max())) p_in("Election list saved, memory cleaned");
+        if (save_and_clean_election_list(get_election_list_max()))
+            p_in("Election list saved, memory cleaned");
     }
 
     return true;
@@ -542,11 +567,10 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
          req.get_term(),
          state_->get_term());
 
-    ptr<resp_msg> resp( cs_new<resp_msg>
-                ( state_->get_term(),
-                    msg_type::broadcast_leader_certificate_response,
-                    id_,
-                    req.get_src() ) );
+    ptr<resp_msg> resp(cs_new<resp_msg>(state_->get_term(),
+                                        msg_type::broadcast_leader_certificate_response,
+                                        id_,
+                                        req.get_src()));
 
     if (!flag_use_election_list()) {
         p_in("I'm not using election list, ignore the leader certificate");
@@ -554,16 +578,16 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
     }
 
     if (term_verified(req.get_term(), -1)) {
-        p_wn("Leader certificate for term %ld has been verified and saved, replacing the old LC",
+        p_wn("Leader certificate for term %ld has been verified and saved, replacing the "
+             "old LC",
              req.get_term());
         return resp;
     }
 
     if (state_->get_voted_for() == -1) {
         p_in("I'm voting for no peer, accept the leader certificate from peer %d",
-                req.get_src());
+             req.get_src());
     }
-
 
     if (req.log_entries().size() != 1) {
         p_er("Invalid leader certificate request, no log entry");
@@ -571,15 +595,17 @@ ptr<resp_msg> raft_server::handle_leader_certificate_request(req_msg& req) {
     }
 
     ptr<buffer> lc_buffer = req.log_entries().at(0)->get_buf_ptr();
-    if(!verify_and_save_leader_certificate(req, lc_buffer)) return resp;
+    if (!verify_and_save_leader_certificate(req, lc_buffer)) return resp;
 
     resp->accept(0);
     return resp;
 }
 
 void raft_server::handle_leader_certificate_resp(resp_msg& resp) {
-    if (resp.get_accepted()){
-        p_in("Leader certificate request accepted by peer %d, now retrying to append entries", resp.get_src());
+    if (resp.get_accepted()) {
+        p_in("Leader certificate request accepted by peer %d, now retrying to append "
+             "entries",
+             resp.get_src());
         request_append_entries(peers_[resp.get_src()]);
     }
 }
@@ -596,19 +622,20 @@ ptr<resp_msg> raft_server::handle_prevote_req(req_msg& req) {
          "last idx: req %ld / mine %ld, term: req %ld / mine %ld\n"
          "%s",
          srv_role_to_string(role_).c_str(),
-         req.get_src(), req.get_last_log_term(),
+         req.get_src(),
+         req.get_last_log_term(),
          log_store_->last_entry()->get_term(),
-         req.get_last_log_idx(), log_store_->next_slot()-1,
-         req.get_term(), state_->get_term(),
+         req.get_last_log_idx(),
+         log_store_->next_slot() - 1,
+         req.get_term(),
+         state_->get_term(),
          (hb_alive_) ? "HB alive" : "HB dead");
 
-    ptr<resp_msg> resp
-        ( cs_new<resp_msg>
-          ( req.get_term(),
-            msg_type::pre_vote_response,
-            id_,
-            req.get_src(),
-            next_idx_for_resp ) );
+    ptr<resp_msg> resp(cs_new<resp_msg>(req.get_term(),
+                                        msg_type::pre_vote_response,
+                                        id_,
+                                        req.get_src(),
+                                        next_idx_for_resp));
 
     // NOTE:
     //   While `catching_up_` flag is on, this server does not get
@@ -638,8 +665,10 @@ void raft_server::handle_prevote_resp(resp_msg& resp) {
         p_in("[PRE-VOTE RESP] from peer %d, my role %s, "
              "but different resp term %zu (pre-vote term %zu). "
              "ignore it.",
-             resp.get_src(), srv_role_to_string(role_).c_str(),
-             resp.get_term(), pre_vote_.term_);
+             resp.get_src(),
+             srv_role_to_string(role_).c_str(),
+             resp.get_term(),
+             pre_vote_.term_);
         return;
     }
 
@@ -662,11 +691,15 @@ void raft_server::handle_prevote_resp(resp_msg& resp) {
     p_in("[PRE-VOTE RESP] peer %d (%s), term %zu, resp term %zu, "
          "my role %s, dead %d, live %d, "
          "num voting members %d, quorum %d\n",
-         resp.get_src(), (resp.get_accepted())?"O":"X",
-         pre_vote_.term_, resp.get_term(),
+         resp.get_src(),
+         (resp.get_accepted()) ? "O" : "X",
+         pre_vote_.term_,
+         resp.get_term(),
          srv_role_to_string(role_).c_str(),
-         pre_vote_.dead_.load(), pre_vote_.live_.load(),
-         get_num_voting_members(), election_quorum_size);
+         pre_vote_.dead_.load(),
+         pre_vote_.live_.load(),
+         get_num_voting_members(),
+         election_quorum_size);
 
     if (pre_vote_.dead_ >= election_quorum_size) {
         p_in("[PRE-VOTE DONE] SUCCESS, term %zu", pre_vote_.term_);
@@ -694,8 +727,8 @@ void raft_server::handle_prevote_resp(resp_msg& resp) {
             pre_vote_.quorum_reject_count_.fetch_add(1);
             p_wn("[PRE-VOTE] rejected by quorum, count %zu",
                 pre_vote_.quorum_reject_count_.load());
-            if ( pre_vote_.quorum_reject_count_ >=
-                    raft_server::raft_limits_.pre_vote_rejection_limit_ ) {
+            if (pre_vote_.quorum_reject_count_
+               >= raft_server::raft_limits_.pre_vote_rejection_limit_) {
                 p_ft("too many pre-vote rejections, probably this node is not "
                     "receiving heartbeat from leader. "
                     "we should re-establish the network connection");
@@ -709,7 +742,6 @@ void raft_server::handle_prevote_resp(resp_msg& resp) {
         steps_to_down_ = 2;
     }
 }
-
 
 bool raft_server::term_verified(ulong term, int32 server_id) {
     if (verified_terms_.find(term) != verified_terms_.end()) {
@@ -727,10 +759,10 @@ void raft_server::save_verified_term(ulong term, int32 server_id) {
     }
     if (verified_terms_.find(term) != verified_terms_.end()) {
         p_wn("term %ld is already verified by another server %d, replacing it",
-                term, verified_terms_[term]);
+             term,
+             verified_terms_[term]);
     }
     verified_terms_[term] = server_id;
 }
 
-} // namespace nuraft;
-
+} // namespace nuraft

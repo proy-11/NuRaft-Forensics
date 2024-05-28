@@ -16,7 +16,8 @@ namespace nuraft {
 EVP_PKEY_CTX* new_evp_pkey_ctx() {
     EVP_PKEY_CTX* kctx = NULL;
 
-    if (!(kctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL)) || EVP_PKEY_keygen_init(kctx) <= 0
+    if (!(kctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL))
+        || EVP_PKEY_keygen_init(kctx) <= 0
         || EVP_PKEY_CTX_set_ec_paramgen_curve_nid(kctx, CURVE_NID) <= 0) {
         throw crypto_exception("new EVP_PKEY_CTX");
     }
@@ -24,20 +25,21 @@ EVP_PKEY_CTX* new_evp_pkey_ctx() {
 }
 
 // ==============================================================================================================
-// =================================================== PUBKEY ===================================================
+// =================================================== PUBKEY
+// ===================================================
 // ==============================================================================================================
 
 pubkey_t::pubkey_t(EVP_PKEY* key_) {
     BIO* bio = BIO_new(BIO_s_mem());
     PEM_write_bio_PrivateKey(bio, key_, NULL, NULL, 0, NULL, NULL);
     key = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
-    if(bio) {
+    if (bio) {
         BIO_free(bio);
     }
 }
 
 pubkey_t::pubkey_t(const buffer& keybuf) {
-     if(!keybuf.data()) {
+    if (!keybuf.data()) {
         return;
     }
     EVP_PKEY* temp = NULL;
@@ -72,11 +74,11 @@ pubkey_t::~pubkey_t() {
 }
 
 ptr<buffer> pubkey_t::tobuf() {
-    if(!key) {
+    if (!key) {
         return nullptr;
     }
     int size = i2d_PublicKey(key, NULL);
-    if(!size) {
+    if (!size) {
         return nullptr;
     }
     ptr<buffer> buf = buffer::alloc(size);
@@ -106,7 +108,8 @@ std::string pubkey_t::str() {
 
 bool pubkey_t::verify_md(const buffer& msg, const buffer& sig) {
     EVP_MD_CTX* mdctx = NULL;
-    if (!(mdctx = EVP_MD_CTX_create()) || 1 != EVP_DigestVerifyInit(mdctx, NULL, HASH_FN(), NULL, key)
+    if (!(mdctx = EVP_MD_CTX_create())
+        || 1 != EVP_DigestVerifyInit(mdctx, NULL, HASH_FN(), NULL, key)
         || 1 != EVP_DigestVerifyUpdate(mdctx, (const void*)msg.data(), msg.size())) {
         throw crypto_exception("verify_md");
     }
@@ -116,10 +119,13 @@ bool pubkey_t::verify_md(const buffer& msg, const buffer& sig) {
     return (1 == res);
 }
 
-ptr<pubkey_t> pubkey_t::frombuf(const buffer& keybuf) { return std::make_shared<pubkey_t>(keybuf); }
+ptr<pubkey_t> pubkey_t::frombuf(const buffer& keybuf) {
+    return std::make_shared<pubkey_t>(keybuf);
+}
 
 // ==============================================================================================================
-// =================================================== SECKEY ===================================================
+// =================================================== SECKEY
+// ===================================================
 // ==============================================================================================================
 
 seckey_t::seckey_t() {
@@ -128,7 +134,7 @@ seckey_t::seckey_t() {
     if (ctx == NULL || EVP_PKEY_keygen(ctx, &key) <= 0) {
         throw crypto_exception("seckey random generation");
     }
-    if(ctx) {
+    if (ctx) {
         EVP_PKEY_CTX_free(ctx);
     }
 }
@@ -165,22 +171,22 @@ seckey_t::seckey_t(std::string priv_key) {
     OpenSSL_add_all_ciphers();
     OpenSSL_add_all_digests();
 
-    if(priv_key.empty()) {
+    if (priv_key.empty()) {
         throw crypto_exception("private key string is empty");
     }
     BIO* bio = BIO_new_mem_buf((void*)priv_key.data(), -1);
-    if(bio == NULL) {
+    if (bio == NULL) {
         throw crypto_exception("bio is null");
     }
-    key =  PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
-    if ( key == NULL) {
+    key = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+    if (key == NULL) {
         bio = BIO_new_file(priv_key.c_str(), "r");
         if (bio == NULL || PEM_read_bio_PrivateKey(bio, &key, NULL, NULL) == NULL) {
             throw crypto_exception("seckey from string or file");
         }
     }
 
-    if(bio) {
+    if (bio) {
         BIO_free(bio);
     }
 }
@@ -228,7 +234,7 @@ void seckey_t::tofile(const std::string& filename) {
 }
 
 ptr<pubkey_intf> seckey_t::derive() {
-    if(!key) {
+    if (!key) {
         return nullptr;
     }
     ptr<pubkey_t> pubkey = std::make_shared<pubkey_t>(key);
@@ -239,7 +245,8 @@ ptr<buffer> seckey_t::sign_md(const buffer& msg) {
     EVP_MD_CTX* mdctx = NULL;
     size_t slen;
 
-    if (!(mdctx = EVP_MD_CTX_create()) || 1 != EVP_DigestSignInit(mdctx, NULL, HASH_FN(), NULL, key)
+    if (!(mdctx = EVP_MD_CTX_create())
+        || 1 != EVP_DigestSignInit(mdctx, NULL, HASH_FN(), NULL, key)
         || 1 != EVP_DigestSignUpdate(mdctx, (const void*)msg.data(), msg.size())
         || 1 != EVP_DigestSignFinal(mdctx, NULL, &slen)) {
         throw crypto_exception("sign_md");
@@ -263,17 +270,23 @@ ptr<buffer> seckey_t::sign_md(const buffer& msg) {
 
 ptr<seckey_t> seckey_t::generate() { return std::make_shared<seckey_t>(); }
 
-ptr<seckey_t> seckey_t::frombuf(const buffer& keybuf) { return std::make_shared<seckey_t>(keybuf); }
+ptr<seckey_t> seckey_t::frombuf(const buffer& keybuf) {
+    return std::make_shared<seckey_t>(keybuf);
+}
 
-ptr<seckey_t> seckey_t::fromfile(const std::string& filename) { return std::make_shared<seckey_t>(filename); }
+ptr<seckey_t> seckey_t::fromfile(const std::string& filename) {
+    return std::make_shared<seckey_t>(filename);
+}
 
 // ==============================================================================================================
-// =================================================== UTILS ====================================================
+// =================================================== UTILS
+// ====================================================
 // ==============================================================================================================
 
 std::string tobase64(const buffer& buf) {
     char* encoded = new char[BASE64_ENC_SIZE(buf.size())];
-    int size = EVP_EncodeBlock((unsigned char*)encoded, (const unsigned char*)buf.data(), buf.size());
+    int size = EVP_EncodeBlock(
+        (unsigned char*)encoded, (const unsigned char*)buf.data(), buf.size());
     auto encstr = std::string(encoded, size);
     delete[] encoded;
     return encstr;
@@ -293,13 +306,13 @@ ptr<buffer> create_hash(const char* source) {
 }
 
 ptr<buffer> create_hash(ptr<log_entry> le_, ulong height) {
-    if(!le_) {
+    if (!le_) {
         return nullptr;
     }
 
     ptr<buffer> serial = le_->serialize_sig();
     size_t msgsize;
-    if(serial == nullptr) {
+    if (serial == nullptr) {
         msgsize = sizeof(ulong);
     } else {
         msgsize = serial->size() + sizeof(ulong);
@@ -307,7 +320,7 @@ ptr<buffer> create_hash(ptr<log_entry> le_, ulong height) {
     // size_t msgsize = serial->size() + sizeof(ulong);
     ptr<buffer> msg = buffer::alloc(msgsize);
     msg->put(height);
-    if(serial != nullptr) {
+    if (serial != nullptr) {
         msg->put(*serial);
     } else {
         msg->put((byte)0);
@@ -353,13 +366,20 @@ ptr<buffer> create_hash(ptr<log_store> store_) {
 //     return true;
 // }
 
-bool check_hash(std::vector<ptr<log_entry>>& entries, ptr<buffer>& base_hash, ptr<buffer> target_hash, ulong starting_idx, std::map<ulong, ptr<buffer>>& hash_map_to_update) {
+bool check_hash(std::vector<ptr<log_entry>>& entries,
+                ptr<buffer>& base_hash,
+                ptr<buffer> target_hash,
+                ulong starting_idx,
+                std::map<ulong, ptr<buffer>>& hash_map_to_update) {
     ptr<buffer> curr_hash = base_hash;
     for (size_t i = 0; i < entries.size(); i++) {
-        // TODO: iteratively hash the entries to the last one. Need to modify the log_entry and raft_server:
-        //   1. do not include prv_ptr in the log_entry structure. Only include the last hash pointer in the req msg.
-        //   2. each node stores only the hash pointers of the latest entry and also the latest comitted entry. intermediate ckpt
-        
+        // TODO: iteratively hash the entries to the last one. Need to modify the
+        // log_entry and raft_server:
+        //   1. do not include prv_ptr in the log_entry structure. Only include the last
+        //   hash pointer in the req msg.
+        //   2. each node stores only the hash pointers of the latest entry and also the
+        //   latest comitted entry. intermediate ckpt
+
         if (entries[i]->get_val_type() != log_val_type::app_log) {
             hash_map_to_update[starting_idx + i] = curr_hash;
             continue;
@@ -398,7 +418,7 @@ bool check_hash(std::vector<ptr<log_entry>>& entries, ptr<buffer>& base_hash, pt
 ptr<buffer> create_hash(ptr<log_entry> new_entry, ptr<buffer> curr_ptr, ulong idx) {
     ptr<buffer> serial = new_entry->serialize_sig();
     size_t msgsize;
-    if(serial == nullptr) {
+    if (serial == nullptr) {
         msgsize = sizeof(ulong);
     } else {
         msgsize = serial->size() + sizeof(ulong);
@@ -406,7 +426,7 @@ ptr<buffer> create_hash(ptr<log_entry> new_entry, ptr<buffer> curr_ptr, ulong id
     if (curr_ptr != nullptr) msgsize += curr_ptr->size();
     ptr<buffer> msg = buffer::alloc(msgsize);
     msg->put(idx);
-    if(serial != nullptr) {
+    if (serial != nullptr) {
         msg->put(*serial);
     } else {
         msg->put((byte)0);

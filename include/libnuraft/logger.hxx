@@ -93,8 +93,11 @@ public:
      * @param line_number Line number of the log.
      * @param log_line Contents of the log.
      */
-    virtual void put_details(
-        int level, const char* source_file, const char* func_name, size_t line_number, const std::string& log_line) {}
+    virtual void put_details(int level,
+                             const char* source_file,
+                             const char* func_name,
+                             size_t line_number,
+                             const std::string& log_line) {}
 };
 
 } // namespace nuraft
