@@ -784,20 +784,6 @@ void raft_server::reset_peer_info() {
         ptr<log_entry> entry(
             cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
 
-        // FMARK: add sig
-        if (flag_use_leader_sig()) {
-            // auto timer = cs_new<timer_t>();
-            // timer->start_timer();
-            entry->set_signature(get_signature(*entry->serialize_sig()));
-            // ptr<buffer> buf= entry->serialize_sig();
-            // if(!buf) {
-            //     p_in("message to sign is null");
-            // }
-            // p_in("Set sig");
-            // entry->set_signature(get_signature(*buf));
-            // timer->add_record("ls.init.rpi");
-            // t_->add_sess(timer);
-        }
 
         store_log_entry(entry, log_store_->next_slot() - 1);
     }
@@ -1067,15 +1053,6 @@ void raft_server::become_leader() {
             cs_new<log_entry>(state_->get_term(), conf_buf, log_val_type::conf));
         p_in("[BECOME LEADER] appended new config at %zu\n", log_store_->next_slot());
 
-        // FMARK: add sig
-        if (flag_use_leader_sig()) {
-            // auto timer = cs_new<timer_t>();
-            // timer->start_timer();
-            p_in("Set sig");
-            entry->set_signature(get_signature(*entry->serialize_sig()));
-            // timer->add_record("ls.init.bcl");
-            // t_->add_sess(timer);
-        }
 
         store_log_entry(entry);
         config_changing_ = true;
@@ -1580,16 +1557,6 @@ void raft_server::set_user_ctx(const std::string& ctx) {
     ptr<log_entry> entry =
         cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf);
 
-    // FMARK: add sig
-    if (flag_use_leader_sig()) {
-        // auto timer = cs_new<timer_t>();
-        // timer->start_timer();
-        p_in("Set sig");
-        entry->set_signature(get_signature(*entry->serialize_sig()));
-        // timer->add_record("ls.init.sctx");
-        // t_->add_sess(timer);
-    }
-
     store_log_entry(entry);
     request_append_entries();
 }
@@ -1815,36 +1782,28 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries,
     return ret;
 }
 
+
 /**
- * FMARK:
+ * FMARK: new check_leader_sig
  *
- * @return -1 on pass; index of failed entry on fail;
  */
-ssize_t raft_server::check_leader_sig(std::vector<ptr<log_entry>>& entries,
-                                      int32 signer) {
-    auto entry = peers_.find(signer);
-    if (entry == peers_.end()) {
-        p_ft("cannot find signer %d!", signer);
+bool raft_server::check_leader_sig(ptr<log_entry> entry, ptr<buffer> sig,
+                                      int32 signer_id) {
+    auto signer = peers_.find(signer_id);
+    if (signer == peers_.end()) {
+        p_ft("cannot find signer %d!", signer_id);
         ctx_->state_mgr_->system_exit(N22_unrecoverable_isolation);
     }
 
-    ptr<peer> p_signer = entry->second;
+    ptr<peer> p_signer = signer->second;
 
-    for (ulong i = 0; i < (ulong)entries.size(); i++) {
-        if (entries[i]->get_val_type() != log_val_type::app_log) continue;
-        p_tr("Verifying signature");
-        if (!entries[i]->serialize_sig()) {
-            p_in("log entry msg is null");
-        }
-        if (!entries[i]->get_sig_ptr()) {
-            p_in("log entry signature is null");
-        }
-        if (!p_signer->verify_signature(entries[i]->serialize_sig(),
-                                        entries[i]->get_sig_ptr())) {
-            return (ssize_t)(i);
-        }
+    if (entry->get_val_type() != log_val_type::app_log) return true;
+    p_tr("Verifying signature");
+    if (!entry->serialize_sig()) {
+        p_in("log entry msg is null");
+        return true;
     }
-    return (ssize_t)-1;
+    return p_signer->verify_signature(entry->serialize_sig(), sig);
 }
 
 int32 raft_server::validate_commitment_certificate(ptr<certificate> cert,

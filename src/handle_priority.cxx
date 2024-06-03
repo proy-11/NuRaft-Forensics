@@ -96,14 +96,6 @@ void raft_server::set_priority(const int srv_id, const int new_priority) {
     config_changing_ = true;
     uncommitted_config_ = cloned_config;
 
-    // FMARK: add sig
-    if (flag_use_leader_sig()) {
-        // auto timer = cs_new<timer_t>();
-        // timer->start_timer();
-        entry->set_signature(get_signature(*entry->serialize_sig()));
-        // timer->add_record("ls.init.spry");
-        // t_->add_sess(timer);
-    }
 
     store_log_entry(entry);
     request_append_entries();

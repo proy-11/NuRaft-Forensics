@@ -269,15 +269,6 @@ void raft_server::sync_log_to_new_srv(ulong start_idx) {
         ptr<log_entry> entry(
             cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
 
-        // FMARK: add sig
-        if (flag_use_leader_sig()) {
-            // auto timer = cs_new<timer_t>();
-            // timer->start_timer();
-            p_in("Set sig");
-            entry->set_signature(get_signature(*entry->serialize_sig()));
-            // timer->add_record("ls.init.sync");
-            // t_->add_sess(timer);
-        }
 
         store_log_entry(entry);
 
@@ -527,15 +518,6 @@ void raft_server::rm_srv_from_cluster(int32 srv_id) {
     ptr<log_entry> entry(
         cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
 
-    // FMARK: add sig
-    if (flag_use_leader_sig()) {
-        // auto timer = cs_new<timer_t>();
-        // timer->start_timer();
-        p_in("Set sig");
-        entry->set_signature(get_signature(*entry->serialize_sig()));
-        // timer->add_record("ls.init.rm");
-        // t_->add_sess(timer);
-    }
 
     store_log_entry(entry);
 

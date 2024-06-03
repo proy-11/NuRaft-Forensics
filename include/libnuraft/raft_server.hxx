@@ -807,7 +807,9 @@ protected:
     bool match_log_entry(std::vector<ptr<log_entry>>& entries,
                          ulong index,
                          ptr<buffer> target_hash);
-    ssize_t check_leader_sig(std::vector<ptr<log_entry>>& entries, int32 signer);
+    // ssize_t check_leader_sig(std::vector<ptr<log_entry>>& entries, int32 signer);
+    bool check_leader_sig(ptr<log_entry> entry, ptr<buffer> sig,
+                                      int32 signer_id);
     int32 validate_commitment_certificate(ptr<certificate> cert, ptr<log_entry> entry);
 
     // FMARK: certificate operations
@@ -923,6 +925,9 @@ protected:
     // ptr<buffer> last_committed_log_hash_;
     std::map<ulong, ptr<buffer>> hash_cache_;
     std::mutex hash_cache_lock_;
+
+    // FMARK: RN: leader signatures
+    std::map<int32, ptr<buffer>> leader_sigs_;
 
     /**
      * (Read-only)

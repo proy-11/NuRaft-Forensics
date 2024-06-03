@@ -564,7 +564,7 @@ private:
                         log_ctx->get(sig);
                     }
 
-                    ptr<log_entry> entry(cs_new<log_entry>(term, buf, val_type, sig));
+                    ptr<log_entry> entry(cs_new<log_entry>(term, buf, val_type));
                     req->log_entries().push_back(entry);
                 }
             }
@@ -1103,9 +1103,9 @@ public:
             // if (le->get_prev_ptr()) {
             //     total_size += le->get_prev_ptr()->size();
             // }
-            if (le->get_sig_ptr()) {
-                total_size += le->get_sig_ptr()->size();
-            }
+            // if (le->get_sig_ptr()) {
+            //     total_size += le->get_sig_ptr()->size();
+            // }
 
             ptr<buffer> entry_buf = buffer::alloc(total_size);
             entry_buf->put(le->get_term());
@@ -1116,17 +1116,18 @@ public:
 
             // FMARK:
             entry_buf->put((int32)0);
+            entry_buf->put((int32)0);
             // if (le->get_prev_ptr()) {
             //     le->get_prev_ptr()->pos(0);
             //     entry_buf->put(*le->get_prev_ptr());
             // }
-            entry_buf->put(le->get_sig_ptr() == nullptr
-                               ? (int32)0
-                               : (int32)le->get_sig_ptr()->size());
-            if (le->get_sig_ptr()) {
-                le->get_sig_ptr()->pos(0);
-                entry_buf->put(*le->get_sig_ptr());
-            }
+            // entry_buf->put(le->get_sig_ptr() == nullptr
+            //                    ? (int32)0
+            //                    : (int32)le->get_sig_ptr()->size());
+            // if (le->get_sig_ptr()) {
+            //     le->get_sig_ptr()->pos(0);
+            //     entry_buf->put(*le->get_sig_ptr());
+            // }
 
             entry_buf->pos(0);
 

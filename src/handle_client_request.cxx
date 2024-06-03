@@ -100,24 +100,6 @@ ptr<resp_msg> raft_server::handle_cli_req(req_msg& req) {
         // force the log's term to current term
         entries.at(i)->set_term(cur_term);
 
-        // FMARK: add pointer
-        // auto timer = cs_new<timer_t>();
-
-        // if (flag_use_ptr()) {
-        //     // timer->start_timer();
-        //     entries.at(i)->set_prev(create_hash(log_store_));
-        //     // timer->add_record("ptr.init");
-        // }
-
-        // FMARK: add sig
-        if (flag_use_leader_sig()) {
-            p_in("Set sig");
-            // timer->start_timer();
-            entries.at(i)->set_signature(
-                this->get_signature(*entries.at(i)->serialize_sig()));
-            // timer->add_record("ls.init.clireq");
-        }
-
         // t_->add_sess(timer);
 
         ulong next_slot = store_log_entry(entries.at(i));

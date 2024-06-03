@@ -37,14 +37,15 @@ class log_entry {
 public:
     log_entry(ulong term,
               const ptr<buffer>& buff,
-              log_val_type value_type = log_val_type::app_log,
+              log_val_type value_type = log_val_type::app_log
               //   const ptr<buffer>& prev = nullptr,
-              const ptr<buffer>& leadersig = nullptr)
+              //   const ptr<buffer>& leadersig = nullptr
+              )
         : term_(term)
         , value_type_(value_type)
-        , buff_(buff)
+        , buff_(buff) {}
         // , prev_(prev)
-        , leader_sig_(leadersig) {}
+        // , leader_sig_(leadersig) {} // FMARK: RN: leader_sig_ removed
 
     __nocopy__(log_entry);
 
@@ -57,7 +58,7 @@ public:
     // void set_prev(const ptr<buffer> prev) { prev_ = buffer::clone(*prev); }
 
     // FMARK: set signature
-    void set_signature(const ptr<buffer> sig) { leader_sig_ = buffer::clone(*sig); }
+    // void set_signature(const ptr<buffer> sig) { leader_sig_ = buffer::clone(*sig); } // FMARK: RN: leader_sig_ removed
 
     log_val_type get_val_type() const { return value_type_; }
 
@@ -82,7 +83,7 @@ public:
     ptr<buffer> get_buf_ptr() const { return buff_; }
 
     // ptr<buffer> get_prev_ptr() const { return prev_; } // FMARK: RN: prev_ removed
-    ptr<buffer> get_sig_ptr() const { return leader_sig_; }
+    // ptr<buffer> get_sig_ptr() const { return leader_sig_; } // FMARK: RN: leader_sig_ removed
 
     // FMARK: serialize for signature
     ptr<buffer> serialize_sig() {
@@ -116,19 +117,21 @@ public:
         buff_->pos(0);
         ptr<buffer> buf = buffer::alloc(
             sizeof(ulong) + sizeof(char) + sizeof(ulong) + buff_->size()
-            + sizeof(ulong)
+            // + sizeof(ulong)
             // + (prev_ == nullptr ? 0 : prev_->size())
-            + 0 // FMARK: RN: prev_ removed
-            + sizeof(ulong) + (leader_sig_ == nullptr ? 0 : leader_sig_->size()));
+            // + 0 // FMARK: RN: prev_ removed
+            // + sizeof(ulong) + (leader_sig_ == nullptr ? 0 : leader_sig_->size()));
+            // + sizeof(ulong) + 0
+            ); // FMARK: RN: leader_sig_ removed
         buf->put(term_);
         buf->put((static_cast<byte>(value_type_)));
         buf->put((ulong)buff_->size());
         buf->put(*buff_);
         // buf->put(prev_ == nullptr ? (ulong)0 : (ulong)prev_->size());
         // if (prev_) buf->put(*prev_);
-        buf->put((ulong)0); // FMARK: RN: prev_ removed
-        buf->put(leader_sig_ == nullptr ? (ulong)0 : (ulong)leader_sig_->size());
-        if (leader_sig_) buf->put(*leader_sig_);
+        // buf->put((ulong)0); // FMARK: RN: prev_ removed
+        // buf->put(leader_sig_ == nullptr ? (ulong)0 : (ulong)leader_sig_->size());
+        // if (leader_sig_) buf->put(*leader_sig_);
         buf->pos(0);
         return buf;
     }
@@ -142,22 +145,23 @@ public:
         buf.get(data);
 
         // ulong prev_size = buf.get_ulong();
-        buf.get_ulong();
-        ptr<buffer> prev = nullptr;
+        // buf.get_ulong();
+        // ptr<buffer> prev = nullptr;
         // if (prev_size) {
         //     prev = buffer::alloc(prev_size);
         //     buf.get(prev);
         // }
 
-        ulong sig_size = buf.get_ulong();
-        ptr<buffer> sig = nullptr;
-        if (sig_size) {
-            sig = buffer::alloc(sig_size);
-            buf.get(sig);
-        }
+        // ulong sig_size = buf.get_ulong();
+        // ptr<buffer> sig = nullptr;
+        // if (sig_size) {
+        //     sig = buffer::alloc(sig_size);
+        //     buf.get(sig);
+        // }
 
         // return cs_new<log_entry>(term, data, t, prev, sig);
-        return cs_new<log_entry>(term, data, t, sig);
+        // return cs_new<log_entry>(term, data, t, sig);
+        return cs_new<log_entry>(term, data, t);
     }
 
     static ulong term_in_buffer(buffer& buf) {
@@ -171,7 +175,7 @@ private:
     log_val_type value_type_;
     ptr<buffer> buff_;
     // ptr<buffer> prev_; // FMARK: RN: prev_ removed
-    ptr<buffer> leader_sig_;
+    // ptr<buffer> leader_sig_; // FMARK: RN: leader_sig_ removed
 };
 
 } // namespace nuraft

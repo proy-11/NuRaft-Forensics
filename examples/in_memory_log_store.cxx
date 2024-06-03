@@ -36,16 +36,15 @@ inmem_log_store::~inmem_log_store() {}
 ptr<log_entry> inmem_log_store::make_clone(const ptr<log_entry>& entry) {
     // ptr<buffer> prev = entry->get_prev_ptr() == nullptr ? nullptr :
     // buffer::clone(*entry->get_prev_ptr()); // FMARK: RN: prev_ removed
-    ptr<buffer> sig =
-        entry->get_sig_ptr() == nullptr ? nullptr : buffer::clone(*entry->get_sig_ptr());
+    // ptr<buffer> sig =
+    //     entry->get_sig_ptr() == nullptr ? nullptr : buffer::clone(*entry->get_sig_ptr()); // FMARK: RN: sig_ removed
 
     ptr<log_entry> clone =
         // cs_new<log_entry>(entry->get_term(), buffer::clone(entry->get_buf()),
         // entry->get_val_type(), prev, sig);
         cs_new<log_entry>(entry->get_term(),
                           buffer::clone(entry->get_buf()),
-                          entry->get_val_type(),
-                          sig);
+                          entry->get_val_type());
     return clone;
 }
 
