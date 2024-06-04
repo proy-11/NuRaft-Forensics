@@ -1338,6 +1338,20 @@ bool raft_server::request_leadership() {
 
 void raft_server::become_follower() {
     // stop hb for all peers
+    if (role_ == srv_role::leader) {
+        // record the last leader signature
+        // find the last app_log type log entry
+        ptr<log_entry> last_app_log;
+        for (ulong ii = log_store_->next_slot() - 1; ii > 0; --ii) {
+            ptr<log_entry> le = log_store_->entry_at(ii);
+            if (le->get_val_type() == log_val_type::app_log) {
+                last_app_log = le;
+                break;
+            }
+        }
+        leader_sigs_[last_app_log->get_term()] = this->get_signature(*last_app_log->serialize_sig());
+
+    }
     p_tr("  FOLLOWER\n");
     {
         std::lock_guard<std::mutex> ll(cli_lock_);
@@ -1939,6 +1953,20 @@ ulong raft_server::get_election_list_max() {
 }
 
 void raft_server::dump_leader_signatures(ulong term) {
+
+    if (role_ == srv_role::leader) {
+        // record the last leader signature
+        // find the last app_log type log entry
+        ptr<log_entry> last_app_log;
+        for (ulong ii = log_store_->next_slot() - 1; ii > 0; --ii) {
+            ptr<log_entry> le = log_store_->entry_at(ii);
+            if (le->get_val_type() == log_val_type::app_log) {
+                last_app_log = le;
+                break;
+            }
+        }
+        leader_sigs_[last_app_log->get_term()] = this->get_signature(*last_app_log->serialize_sig());
+    }
 
     if (leader_sigs_.find(term) == leader_sigs_.end()) {
         p_db("no leader signatures for term %zu", term);
