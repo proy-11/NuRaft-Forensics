@@ -29,15 +29,15 @@ bool raft_server::save_and_clean_election_list(ulong threshold) {
     }
 
     // in case of writing failure, we will not be able to recover the election list
-    std::ofstream file(filename, std::ios::binary || std::ios::app);
+    std::ofstream file(filename, std::ios::binary | std::ios::app);
     if (!file.is_open()) {
         p_er("cannot open file %s for saving election list", filename.c_str());
         return false;
     }
     uint8_t size_t_size = sizeof(size_t);
-    file.write(reinterpret_cast<const char*>(&size_t_size),
-               1); // Write system size_t size to file first
     for (const auto& pair: temp_list) {
+        file.write(reinterpret_cast<const char*>(&size_t_size),
+               1); // Write system size_t size to file first
         file.write(reinterpret_cast<const char*>(&pair.first), sizeof(ulong));
         ptr<buffer> serialized_lc = pair.second->serialize();
         size_t len = serialized_lc->size();

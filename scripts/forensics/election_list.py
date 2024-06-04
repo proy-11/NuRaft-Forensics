@@ -37,10 +37,9 @@ class election_list:
     def __init__(self, filename):
         self.el = {}
         with open(filename, "rb") as file:
-            size_t_size = struct.unpack("B", file.read(1))[0]
-            size_t_format = "Q" if size_t_size == 8 else "I"
-
             while True:
+                size_t_size = struct.unpack("B", file.read(1))[0]
+                size_t_format = "Q" if size_t_size == 8 else "I"
                 key_bytes = file.read(size_t_size)
                 if not key_bytes:
                     break
