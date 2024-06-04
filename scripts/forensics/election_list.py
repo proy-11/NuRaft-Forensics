@@ -1,5 +1,6 @@
 import struct
 import os
+import sys
 
 
 class leader_certificate:
@@ -66,7 +67,10 @@ class election_list:
 
 if __name__ == "__main__":
     # Example usage
-    for file in os.listdir("build/forensics_out"):
-        print(f"File: {file}")
-        el = election_list(f"build/forensics_out/{file}")
-        print(el)
+    for file in os.listdir(sys.argv[1]):
+        try:
+            print(f"File: {file}")
+            el = election_list(f"{sys.argv[1]}/{file}")
+            print(el)
+        except:
+            pass
