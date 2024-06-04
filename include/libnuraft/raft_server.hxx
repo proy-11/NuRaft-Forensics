@@ -39,6 +39,7 @@ limitations under the License.
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <chrono>
 
 #include "leader_certificate.hxx"
 
@@ -1400,6 +1401,9 @@ protected:
     // FMARK: RN (deprecated)
     // std::mutex last_log_hash_lock_;
     // std::mutex last_committed_log_hash_lock_;
+
+    // FMARK: initial timestamp
+    std::chrono::microseconds::rep init_timestamp_;
 };
 
 } // namespace nuraft

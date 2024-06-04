@@ -29,7 +29,7 @@ bool raft_server::save_and_clean_election_list(ulong threshold) {
     }
 
     // in case of writing failure, we will not be able to recover the election list
-    std::ofstream file(filename, std::ios::binary);
+    std::ofstream file(filename, std::ios::binary || std::ios::app);
     if (!file.is_open()) {
         p_er("cannot open file %s for saving election list", filename.c_str());
         return false;
@@ -50,15 +50,8 @@ bool raft_server::save_and_clean_election_list(ulong threshold) {
 }
 
 std::string raft_server::get_election_list_file_name(const std::string& data_dir) {
-    auto now = std::chrono::system_clock::now();
-
-    // Convert to a duration since the epoch in microseconds
-    auto microsecondsSinceEpoch =
-        std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch())
-            .count();
-
     std::stringstream filename;
-    filename << "el_" << microsecondsSinceEpoch << "_p" << get_id() << ".dat";
+    filename << "el_" << init_timestamp_ << "_p" << get_id() << ".dat";
 
     return ((boost::filesystem::path)data_dir / filename.str()).string();
 }

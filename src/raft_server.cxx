@@ -102,6 +102,9 @@ raft_server::raft_server(context* ctx, const init_options& opt)
                                               std::placeholders::_2))
     , last_snapshot_(ctx->state_machine_->last_snapshot()) {
 
+    // FMARK: record initial timestamp
+    init_timestamp_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    
     const size_t BUFSIZE = 4096;
     char temp_buf[BUFSIZE];
     std::string print_msg;
