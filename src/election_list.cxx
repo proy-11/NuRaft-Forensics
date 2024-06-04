@@ -55,4 +55,11 @@ std::string raft_server::get_election_list_file_name(const std::string& data_dir
 
     return ((boost::filesystem::path)data_dir / filename.str()).string();
 }
+
+std::string raft_server::get_leader_sig_file_name(const std::string& data_dir) {
+    std::stringstream filename;
+    filename << "ls_" << init_timestamp_ << "_p" << get_id() << ".dat";
+
+    return ((boost::filesystem::path)data_dir / filename.str()).string();
+}
 } // namespace nuraft

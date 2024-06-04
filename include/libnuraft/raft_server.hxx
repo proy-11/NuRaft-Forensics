@@ -845,6 +845,9 @@ protected:
     bool save_and_clean_election_list(ulong threshold);
 
     std::string get_election_list_file_name(const std::string& data_dir);
+    std::string get_leader_sig_file_name(const std::string& data_dir);
+
+    void dump_leader_signatures(ulong term);
 
     /**
      * @brief check whether the term has been verified with a valid leader certificate.

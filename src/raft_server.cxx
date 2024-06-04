@@ -39,6 +39,8 @@ limitations under the License.
 #include <random>
 #include <sstream>
 #include <thread>
+#include <fstream>
+
 
 namespace nuraft {
 
@@ -104,7 +106,7 @@ raft_server::raft_server(context* ctx, const init_options& opt)
 
     // FMARK: record initial timestamp
     init_timestamp_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    
+
     const size_t BUFSIZE = 4096;
     char temp_buf[BUFSIZE];
     std::string print_msg;
@@ -514,6 +516,12 @@ void raft_server::shutdown() {
         // FMARK: save election list to file
         p_in("saving unsaved election list to file");
         save_and_clean_election_list(1);
+    }
+
+    if (flag_use_leader_sig()) {
+        // FMARK: save leader signature to file
+        p_in("saving unsaved leader signature to file");
+        dump_leader_signatures(state_->get_term());
     }
 
     p_in("reset all pointers.");
@@ -1359,6 +1367,8 @@ void raft_server::become_follower() {
 
 bool raft_server::update_term(ulong term) {
     if (term > state_->get_term()) {
+        ulong last_term = state_->get_term();
+        dump_leader_signatures(last_term);
         state_->set_term(term);
         state_->set_voted_for(-1);
         state_->allow_election_timer(true);
@@ -1927,4 +1937,37 @@ bool raft_server::flag_save_election_list() {
 ulong raft_server::get_election_list_max() {
     return get_current_params().election_list_max_;
 }
+
+void raft_server::dump_leader_signatures(ulong term) {
+
+    if (leader_sigs_.find(term) == leader_sigs_.end()) {
+        p_db("no leader signatures for term %zu", term);
+        return;
+    }
+
+    std::string dir = ctx_->get_params()->forensics_output_path_;
+    if (!boost::filesystem::exists(dir)) {
+        boost::filesystem::create_directory(dir);
+    }
+    std::string filename =
+        get_leader_sig_file_name(dir); // file name should be unique by using
+                                            // timestamp, server id
+
+    std::ofstream file(filename, std::ios::binary | std::ios::app);
+    if (!file.is_open()) {
+        p_er("cannot open file %s for saving election list", filename.c_str());
+        return;
+    }
+    uint8_t size_t_size = sizeof(size_t);
+    file.write(reinterpret_cast<const char*>(&size_t_size), 1); // Write system size_t size to file first
+    file.write(reinterpret_cast<const char*>(&term), sizeof(ulong));
+    ptr<buffer> leader_sig = leader_sigs_[term];
+    size_t len = leader_sig->size();
+    file.write(reinterpret_cast<const char*>(&len), sizeof(size_t));
+    file.write(reinterpret_cast<const char*>(leader_sig->data_begin()), len);
+
+    file.close();
+    p_db("leader signatures for term %zu saved to %s", term, filename.c_str());
+}
+
 } // namespace nuraft

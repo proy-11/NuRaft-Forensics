@@ -205,6 +205,8 @@ void raft_server::initiate_vote(bool force_vote) {
         // Request vote when
         //  1) my priority satisfies the target, OR
         //  2) I'm the only node in the group.
+        ulong last_term = state_->get_term();
+        dump_leader_signatures(last_term);
         state_->inc_term();
         state_->set_voted_for(-1);
         role_ = srv_role::candidate;
@@ -466,7 +468,7 @@ void raft_server::broadcast_leader_certificate() {
     save_verified_term(term_, get_id());
 
     if (flag_save_election_list()) {
-        if (save_and_clean_election_list(get_election_list_max()))
+        if (save_and_clean_election_list(1))
             p_in("Election list saved, memory cleaned");
     }
 
@@ -543,7 +545,7 @@ bool raft_server::verify_and_save_leader_certificate(req_msg& req,
 
     if (flag_save_election_list()) {
         p_tr("Saving the election list to file");
-        if (save_and_clean_election_list(get_election_list_max()))
+        if (save_and_clean_election_list(1))
             p_in("Election list saved, memory cleaned");
     }
 
