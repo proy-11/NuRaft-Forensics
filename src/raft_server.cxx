@@ -1767,6 +1767,13 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries,
         if (hash_cache_.find(index - 1) != hash_cache_.end()) {
             lock.unlock();
             base_hash = hash_cache_[index - 1];
+        } else {
+            base_hash = hash_cache_.rbegin()->second;
+            auto logs_to_append = log_store_->log_entries(hash_cache_.rbegin()->first, index);
+            entries.insert(entries.begin(), logs_to_append->begin(), logs_to_append->end());
+            p_in("delayed verification: verifying log entries from %zu to %zu",
+                 hash_cache_.rbegin()->first,
+                 index);
         }
     }
 
