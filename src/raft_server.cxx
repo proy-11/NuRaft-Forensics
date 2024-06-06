@@ -1770,7 +1770,6 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries,
             base_hash = hash_cache_[index - 1];
             new_entries.insert(new_entries.begin(), entries.begin() + cnt, entries.end());
         } else {
-            lock.unlock();
             base_hash = hash_cache_.rbegin()->second;
             auto logs_to_append = log_store_->log_entries(hash_cache_.rbegin()->first, index);
             new_entries.insert(new_entries.begin(), logs_to_append->begin(), logs_to_append->end());
@@ -1810,6 +1809,7 @@ bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries,
         }
     } else {
         // apply hash_cache_to_update to hash_cache_
+        std::unique_lock<std::mutex> lock(hash_cache_lock_);
         for (auto& it: hash_cache_to_update) {
             hash_cache_[it.first] = it.second;
             p_in("hash cache updated for log index %zu -> %s",
