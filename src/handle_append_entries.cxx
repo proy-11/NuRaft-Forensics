@@ -761,6 +761,7 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                     return resp;
                 } else {
                     leader_sigs_[req.get_term()] = leader_sig;
+                    dump_leader_signatures(req.get_term()); // FMARK: RN: immediately write the leader signature to file
                     p_db("req log idx %zu -- %zu passed leader sig checks",
                         log_idx + 1,
                         log_idx + log_size);

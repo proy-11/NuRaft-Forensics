@@ -40,6 +40,7 @@ limitations under the License.
 #include <sstream>
 #include <thread>
 #include <fstream>
+#include <limits>
 
 
 namespace nuraft {
@@ -1338,20 +1339,7 @@ bool raft_server::request_leadership() {
 
 void raft_server::become_follower() {
     // stop hb for all peers
-    if (role_ == srv_role::leader) {
-        // record the last leader signature
-        // find the last app_log type log entry
-        ptr<log_entry> last_app_log;
-        for (ulong ii = log_store_->next_slot() - 1; ii > 0; --ii) {
-            ptr<log_entry> le = log_store_->entry_at(ii);
-            if (le->get_val_type() == log_val_type::app_log) {
-                last_app_log = le;
-                break;
-            }
-        }
-        leader_sigs_[last_app_log->get_term()] = this->get_signature(*last_app_log->serialize_sig());
-
-    }
+    dump_leader_signatures(std::numeric_limits<ulong>::max()); // FMARK: RN: immediately write leader signature to file
     p_tr("  FOLLOWER\n");
     {
         std::lock_guard<std::mutex> ll(cli_lock_);
@@ -1964,10 +1952,10 @@ ulong raft_server::get_election_list_max() {
 
 void raft_server::dump_leader_signatures(ulong term) {
 
-    if (role_ == srv_role::leader) {
-        // record the last leader signature
-        // find the last app_log type log entry
-        ptr<log_entry> last_app_log;
+    ptr<log_entry> last_app_log;
+
+    bool term_out_of_range = leader_sigs_.find(term) == leader_sigs_.end();
+    if (term_out_of_range || role_ == srv_role::leader) {
         for (ulong ii = log_store_->next_slot() - 1; ii > 0; --ii) {
             ptr<log_entry> le = log_store_->entry_at(ii);
             if (le->get_val_type() == log_val_type::app_log) {
@@ -1975,13 +1963,22 @@ void raft_server::dump_leader_signatures(ulong term) {
                 break;
             }
         }
-        leader_sigs_[last_app_log->get_term()] = this->get_signature(*last_app_log->serialize_sig());
+
+        if (!last_app_log) {
+            p_er("no app_log type log entries, cannot save leader signatures");
+            return;
+        }
+
+        if (term_out_of_range) {
+            term = last_app_log->get_term();
+        }
+
+        if (role_ == srv_role::leader) {
+            // record the last leader signature
+            leader_sigs_[last_app_log->get_term()] = this->get_signature(*last_app_log->serialize_sig());
+        }
     }
 
-    if (leader_sigs_.find(term) == leader_sigs_.end()) {
-        p_db("no leader signatures for term %zu", term);
-        return;
-    }
 
     std::string dir = ctx_->get_params()->forensics_output_path_;
     if (!boost::filesystem::exists(dir)) {
