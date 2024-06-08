@@ -1,11 +1,13 @@
 import struct
 import os
 import sys
+import base64
+from datetime import datetime, timedelta
 
 
 class leader_certificate:
     def __init__(self, buffer):
-        print(buffer.hex())
+        # print(buffer.hex())
         self.num_servers, self.term, self.index, nsig = struct.unpack(
             "<iQQi", buffer[:24]
         )
@@ -13,7 +15,7 @@ class leader_certificate:
         self.certs = {}
         for i in range(nsig):
             id, sig_len = struct.unpack("ii", buffer[:8])
-            self.certs[id] = buffer[8 : 8 + sig_len]
+            self.certs[id] = base64.b64encode(buffer[8 : 8 + sig_len]).decode("utf-8")
             buffer = buffer[8 + sig_len :]
 
         # read request
@@ -24,6 +26,9 @@ class leader_certificate:
         return self.request
 
     def get_request_string(self):
+        if len(self.request) < 40:
+            return "No request for this term."
+        
         last_log_term, last_log_idx, commit_idx, term, type_, src = struct.unpack(
             "<QQQQii", self.request[:40]
         )
@@ -38,11 +43,12 @@ class election_list:
         self.el = {}
         with open(filename, "rb") as file:
             while True:
-                size_t_size = struct.unpack("B", file.read(1))[0]
+                size_t_size_byte = file.read(1)
+                if not size_t_size_byte:
+                    break
+                size_t_size = struct.unpack("B", size_t_size_byte)[0]
                 size_t_format = "Q" if size_t_size == 8 else "I"
                 key_bytes = file.read(size_t_size)
-                if not key_bytes:
-                    break
                 key = struct.unpack(size_t_format, key_bytes)[0]
 
                 # Read the length of the serialized data (size_t)
@@ -58,18 +64,23 @@ class election_list:
         return self.el
 
     def __str__(self):
-        s = f'{"Term":<8} {"Request":<80} {"Voter signatures":<20}\n'
+        s = f'{"Term":<8} {"Request":<90} {"Voter signatures":<20}\n'
         for k, v in self.el.items():
-            s += f"{k:<8} {v.get_request_string():<80} {str(v.get_certs()):<20}\n"
+            s += f"{k:<8} {v.get_request_string():<90} {str(v.get_certs()):<20}\n"
         return s
 
 
 if __name__ == "__main__":
     # Example usage
     for file in os.listdir(sys.argv[1]):
-        try:
-            print(f"File: {file}")
-            el = election_list(f"{sys.argv[1]}/{file}")
-            print(el)
-        except:
-            pass
+        if not file.startswith("el"):
+            continue
+        
+        parts = file.split('_')
+        timestamp = int(parts[1])
+        date_time = datetime(1970, 1, 1) + timedelta(microseconds=timestamp)
+        peer_number = parts[2].split('.')[0][1:]  # removes 'p' from 'p1' and '.dat'
+        
+        print(f"File: {file}, Timestamp: {date_time}, Peer: {peer_number}")
+        el = election_list(f"{sys.argv[1]}/{file}")
+        print(el)
