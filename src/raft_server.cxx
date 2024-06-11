@@ -522,7 +522,7 @@ void raft_server::shutdown() {
     if (flag_use_leader_sig()) {
         // FMARK: save leader signature to file
         p_in("saving unsaved leader signature to file");
-        dump_leader_signatures(state_->get_term());
+        dump_leader_signatures();
     }
 
     p_in("reset all pointers.");
@@ -1339,7 +1339,7 @@ bool raft_server::request_leadership() {
 
 void raft_server::become_follower() {
     // stop hb for all peers
-    dump_leader_signatures(std::numeric_limits<ulong>::max()); // FMARK: RN: immediately write leader signature to file
+    dump_leader_signatures(); // FMARK: RN: immediately write leader signature to file
     p_tr("  FOLLOWER\n");
     {
         std::lock_guard<std::mutex> ll(cli_lock_);
@@ -1370,7 +1370,7 @@ void raft_server::become_follower() {
 bool raft_server::update_term(ulong term) {
     if (term > state_->get_term()) {
         ulong last_term = state_->get_term();
-        dump_leader_signatures(last_term);
+        dump_leader_signatures();
         state_->set_term(term);
         state_->set_voted_for(-1);
         state_->allow_election_timer(true);
@@ -1950,35 +1950,15 @@ ulong raft_server::get_election_list_max() {
     return get_current_params().election_list_max_;
 }
 
-void raft_server::dump_leader_signatures(ulong term) {
+void raft_server::dump_leader_signatures() {
+    dump_leader_signatures(quick_commit_index_, log_store_->entry_at(quick_commit_index_)->get_term());
+}
 
-    ptr<log_entry> last_app_log;
-
-    bool term_out_of_range = leader_sigs_.find(term) == leader_sigs_.end();
-    if (term_out_of_range || role_ == srv_role::leader) {
-        for (ulong ii = log_store_->next_slot() - 1; ii > 0; --ii) {
-            ptr<log_entry> le = log_store_->entry_at(ii);
-            if (le->get_val_type() == log_val_type::app_log) {
-                last_app_log = le;
-                break;
-            }
-        }
-
-        if (!last_app_log) {
-            p_er("no app_log type log entries, cannot save leader signatures");
-            return;
-        }
-
-        if (term_out_of_range) {
-            term = last_app_log->get_term();
-        }
-
-        if (role_ == srv_role::leader) {
-            // record the last leader signature
-            leader_sigs_[last_app_log->get_term()] = this->get_signature(*last_app_log->serialize_sig());
-        }
+void raft_server::dump_leader_signatures(unsigned long long commit_index, ulong term) {
+    if (last_committed_log_sig_ == nullptr) {
+        p_db("no leader signature to save");
+        return;
     }
-
 
     std::string dir = ctx_->get_params()->forensics_output_path_;
     if (!boost::filesystem::exists(dir)) {
@@ -1996,7 +1976,8 @@ void raft_server::dump_leader_signatures(ulong term) {
     uint8_t size_t_size = sizeof(size_t);
     file.write(reinterpret_cast<const char*>(&size_t_size), 1); // Write system size_t size to file first
     file.write(reinterpret_cast<const char*>(&term), sizeof(ulong));
-    ptr<buffer> leader_sig = leader_sigs_[term];
+    file.write(reinterpret_cast<const char*>(&commit_index), sizeof(unsigned long long));
+    ptr<buffer> leader_sig = last_committed_log_sig_;
     size_t len = leader_sig->size();
     file.write(reinterpret_cast<const char*>(&len), sizeof(size_t));
     file.write(reinterpret_cast<const char*>(leader_sig->data_begin()), len);

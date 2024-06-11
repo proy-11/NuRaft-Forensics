@@ -847,7 +847,8 @@ protected:
     std::string get_election_list_file_name(const std::string& data_dir);
     std::string get_leader_sig_file_name(const std::string& data_dir);
 
-    void dump_leader_signatures(ulong term);
+    void dump_leader_signatures();
+    void dump_leader_signatures(unsigned long long commit_index, ulong term);
 
     /**
      * @brief check whether the term has been verified with a valid leader certificate.
@@ -931,7 +932,8 @@ protected:
     std::mutex hash_cache_lock_;
 
     // FMARK: RN: leader signatures
-    std::map<int32, ptr<buffer>> leader_sigs_;
+    // std::map<int32, ptr<buffer>> leader_sigs_;
+    ptr<buffer> last_committed_log_sig_;
 
     /**
      * (Read-only)
