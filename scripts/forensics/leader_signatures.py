@@ -18,7 +18,8 @@ class leader_signatures:
                 size_t_format = "Q" if size_t_size == 8 else "I"
                 key_bytes = file.read(size_t_size)
                 key = struct.unpack(size_t_format, key_bytes)[0]
-
+                idx = struct.unpack("Q", file.read(8))[0]
+                
                 # Read the length of the serialized data (size_t)
                 len_bytes = file.read(size_t_size)
                 length = struct.unpack(size_t_format, len_bytes)[0]
@@ -26,12 +27,12 @@ class leader_signatures:
                 # Read the serialized data
                 serialized_data = file.read(length)
 
-                self.ls.append((key, base64.b64encode(serialized_data).decode("utf-8")))
+                self.ls.append((key, idx, base64.b64encode(serialized_data).decode("utf-8")))
 
     def __str__(self):
-        s = f'{"Term":<8} {"Leader Sigs":<90}\n'
-        for k, v in self.ls:
-            s += f"{k:<8} {v:<90}\n"
+        s = f'{"Term":<8} {"Idx":<10} {"Leader Sigs":<90}\n'
+        for k, idx, v in self.ls:
+            s += f"{k:<8} {idx:<10} {v:<90}\n"
         return s
 
 
