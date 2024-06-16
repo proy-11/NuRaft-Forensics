@@ -519,7 +519,7 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
         // FMARK: RN: new leader sig
         if (flag_use_leader_sig()) {
             // FMARK: RN: shared the leader signatures of the last committed log entry instead of the last shared log entry
-            if (last_committed_log_sig_local != nullptr) {
+            if (last_committed_log_sig_local != nullptr && log_store_->term_at(commit_idx) == term) {
                 // insert the leader signature for the last app_log entry into v
                 ptr<log_entry> leader_sig_le =
                     cs_new<log_entry>(0, last_committed_log_sig_local, log_val_type::leader_sig);
