@@ -66,12 +66,13 @@ class election_list:
     def __str__(self):
         s = f'{"Term":<8} {"Request":<90} {"Voter signatures":<20}\n'
         for k, v in self.el.items():
-            s += f"{k:<8} {v.get_request_string():<90} {str(v.get_certs()):<20}\n"
+            s += f"{k:<8} {v.get_request_string():<90} {str(sorted(v.get_certs().items())):<20}\n"
         return s
 
 
 if __name__ == "__main__":
     # Example usage
+    el_list = []
     for file in os.listdir(sys.argv[1]):
         if not file.startswith("el"):
             continue
@@ -83,4 +84,10 @@ if __name__ == "__main__":
         
         print(f"File: {file}, Timestamp: {date_time}, Peer: {peer_number}")
         el = election_list(f"{sys.argv[1]}/{file}")
+        el_list.append(str(el))
         print(el)
+    if all(i == el_list[0] for i in el_list):
+        print("All election lists are the same.")
+    else:
+        print("Election lists are different.")
+

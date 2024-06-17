@@ -515,21 +515,29 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
                  tobase64(*hash_ptr_buf).c_str(),
                  p.get_id());
         }
+    }
 
-        // FMARK: RN: new leader sig
-        if (flag_use_leader_sig()) {
-            // FMARK: RN: shared the leader signatures of the last committed log entry instead of the last shared log entry
-            if (last_committed_log_sig_local != nullptr && log_store_->term_at(commit_idx) == term) {
-                // insert the leader signature for the last app_log entry into v
-                ptr<log_entry> leader_sig_le =
-                    cs_new<log_entry>(0, last_committed_log_sig_local, log_val_type::leader_sig);
-                v.push_back(leader_sig_le);
-                p_in("leader signature on log %zu sent to peer %d", commit_idx, p.get_id());
-            } else {
-                p_in("leader signature not sent to peer %d", p.get_id());
-            }
+    ulong last_committed_app_log_idx = commit_idx;
+    while (log_store_->entry_at(last_committed_app_log_idx)->get_val_type()
+            != log_val_type::app_log && last_committed_app_log_idx > 0) {
+        last_committed_app_log_idx--;
+    }
+
+    // FMARK: RN: new leader sig
+    if (flag_use_leader_sig()) {
+        // FMARK: RN: shared the leader signatures of the last committed log entry instead of the last shared log entry
+        if (last_committed_log_sig_local != nullptr && log_store_->term_at(last_committed_app_log_idx) == term) {
+            // insert the leader signature for the last app_log entry into v
+            ptr<log_entry> leader_sig_le =
+                cs_new<log_entry>(0, last_committed_log_sig_local, log_val_type::leader_sig);
+            v.push_back(leader_sig_le);
+            p_in("leader signature on log %zu sent to peer %d", commit_idx, p.get_id());
+        } else {
+            p_in("leader signature not sent to peer %d", p.get_id());
         }
-
+    }
+    
+    if (log_entries) {
         v.insert(v.end(), log_entries->begin(), log_entries->end());
         // FMARK: TODO: correctness
         if (flag_use_cc() && commit_cert_) {
@@ -729,10 +737,10 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
     size_t log_size = req.log_entries().size();
     // ptr<timer_t> timer = cs_new<timer_t>();
 
+    ulong log_idx = req.get_last_log_idx();
+    ulong prev_idx = log_idx;
+    int64_t conflict;
     if (log_size > 0) {
-        ulong log_idx = req.get_last_log_idx();
-        ulong prev_idx = log_idx;
-        int64_t conflict;
 
         if (flag_use_ptr() && hash_ptr != nullptr) {
             // timer->start_timer();
@@ -756,28 +764,30 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         } else {
             p_in("hash pointer is not used/received");
         }
+    }
 
-        if (flag_use_leader_sig() && leader_sig != nullptr) {
-            if (last_committed_app_log == nullptr) {
-                p_wn("no app_log entry found in comitted log_entries, but leader signature provided (must be a bug!)");
-            } else {
-                if ((conflict = check_leader_sig(last_committed_app_log, leader_sig, req.get_src())) == false) {
-                    p_wn("deny illegal signature of log entry: item %zu",
-                        req.get_term());
-                    resp->set_result_code(cmd_result_code::BAD_LEADER_SIG);
-                    return resp;
-                } else {
-                    p_db("req log idx %zu -- %zu passed leader sig checks",
-                        log_idx + 1,
-                        log_idx + log_size);
-                    last_committed_log_sig_ = leader_sig;
-                    dump_leader_signatures(req.get_commit_idx(), req.get_term());
-                }
-            }
+    if (flag_use_leader_sig() && leader_sig != nullptr) {
+        if (last_committed_app_log == nullptr) {
+            p_wn("Node fall behind, leader signature is not verified");
         } else {
-            p_in("leader signature is not used/received");
+            if ((conflict = check_leader_sig(last_committed_app_log, leader_sig, req.get_src())) == false) {
+                p_wn("deny illegal signature of log entry: item %zu",
+                    req.get_term());
+                resp->set_result_code(cmd_result_code::BAD_LEADER_SIG);
+                return resp;
+            } else {
+                p_db("req log idx %zu -- %zu passed leader sig checks",
+                    log_idx + 1,
+                    log_idx + log_size);
+                last_committed_log_sig_ = leader_sig;
+                dump_leader_signatures(req.get_commit_idx(), req.get_term());
+            }
         }
-
+    } else {
+        p_in("leader signature is not used/received");
+    }
+    
+    if (log_size > 0) {
         if (flag_use_cc()) {
             auto cc = req.get_certificate();
             if (cc) {

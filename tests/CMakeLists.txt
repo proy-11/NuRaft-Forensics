@@ -114,6 +114,22 @@ if(Boost_FOUND)
                           ${LIBRARIES})
 endif()
 
+# === Forensics Test ===
+if(Boost_FOUND)
+    include_directories(${Boost_INCLUDE_DIRS})
+    add_executable(raft_forensics_bench
+                forensics_test/raft_forensics_bench.cxx
+                ${EXAMPLES_SRC}/logger.cc
+                ${EXAMPLES_SRC}/in_memory_log_store.cxx)
+    target_include_directories(raft_forensics_bench PRIVATE bench)
+    add_dependencies(raft_forensics_bench
+                    static_lib)
+    target_link_libraries(raft_forensics_bench
+                          ${Boost_LIBRARIES}
+                          ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+                        #   ${LIBCRYPTOPP_LIBRARIES}
+                          ${LIBRARIES})
+endif()
 
 # === Other modules ===
 add_executable(buffer_test

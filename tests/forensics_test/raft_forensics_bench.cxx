@@ -39,8 +39,15 @@ using raft_result = cmd_result<ptr<buffer>>;
 
 class dummy_sm : public state_machine {
 public:
-    dummy_sm()
-        : last_commit_idx_(0) {}
+    dummy_sm(std::string output_path, ulong node_id)
+        : last_commit_idx_(0),
+          output_path_(output_path),
+          node_id_(node_id),
+          svr_(nullptr) {
+                if (!boost::filesystem::exists(output_path)) {
+                    boost::filesystem::create_directory(output_path);
+                }
+          }
     ~dummy_sm() {}
 
     ptr<buffer> commit(const ulong log_idx, buffer& data) {
@@ -48,6 +55,18 @@ public:
         ret->put(log_idx);
         ret->pos(0);
         last_commit_idx_ = log_idx;
+
+        // writing log to file
+        std::ofstream file(output_path_ + "/log_entries_p" + std::to_string(node_id_) + ".dat", std::ios::binary | std::ios::app);
+        file.write(reinterpret_cast<const char*>(&log_idx), sizeof(ulong));
+        size_t len = data.size();
+        auto term = svr_->get_log_term(log_idx);
+        auto type = static_cast<byte>(svr_->get_log_store()->entry_at(log_idx)->get_val_type());
+        file.write(reinterpret_cast<const char*>(&term), sizeof(ulong));
+        file.write(reinterpret_cast<const char*>(&type), 1);
+        file.write(reinterpret_cast<const char*>(&len), sizeof(size_t));
+        file.write(reinterpret_cast<const char*>(data.data_begin()), len);
+
         return ret;
     }
 
@@ -95,10 +114,17 @@ public:
         when_done(ret, except);
     }
 
+    void set_server(ptr<raft_server> svr) {
+        svr_ = svr;
+    }
+
 private:
     ptr<snapshot> last_snapshot_;
     std::mutex last_snapshot_lock_;
     uint64_t last_commit_idx_;
+    std::string output_path_;
+    ulong node_id_;
+    ptr<raft_server> svr_;
 };
 
 struct bench_config {
@@ -172,12 +198,12 @@ int init_raft(server_stuff& stuff, int complexity) {
     // std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
 
     _msg("Writing log to %s\n", log_file_name.c_str());
-    stuff.log_wrap_ = cs_new<logger_wrapper>(log_file_name, -1);
+    stuff.log_wrap_ = cs_new<logger_wrapper>(log_file_name, 5);
     stuff.raft_logger_ = stuff.log_wrap_;
 
     // Create state manager and state machine.
     stuff.smgr_ = cs_new<TestMgr>(stuff.server_id_, stuff.endpoint_);
-    stuff.sm_ = cs_new<dummy_sm>();
+    stuff.sm_ = cs_new<dummy_sm>(global_workdir.string(), stuff.server_id_);
 
     // Start ASIO service.
     asio_service::options asio_opt;
@@ -203,6 +229,7 @@ int init_raft(server_stuff& stuff, int complexity) {
     params.client_req_timeout_ = 4000;
     params.return_method_ = raft_params::blocking;
     params.forensics_output_path_ = global_workdir.string() + "/forensics_out";
+    params.auto_forwarding_ = true;
 
     if (complexity < 3) {
         params.use_commitment_cert_ = false;
@@ -222,6 +249,8 @@ int init_raft(server_stuff& stuff, int complexity) {
                                scheduler,
                                params);
     stuff.raft_instance_ = cs_new<raft_server>(ctx);
+
+    dynamic_cast<dummy_sm*>(stuff.sm_.get())->set_server(stuff.raft_instance_); // FMARK: let sm know its server
 
     // Listen.
     stuff.asio_listener_->listen(stuff.raft_instance_);
@@ -294,8 +323,9 @@ int submit_request(worker_params* args, ptr<buffer> msg) {
     ptr<raft_result> ret = args->stuff_.raft_instance_->append_entries({msg});
     global_lat.addLatency("rep", timer.getTimeUs());
 
-    CHK_TRUE(ret->get_accepted());
-    CHK_NONNULL(ret->get());
+    // FMARK: DO NOT CHECK THE RESULT AS IT MAY FAIL DUE TO LEADER BEING FROZEN.
+    // CHK_TRUE(ret->get_accepted());
+    // CHK_NONNULL(ret->get());
 
     {
         std::lock_guard<std::mutex> l(args->wg_lock_);

@@ -34,10 +34,17 @@ class leader_signatures:
         for k, idx, v in self.ls:
             s += f"{k:<8} {idx:<10} {v:<90}\n"
         return s
+    
+    def get_last_of_each_term(self):
+        last_of_each_term = {}
+        for k, idx, v in self.ls:
+            last_of_each_term[k] = (idx, v)
+        return last_of_each_term
 
 
 if __name__ == "__main__":
     # Example usage
+    ls_list = []
     for file in os.listdir(sys.argv[1]):
         if not file.startswith("ls"):
             continue
@@ -48,5 +55,10 @@ if __name__ == "__main__":
         peer_number = parts[2].split('.')[0][1:]  # removes 'p' from 'p1' and '.dat'
         
         print(f"File: {file}, Timestamp: {date_time}, Peer: {peer_number}")
-        el = leader_signatures(f"{sys.argv[1]}/{file}")
-        print(el)
+        ls = leader_signatures(f"{sys.argv[1]}/{file}")
+        ls_list.append(ls.get_last_of_each_term())
+        print(ls)
+    if all(i == ls_list[0] for i in ls_list):
+        print("All leader sigs of all term are the same.")
+    else:
+        print("Leader sigs are different.")
