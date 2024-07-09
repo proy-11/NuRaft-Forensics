@@ -13,11 +13,11 @@ complexity=3
 workdir="$(dirname $0)/../../test_output/raft-$branch_name-lv$complexity-$payload-$datetime/$freq"
 
 # 0s launched
-# 5s follower freeze
-# 25s follower comes back
-# 35s leader freeze
-# 55s leader comes back
-# 65s stop and check disk file validity 
+# 10s follower freeze
+# 30s follower comes back
+# 40s leader freeze
+# 60s leader comes back
+# 70s stop and check disk file validity 
 
 dur_1=10
 dur_2=20
