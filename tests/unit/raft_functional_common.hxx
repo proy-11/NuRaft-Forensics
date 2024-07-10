@@ -297,6 +297,19 @@ public:
         return 0;
     }
 
+    ulong isCommitted(const int msg) {
+        std::lock_guard<std::mutex> ll(dataLock);
+        for (auto& entry: commits) {
+            ptr<buffer> bb = entry.second;
+            bb->pos(0);
+            auto num = bb->get_int();
+            if (num == msg) {
+                return entry.first;
+            }
+        }
+        return 0;
+    }
+
     ptr<buffer> getData(ulong log_idx) const {
         std::lock_guard<std::mutex> ll(dataLock);
         auto entry = commits.find(log_idx);
