@@ -95,6 +95,7 @@ ptr<resp_msg> FakeNetwork::gotMsg(ptr<req_msg>& msg) {
 }
 
 bool FakeNetwork::execReqResp(const std::string& endpoint) {
+    bool msg_exchanged = false;
     if (endpoint.empty()) {
         // Do the same thing to all.
 
@@ -113,6 +114,7 @@ bool FakeNetwork::execReqResp(const std::string& endpoint) {
         for (auto& entry: clients_clone) {
             const std::string& cur_endpoint = entry.first;
             bool ret = delieverReqTo(cur_endpoint);
+            msg_exchanged |= ret;
             if (!ret) continue;
         }
 
@@ -124,9 +126,10 @@ bool FakeNetwork::execReqResp(const std::string& endpoint) {
         for (auto& entry: clients_clone) {
             const std::string& cur_endpoint = entry.first;
             bool ret = handleRespFrom(cur_endpoint);
+            msg_exchanged |= ret;
             if (!ret) continue;
         }
-        return true;
+        return msg_exchanged;
     }
 
     bool ret = delieverReqTo(endpoint);

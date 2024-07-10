@@ -11,10 +11,11 @@
 namespace nuraft {
 class certificate {
 public:
-    certificate(int num_servers = 0, ulong term = 0, ulong index = 0)
+    certificate(int num_servers = 0, ulong term = 0, ulong index = 0, int quorum_ratio_reciprocal = 2)
         : num_servers_(num_servers)
         , term_(term)
-        , index_(index) {}
+        , index_(index)
+        , quorum_ratio_reciprocal_ (quorum_ratio_reciprocal) {}
     ~certificate() {}
 
     ptr<certificate> clone() {
@@ -34,7 +35,7 @@ public:
     bool insert(int32 id, ptr<buffer> buf) {
         std::lock_guard<std::mutex> guard(mutex_);
         signatures_[id] = (buf);
-        return 2 * (int32)signatures_.size() > num_servers_;
+        return quorum_ratio_reciprocal_ == 1 ? (int32)signatures_.size() == num_servers_ : quorum_ratio_reciprocal_ * (int32)signatures_.size() > num_servers_;
     }
 
     inline int32 get_num_servers() { return num_servers_; }
@@ -100,6 +101,7 @@ private:
     std::unordered_map<int32, ptr<buffer>> signatures_;
 
     std::mutex mutex_;
+    int quorum_ratio_reciprocal_;
 };
 
 } // namespace nuraft
