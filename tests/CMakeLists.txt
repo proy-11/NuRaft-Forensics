@@ -101,6 +101,7 @@ target_link_libraries(asio_service_test
 if(Boost_FOUND)
     message(STATUS "tests: Boost found")
     include_directories(${Boost_INCLUDE_DIRS})
+    include_directories(forensics_test/attack_utils)
     add_executable(raft_bench
                 bench/raft_bench.cxx
                 ${EXAMPLES_SRC}/logger.cc
@@ -116,7 +117,6 @@ endif()
 
 # === Forensics Test ===
 if(Boost_FOUND)
-    include_directories(${Boost_INCLUDE_DIRS})
     add_executable(raft_forensics_bench
                 forensics_test/raft_forensics_bench.cxx
                 ${EXAMPLES_SRC}/logger.cc
@@ -125,6 +125,22 @@ if(Boost_FOUND)
     add_dependencies(raft_forensics_bench
                     static_lib)
     target_link_libraries(raft_forensics_bench
+                          ${Boost_LIBRARIES}
+                          ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
+                        #   ${LIBCRYPTOPP_LIBRARIES}
+                          ${LIBRARIES})
+endif()
+
+# === Split Brain Attack Test ===
+if(Boost_FOUND)
+    add_executable(split_brain_attack_test
+                forensics_test/split_brain_test.cxx
+                unit/fake_network.cxx
+                ${EXAMPLES_SRC}/logger.cc
+                ${EXAMPLES_SRC}/in_memory_log_store.cxx)
+    add_dependencies(split_brain_attack_test
+                    static_lib)
+    target_link_libraries(split_brain_attack_test
                           ${Boost_LIBRARIES}
                           ${BUILD_DIR}/${LIBRARY_OUTPUT_NAME}
                         #   ${LIBCRYPTOPP_LIBRARIES}

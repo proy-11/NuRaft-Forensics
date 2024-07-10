@@ -15,6 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 **************************************************************************/
 
+#include "mal_raft_server.hxx"
 #include "raft_functional_common.hxx"
 
 #include "event_awaiter.h"
@@ -48,8 +49,11 @@ public:
         if (fNet) fNet->shutdown();
     }
 
-    void initServer(raft_params* given_params = nullptr,
-                    const raft_server::init_options& opt = raft_server::init_options()) {
+    template <class Raft_Server_Type = raft_server>
+    void
+    initServer(raft_params* given_params = nullptr,
+               const raft_server::init_options& opt = Raft_Server_Type::init_options(),
+               std::string log_file_name = "") {
         fNet = cs_new<FakeNetwork>(myEndpoint, fBase);
         fBase->addNetwork(fNet);
 
@@ -57,8 +61,10 @@ public:
         sMgr = cs_new<TestMgr>(myId, myEndpoint);
         sm = cs_new<TestSm>(fBase->getLogger());
 
-        std::string log_file_name = "./srv" + std::to_string(myId) + ".log";
-        myLogWrapper = cs_new<logger_wrapper>(log_file_name, 1);
+        myLogWrapper = cs_new<logger_wrapper>(
+            log_file_name == "" ? "./srv" + std::to_string(myId) + ".log"
+                                : log_file_name + "/srv" + std::to_string(myId) + ".log",
+            5);
         myLog = myLogWrapper;
 
         listener = fNet;
@@ -76,16 +82,17 @@ public:
         } else {
             params = *given_params;
         }
-        params.use_commitment_cert_ = false;
-        params.use_leader_sig_ = false;
-        params.use_chain_ptr_ = false;
+        // params.use_commitment_cert_ = false;
+        // params.use_leader_sig_ = false;
+        // params.use_chain_ptr_ = false;
         params.private_key = "";
+        params.forensics_output_path_ = log_file_name + "/forensics_out";
 
         // For deterministic test, we should not use BG thread.
         params.use_bg_thread_for_urgent_commit_ = false;
 
         ctx = new context(sMgr, sm, listener, myLog, rpcCliFactory, scheduler, params);
-        raftServer = cs_new<raft_server>(ctx, opt);
+        raftServer = cs_new<Raft_Server_Type>(ctx, opt);
     }
 
     void free() {
@@ -199,6 +206,28 @@ static INT_UNUSED launch_servers(const std::vector<RaftPkg*>& pkgs,
     for (size_t ii = 0; ii < num_srvs; ++ii) {
         RaftPkg* ff = pkgs[ii];
         ff->initServer(custom_params, opt);
+        ff->fNet->listen(ff->raftServer);
+        ff->fTimer->invoke(timer_task_type::election_timer);
+    }
+    return 0;
+}
+
+static INT_UNUSED launch_servers_malicious(const std::vector<RaftPkg*>& pkgs,
+                                           raft_params* custom_params = nullptr,
+                                           size_t malicious_id = 0,
+                                           std::string log_file = "") {
+    size_t num_srvs = pkgs.size();
+    CHK_GT(num_srvs, 0);
+
+    raft_server::init_options opt;
+    opt.raft_callback_ = cb_default;
+
+    for (size_t ii = 0; ii < num_srvs; ++ii) {
+        RaftPkg* ff = pkgs[ii];
+        if (ii == malicious_id)
+            ff->initServer<mal_raft_server>(custom_params, opt, log_file);
+        else
+            ff->initServer(custom_params, opt, log_file);
         ff->fNet->listen(ff->raftServer);
         ff->fTimer->invoke(timer_task_type::election_timer);
     }

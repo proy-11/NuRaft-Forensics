@@ -1855,7 +1855,8 @@ int32 raft_server::validate_commitment_certificate(ptr<certificate> cert,
 bool raft_server::push_new_cert_signature(ptr<buffer> sig,
                                           int32 pid,
                                           ulong term,
-                                          ulong index) {
+                                          ulong index,
+                                          int quorum_ratio_reciprocal) {
     auto current_commit_index = quick_commit_index_.load();
     if (index <= current_commit_index) {
         p_db("received a stale signature of index %zu (current committed %zu) from peer "
@@ -1872,7 +1873,7 @@ bool raft_server::push_new_cert_signature(ptr<buffer> sig,
          term);
     auto it = working_certs_.find(index);
     if (it == working_certs_.end()) {
-        auto new_cert = cs_new<certificate>(config_->get_servers().size(), term, index);
+        auto new_cert = cs_new<certificate>(config_->get_servers().size(), term, index, quorum_ratio_reciprocal);
         new_cert->insert(pid, sig);
         new_cert->insert(id_,
                          get_signature(*log_store_->entry_at(index)->serialize_sig()));

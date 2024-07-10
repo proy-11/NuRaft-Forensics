@@ -731,7 +731,7 @@ protected:
     void request_append_entries();
     bool request_append_entries(ptr<peer> p);
     void handle_peer_resp(ptr<resp_msg>& resp, ptr<rpc_exception>& err);
-    void handle_append_entries_resp(resp_msg& resp);
+    virtual void handle_append_entries_resp(resp_msg& resp);
     void handle_install_snapshot_resp(resp_msg& resp);
     void handle_install_snapshot_resp_new_member(resp_msg& resp);
     void handle_prevote_resp(resp_msg& resp);
@@ -747,7 +747,7 @@ protected:
     void handle_join_leave_rpc_err(msg_type t_msg, ptr<peer> p);
     void reset_srv_to_join();
     void reset_srv_to_leave();
-    ptr<req_msg> create_append_entries_req(peer& p);
+    virtual ptr<req_msg> create_append_entries_req(peer& p);
     ptr<req_msg>
     create_sync_snapshot_req(peer& p, ulong last_log_idx, ulong term, ulong commit_idx);
     bool check_snapshot_timeout(ptr<peer> pp);
@@ -802,7 +802,7 @@ protected:
     ptr<snapshot> get_last_snapshot() const;
     void set_last_snapshot(const ptr<snapshot>& new_snapshot);
 
-    ulong store_log_entry(ptr<log_entry>& entry, ulong index = 0);
+    virtual ulong store_log_entry(ptr<log_entry>& entry, ulong index = 0);
 
     // FMARK: crypto checks
     bool match_log_entry(std::vector<ptr<log_entry>>& entries,
@@ -814,7 +814,7 @@ protected:
     int32 validate_commitment_certificate(ptr<certificate> cert, ptr<log_entry> entry);
 
     // FMARK: certificate operations
-    bool push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term, ulong index);
+    bool push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term, ulong index, int quorum_ratio_reciprocal = 2);
 
     ptr<resp_msg> handle_out_of_log_msg(req_msg& req,
                                         ptr<custom_notification_msg> msg,

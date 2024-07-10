@@ -234,6 +234,7 @@ set(LIBRARIES
 # === Paths ===
 set(ROOT_SRC ${PROJECT_SOURCE_DIR}/src)
 set(EXAMPLES_SRC ${PROJECT_SOURCE_DIR}/examples)
+set(ATTACK_UTIL_SRC ${PROJECT_SOURCE_DIR}/tests/forensics_test/attack_utils)
 
 # === Copy script files ===
 file(COPY ${PROJECT_SOURCE_DIR}/scripts/test/runtests.sh
@@ -288,6 +289,7 @@ set(RAFT_CORE
     ${ROOT_SRC}/snapshot_sync_req.cxx
     ${ROOT_SRC}/srv_config.cxx
     ${ROOT_SRC}/stat_mgr.cxx
+    ${ATTACK_UTIL_SRC}/mal_raft_server.cxx
     )
 add_library(RAFT_CORE_OBJ OBJECT ${RAFT_CORE})
 
