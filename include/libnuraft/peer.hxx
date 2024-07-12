@@ -37,50 +37,10 @@ namespace nuraft {
 class snapshot;
 class peer {
 public:
-    peer(ptr<srv_config>& config, const context& ctx, timer_task<int32>::executor& hb_exec, ptr<logger>& logger)
-        : config_(config)
-        , scheduler_(ctx.scheduler_)
-        , rpc_(ctx.rpc_cli_factory_->create_client(config->get_endpoint()))
-        , current_hb_interval_(ctx.get_params()->heart_beat_interval_)
-        , hb_interval_(ctx.get_params()->heart_beat_interval_)
-        , rpc_backoff_(ctx.get_params()->rpc_failure_backoff_)
-        , max_hb_interval_(ctx.get_params()->max_hb_interval())
-        , next_log_idx_(0)
-        , next_batch_size_hint_in_bytes_(0)
-        , matched_idx_(0)
-        , busy_flag_(false)
-        , pending_commit_flag_(false)
-        , hb_enabled_(false)
-        , hb_task_(cs_new<timer_task<int32>, timer_task<int32>::executor&, int32>(
-              hb_exec, config->get_id(), timer_task_type::heartbeat_timer))
-        , snp_sync_ctx_(nullptr)
-        , lock_()
-        , long_pause_warnings_(0)
-        , network_recoveries_(0)
-        , manual_free_(false)
-        , rpc_errs_(0)
-        , last_sent_idx_(0)
-        , cnt_not_applied_(0)
-        , leave_requested_(false)
-        , hb_cnt_since_leave_(0)
-        , stepping_down_(false)
-        , reconn_scheduled_(false)
-        , reconn_backoff_(0)
-        , suppress_following_error_(false)
-        , abandoned_(false)
-        , rsv_msg_(nullptr)
-        , rsv_msg_handler_(nullptr)
-        , l_(logger)
-        , public_key(nullptr) {
-        reset_ls_timer();
-        reset_resp_timer();
-        reset_active_timer();
-
-        // FMARK: set public key if configured
-        if (config != nullptr) {
-            set_public_key(config->get_public_key());
-        }
-    }
+    peer(ptr<srv_config>& config,
+         const context& ctx,
+         timer_task<int32>::executor& hb_exec,
+         ptr<logger>& logger);
 
     __nocopy__(peer);
 
@@ -125,9 +85,17 @@ public:
 
     void set_next_log_idx(ulong idx) { next_log_idx_ = idx; }
 
-    int64 get_next_batch_size_hint_in_bytes() const { return next_batch_size_hint_in_bytes_; }
+    uint64_t get_last_accepted_log_idx() const { return last_accepted_log_idx_; }
 
-    void set_next_batch_size_hint_in_bytes(int64 batch_size) { next_batch_size_hint_in_bytes_ = batch_size; }
+    void set_last_accepted_log_idx(uint64_t to) { last_accepted_log_idx_ = to; }
+
+    int64 get_next_batch_size_hint_in_bytes() const {
+        return next_batch_size_hint_in_bytes_;
+    }
+
+    void set_next_batch_size_hint_in_bytes(int64 batch_size) {
+        next_batch_size_hint_in_bytes_ = batch_size;
+    }
 
     ulong get_matched_idx() const { return matched_idx_; }
 
@@ -150,7 +118,10 @@ public:
 
     ptr<snapshot_sync_ctx> get_snapshot_sync_ctx() const { return snp_sync_ctx_; }
 
-    void slow_down_hb() { current_hb_interval_ = std::min(max_hb_interval_, current_hb_interval_ + rpc_backoff_); }
+    void slow_down_hb() {
+        current_hb_interval_ =
+            std::min(max_hb_interval_, current_hb_interval_ + rpc_backoff_);
+    }
 
     void resume_hb_speed() { current_hb_interval_ = hb_interval_; }
 
@@ -250,12 +221,7 @@ public:
      *
      * @param pubkey public key
      */
-    void set_public_key(ptr<pubkey_intf> pubkey) {
-        if (pubkey == nullptr) {
-            return;
-        }
-        public_key = pubkey;
-    }
+    void set_public_key(ptr<pubkey_intf> pubkey);
 
     std::string get_public_key_str();
 
@@ -316,6 +282,11 @@ private:
      * Next log index of this server.
      */
     std::atomic<ulong> next_log_idx_;
+
+    /**
+     * The last log index accepted by this server.
+     */
+    std::atomic<uint64_t> last_accepted_log_idx_;
 
     /**
      * Hint of the next log batch size in bytes.

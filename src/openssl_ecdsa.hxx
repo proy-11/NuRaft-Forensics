@@ -5,8 +5,10 @@
 
 #include <boost/filesystem.hpp>
 #include <chrono>
+#include <map>
 #include <openssl/bio.h>
 #include <openssl/ec.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/obj_mac.h>
 #include <openssl/pem.h>
@@ -44,7 +46,8 @@ class seckey_t : public seckey_intf {
 public:
     seckey_t();
     seckey_t(const buffer& keybuf);
-    seckey_t(const std::string& filename);
+    // seckey_t(const std::string& filename);
+    seckey_t(std::string priv_key);
     virtual ~seckey_t();
 
     virtual ptr<buffer> tobuf();
@@ -69,8 +72,16 @@ ptr<buffer> create_hash(ptr<log_entry> le_, ulong height);
 
 ptr<buffer> create_hash(ptr<log_store> store_);
 
-bool check_hash(ptr<log_entry> appended, ptr<log_entry> latest, ulong height);
+// bool check_hash(ptr<log_entry> appended, ptr<log_entry> latest, ulong height);
+
+bool check_hash(std::vector<ptr<log_entry>>& entries,
+                ptr<buffer>& base_hash,
+                ptr<buffer> target_hash,
+                ulong starting_idx,
+                std::map<ulong, ptr<buffer>>& hash_map_to_update);
 
 bool check_hash(ptr<log_entry> appended, ptr<log_store> store_, ulong pos);
+
+ptr<buffer> create_hash(ptr<log_entry> new_entry, ptr<buffer> curr_ptr, ulong idx);
 } // namespace nuraft
 #endif

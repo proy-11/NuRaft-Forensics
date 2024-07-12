@@ -167,8 +167,12 @@ struct server_stuff {
 
 int init_raft(server_stuff& stuff, int complexity) {
     // Create logger for this server.
-    std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
-    stuff.log_wrap_ = cs_new<logger_wrapper>(log_file_name, 1);
+    std::string log_file_name =
+        global_workdir.string() + "/srv" + std::to_string(stuff.server_id_) + ".log";
+    // std::string log_file_name = "./srv" + std::to_string(stuff.server_id_) + ".log";
+
+    _msg("Writing log to %s\n", log_file_name.c_str());
+    stuff.log_wrap_ = cs_new<logger_wrapper>(log_file_name, -1);
     stuff.raft_logger_ = stuff.log_wrap_;
 
     // Create state manager and state machine.
@@ -198,6 +202,7 @@ int init_raft(server_stuff& stuff, int complexity) {
     params.snapshot_distance_ = 100000;
     params.client_req_timeout_ = 4000;
     params.return_method_ = raft_params::blocking;
+    params.forensics_output_path_ = global_workdir.string() + "/forensics_out";
 
     if (complexity < 3) {
         params.use_commitment_cert_ = false;
@@ -533,14 +538,16 @@ bench_config parse_config(int argc, char** argv) {
         exit(0);
     }
 
-    if (srv_id > 1) {
-        // Follower.
-        return bench_config(srv_id, my_endpoint, duration, complexity);
-    }
-
     iarg++;
     std::string workdir(argv[iarg]);
     global_workdir = workdir;
+
+    if (srv_id > 1) {
+        // Follower.
+        bench_config cfg = bench_config(srv_id, my_endpoint, duration, complexity);
+        cfg.workdir = workdir;
+        return cfg;
+    }
 
     ensure_dir(workdir);
 

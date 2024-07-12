@@ -38,13 +38,17 @@ public:
     const static int32 INIT_PRIORITY = 1;
 
     // FMARK: add pubkey
-    srv_config(int32 id, const std::string& endpoint, ptr<pubkey_intf> pubkey = nullptr)
+    srv_config(int32 id,
+               const std::string& endpoint,
+               ptr<pubkey_intf> pubkey = nullptr,
+               std::string private_key = "")
         : id_(id)
         , dc_id_(0)
         , endpoint_(endpoint)
         , learner_(false)
         , priority_(INIT_PRIORITY)
-        , public_key_(pubkey) {}
+        , public_key_(pubkey)
+        , private_key_string_(private_key) {}
 
     // FMARK: add pubkey
     srv_config(int32 id,
@@ -53,14 +57,16 @@ public:
                const std::string& aux,
                bool learner,
                int32 priority = INIT_PRIORITY,
-               ptr<pubkey_intf> pubkey = nullptr)
+               ptr<pubkey_intf> pubkey = nullptr,
+               std::string private_key = "")
         : id_(id)
         , dc_id_(dc_id)
         , endpoint_(endpoint)
         , aux_(aux)
         , learner_(learner)
         , priority_(priority)
-        , public_key_(pubkey) {}
+        , public_key_(pubkey)
+        , private_key_string_(private_key) {}
 
     __nocopy__(srv_config);
 
@@ -89,12 +95,13 @@ public:
     ptr<pubkey_intf> get_public_key() const { return public_key_; }
 
     // FMARK: set pubkey
-    void set_public_key(ptr<pubkey_intf> pubkey) {
-        if (pubkey == nullptr) {
-            return;
-        }
-        public_key_ = pubkey;
-    }
+    void set_public_key(ptr<pubkey_intf> pubkey);
+
+    ptr<seckey_intf> get_private_key() const { return private_key_; }
+
+    void set_private_key(ptr<seckey_intf> priv_key);
+
+    std::string get_private_key_string() { return private_key_string_; }
 
 private:
     /**
@@ -137,6 +144,10 @@ private:
      *
      */
     ptr<pubkey_intf> public_key_;
+
+    ptr<seckey_intf> private_key_;
+
+    std::string private_key_string_;
 };
 
 } // namespace nuraft

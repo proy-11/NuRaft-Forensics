@@ -71,7 +71,8 @@ void raft_server::request_append_entries() {
     // which calls `commit()` function.
     // We should call it here.
     if (peers_.size() == 0 || get_quorum_for_commit() == 0) {
-        p_tr("append entries requested for one node cluster or quorum size 1 (including leader)");
+        p_tr("append entries requested for one node cluster or quorum size 1 (including "
+             "leader)");
         commit(precommit_index_.load());
         return;
     }
@@ -82,7 +83,9 @@ void raft_server::request_append_entries() {
 }
 
 bool raft_server::request_append_entries(ptr<peer> p) {
-    p_tr("append entries requested for peer id: %d, next log idx: %llu", p->get_id(), p->get_next_log_idx());
+    p_tr("append entries requested for peer id: %d, next log idx: %llu",
+         p->get_id(),
+         p->get_next_log_idx());
     static timer_helper chk_timer(1000 * 1000);
 
     // Checking the validity of role first.
@@ -126,7 +129,8 @@ bool raft_server::request_append_entries(ptr<peer> p) {
                 ctx_->set_params(clone);
             }
 
-        } else if (num_not_responding_peers == 0 && num_stale_peers == 0 && params->custom_commit_quorum_size_ == 1) {
+        } else if (num_not_responding_peers == 0 && num_stale_peers == 0
+                   && params->custom_commit_quorum_size_ == 1) {
             // Recovered, both cases should be clear.
             p_wn("2-node cluster's follower is responding now, "
                  "restore quorum with default value");
@@ -139,7 +143,8 @@ bool raft_server::request_append_entries(ptr<peer> p) {
 
     bool need_to_reconnect = p->need_to_reconnect();
     int32 last_active_time_ms = p->get_active_timer_us() / 1000;
-    if (last_active_time_ms > params->heart_beat_interval_ * raft_server::raft_limits_.reconnect_limit_) {
+    if (last_active_time_ms
+        > params->heart_beat_interval_ * raft_server::raft_limits_.reconnect_limit_) {
         if (srv_to_leave_ && srv_to_leave_->get_id() == p->get_id()) {
             // We should not re-establish the connection to
             // to-be-removed server, as it will block removing it
@@ -200,7 +205,9 @@ bool raft_server::request_append_entries(ptr<peer> p) {
         if (msg) {
             // Clear the reserved message.
             p->set_rsv_msg(nullptr, nullptr);
-            p_in("found reserved message to peer %d, type %d", p->get_id(), msg->get_type());
+            p_in("found reserved message to peer %d, type %d",
+                 p->get_id(),
+                 msg->get_type());
 
         } else {
             // Normal message.
@@ -216,7 +223,8 @@ bool raft_server::request_append_entries(ptr<peer> p) {
 
         if (!p->is_manual_free()) {
             // Actual recovery.
-            if (p->get_long_puase_warnings() >= raft_server::raft_limits_.warning_limit_) {
+            if (p->get_long_puase_warnings()
+                >= raft_server::raft_limits_.warning_limit_) {
                 int32 last_ts_ms = p->get_ls_timer_us() / 1000;
                 p->inc_recovery_cnt();
                 p_wn("recovered from long pause to peer %d, %d warnings, "
@@ -248,8 +256,8 @@ bool raft_server::request_append_entries(ptr<peer> p) {
         //     p_wn("SEND REQ ENTRY %lld (%d): %s (%s)",
         //          k,
         //          entries[k]->get_val_type(),
-        //          tobase64(*create_hash(entries[k], k + msg->get_last_log_idx() + 1)).c_str(),
-        //          entries[k]->get_val_type() == log_val_type::app_log
+        //          tobase64(*create_hash(entries[k], k + msg->get_last_log_idx() +
+        //          1)).c_str(), entries[k]->get_val_type() == log_val_type::app_log
         //              ? msg->log_entries()[k]->get_prev_ptr() == nullptr
         //                    ? "null"
         //                    : tobase64(*entries[k]->get_prev_ptr()).c_str()
@@ -259,7 +267,8 @@ bool raft_server::request_append_entries(ptr<peer> p) {
         p->send_req(p, msg, m_handler);
         p->reset_ls_timer();
 
-        if (srv_to_leave_ && srv_to_leave_->get_id() == p->get_id() && msg->get_commit_idx() >= srv_to_leave_target_idx_
+        if (srv_to_leave_ && srv_to_leave_->get_id() == p->get_id()
+            && msg->get_commit_idx() >= srv_to_leave_target_idx_
             && !srv_to_leave_->is_stepping_down()) {
             // If this is the server to leave, AND
             // current request's commit index includes
@@ -290,7 +299,8 @@ bool raft_server::request_append_entries(ptr<peer> p) {
                  p->get_id(),
                  last_ts_ms);
 
-        } else if (p->get_long_puase_warnings() == raft_server::raft_limits_.warning_limit_) {
+        } else if (p->get_long_puase_warnings()
+                   == raft_server::raft_limits_.warning_limit_) {
             p_wn("long pause warning to %d is too verbose, "
                  "will suppress it from now",
                  p->get_id());
@@ -306,14 +316,15 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     ulong term(0L);
     ulong starting_idx(1L);
 
-    {
-        recur_lock(lock_);
-        starting_idx = log_store_->start_index();
-        cur_nxt_idx = precommit_index_ + 1;
-        commit_idx = quick_commit_index_;
-        term = state_->get_term();
-        p_in("Current next index of peer #%d: %llu (%llu)", p.get_id(), cur_nxt_idx, p.get_next_log_idx());
-    }
+    starting_idx = log_store_->start_index();
+    cur_nxt_idx = precommit_index_ + 1;
+    commit_idx = quick_commit_index_;
+    auto last_committed_log_sig_local = last_committed_log_sig_;
+    term = state_->get_term();
+    p_in("Current next index of peer #%d: %llu (%llu)",
+         p.get_id(),
+         cur_nxt_idx,
+         p.get_next_log_idx());
 
     {
         std::lock_guard<std::mutex> guard(p.get_lock());
@@ -327,7 +338,10 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
 
     if (last_log_idx >= cur_nxt_idx) {
         // LCOV_EXCL_START
-        p_er("Peer #%d's lastLogIndex is too large %llu v.s. %llu, ", p.get_id(), last_log_idx, cur_nxt_idx);
+        p_er("Peer #%d's lastLogIndex is too large %llu v.s. %llu, ",
+             p.get_id(),
+             last_log_idx,
+             cur_nxt_idx);
         ctx_->state_mgr_->system_exit(raft_err::N8_peer_last_log_idx_too_large);
         ::exit(-1);
         return ptr<req_msg>();
@@ -339,7 +353,10 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     // last_log_idx: last log index of replica (follower).
     // end_idx: if (cur_nxt_idx - last_log_idx) > max_append_size, limit it.
 
-    p_tr("last_log_idx: %d, starting_idx: %d, cur_nxt_idx: %d\n", last_log_idx, starting_idx, cur_nxt_idx);
+    p_tr("last_log_idx: %d, starting_idx: %d, cur_nxt_idx: %d\n",
+         last_log_idx,
+         starting_idx,
+         cur_nxt_idx);
 
     // Verify log index range.
     bool entries_valid = (last_log_idx + 1 >= starting_idx);
@@ -347,7 +364,8 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     // Read log entries. The underlying log store may have removed some log entries
     // causing some of the requested entries to be unavailable. The log store should
     // return nullptr to indicate such errors.
-    ulong end_idx = std::min(cur_nxt_idx, last_log_idx + 1 + ctx_->get_params()->max_append_size_);
+    ulong end_idx =
+        std::min(cur_nxt_idx, last_log_idx + 1 + ctx_->get_params()->max_append_size_);
 
     // NOTE: If this is a retry, probably the follower is down.
     //       Send just one log until it comes back
@@ -356,7 +374,10 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     ulong peer_last_sent_idx = p.get_last_sent_idx();
     if (last_log_idx + 1 == peer_last_sent_idx && last_log_idx + 2 < end_idx) {
         int32 cur_cnt = p.inc_cnt_not_applied();
-        p_db("last sent log (%zu) to peer %d is not applied, cnt %d", peer_last_sent_idx, p.get_id(), cur_cnt);
+        p_db("last sent log (%zu) to peer %d is not applied, cnt %d",
+             peer_last_sent_idx,
+             p.get_id(),
+             cur_cnt);
         if (cur_cnt >= 5) {
             ulong prev_end_idx = end_idx;
             end_idx = std::min(cur_nxt_idx, last_log_idx + 1 + 1);
@@ -370,7 +391,8 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     if ((last_log_idx + 1) >= cur_nxt_idx) {
         log_entries = ptr<std::vector<ptr<log_entry>>>();
     } else if (entries_valid) {
-        log_entries = log_store_->log_entries_ext(last_log_idx + 1, end_idx, p.get_next_batch_size_hint_in_bytes());
+        log_entries = log_store_->log_entries_ext(
+            last_log_idx + 1, end_idx, p.get_next_batch_size_hint_in_bytes());
         if (log_entries == nullptr) {
             p_wn("failed to retrieve log entries: %zu - %zu", last_log_idx + 1, end_idx);
             entries_valid = false;
@@ -386,7 +408,8 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
         // Modified by Jung-Sang Ahn (Oct 11 2017):
         // As `reserved_log` has been newly added, need to check snapshot
         // in addition to `starting_idx`.
-        if (snp_local && last_log_idx < starting_idx && last_log_idx < snp_local->get_last_log_idx()) {
+        if (snp_local && last_log_idx < starting_idx
+            && last_log_idx < snp_local->get_last_log_idx()) {
             p_db("send snapshot peer %d, peer log idx: %zu, my starting idx: %zu, "
                  "my log idx: %zu, last_snapshot_log_idx: %zu\n",
                  p.get_id(),
@@ -408,20 +431,26 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
              starting_idx);
 
         // Send out-of-log-range notification to this follower.
-        ptr<req_msg> req =
-            cs_new<req_msg>(term, msg_type::custom_notification_request, id_, p.get_id(), 0, last_log_idx, commit_idx);
+        ptr<req_msg> req = cs_new<req_msg>(term,
+                                           msg_type::custom_notification_request,
+                                           id_,
+                                           p.get_id(),
+                                           0,
+                                           last_log_idx,
+                                           commit_idx);
 
         // Out-of-log message.
         ptr<out_of_log_msg> ool_msg = cs_new<out_of_log_msg>();
         ool_msg->start_idx_of_leader_ = starting_idx;
 
         // Create a notification containing OOL message.
-        ptr<custom_notification_msg> custom_noti =
-            cs_new<custom_notification_msg>(custom_notification_msg::out_of_log_range_warning);
+        ptr<custom_notification_msg> custom_noti = cs_new<custom_notification_msg>(
+            custom_notification_msg::out_of_log_range_warning);
         custom_noti->ctx_ = ool_msg->serialize();
 
         // Wrap it using log_entry.
-        ptr<log_entry> custom_noti_le = cs_new<log_entry>(0, custom_noti->serialize(), log_val_type::custom);
+        ptr<log_entry> custom_noti_le =
+            cs_new<log_entry>(0, custom_noti->serialize(), log_val_type::custom);
 
         req->log_entries().push_back(custom_noti_le);
         return req;
@@ -431,7 +460,23 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     ulong adjusted_end_idx = end_idx;
     if (log_entries) adjusted_end_idx = last_log_idx + 1 + log_entries->size();
     if (adjusted_end_idx != end_idx) {
-        p_tr("adjusted end_idx due to batch size hint: %zu -> %zu", end_idx, adjusted_end_idx);
+        p_tr("adjusted end_idx due to batch size hint: %zu -> %zu",
+             end_idx,
+             adjusted_end_idx);
+    }
+
+    ptr<buffer> hash_ptr_buf = nullptr;
+    {
+        std::unique_lock<std::mutex> guard(hash_cache_lock_);
+        if (hash_cache_.find(adjusted_end_idx - 1) != hash_cache_.end()
+            && hash_cache_[adjusted_end_idx - 1] != nullptr) {
+            hash_ptr_buf = buffer::clone(*hash_cache_[adjusted_end_idx - 1]);
+            p_in("hash pointer (%s) found for idx %zu",
+                 tobase64(*hash_ptr_buf).c_str(),
+                 adjusted_end_idx - 1);
+        } else {
+            p_in("hash pointer not found for idx %zu", adjusted_end_idx - 1);
+        }
     }
 
     p_db("append_entries for %d with LastLogIndex=%llu, "
@@ -452,9 +497,46 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
         p_db("idx range: %zu-%zu", last_log_idx + 1, adjusted_end_idx - 1);
     }
 
-    ptr<req_msg> req(cs_new<req_msg>(
-        term, msg_type::append_entries_request, id_, p.get_id(), last_log_term, last_log_idx, commit_idx));
+    ptr<req_msg> req(cs_new<req_msg>(term,
+                                     msg_type::append_entries_request,
+                                     id_,
+                                     p.get_id(),
+                                     last_log_term,
+                                     last_log_idx,
+                                     commit_idx));
     std::vector<ptr<log_entry>>& v = req->log_entries();
+    if (log_entries) {
+        // FMARK: RN: use the first log entry to transmit hash pointer
+        if (flag_use_ptr() && hash_ptr_buf != nullptr) {
+            ptr<log_entry> ptr_msg_le =
+                cs_new<log_entry>(0, hash_ptr_buf, log_val_type::hash_ptr);
+            v.push_back(ptr_msg_le);
+            p_in("hash pointer (%s) sent to peer %d",
+                 tobase64(*hash_ptr_buf).c_str(),
+                 p.get_id());
+        }
+    }
+
+    ulong last_committed_app_log_idx = commit_idx;
+    while (log_store_->entry_at(last_committed_app_log_idx)->get_val_type()
+            != log_val_type::app_log && last_committed_app_log_idx > 0) {
+        last_committed_app_log_idx--;
+    }
+
+    // FMARK: RN: new leader sig
+    if (flag_use_leader_sig()) {
+        // FMARK: RN: shared the leader signatures of the last committed log entry instead of the last shared log entry
+        if (last_committed_log_sig_local != nullptr && log_store_->term_at(last_committed_app_log_idx) == term) {
+            // insert the leader signature for the last app_log entry into v
+            ptr<log_entry> leader_sig_le =
+                cs_new<log_entry>(0, last_committed_log_sig_local, log_val_type::leader_sig);
+            v.push_back(leader_sig_le);
+            p_in("leader signature on log %zu sent to peer %d", commit_idx, p.get_id());
+        } else {
+            p_in("leader signature not sent to peer %d", p.get_id());
+        }
+    }
+    
     if (log_entries) {
         v.insert(v.end(), log_entries->begin(), log_entries->end());
         // FMARK: TODO: correctness
@@ -466,7 +548,9 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
                 std::lock_guard<std::mutex> guard(cert_lock_);
                 clone_cert_ = commit_cert_->clone();
             }
-            p_db("[CC] attached of term %zu, index %zu", clone_cert_->get_term(), clone_cert_->get_index());
+            p_db("[CC] attached of term %zu, index %zu",
+                 clone_cert_->get_term(),
+                 clone_cert_->get_index());
 
             req->set_certificate(clone_cert_);
             // timer->add_record("cc.attach");
@@ -547,17 +631,21 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
     //
     // In not accepted case, we will return log_store_->next_slot() for
     // the leader to quick jump to the index that might aligned.
-    ptr<resp_msg> resp = cs_new<resp_msg>(
-        state_->get_term(), msg_type::append_entries_response, id_, req.get_src(), log_store_->next_slot());
+    ptr<resp_msg> resp = cs_new<resp_msg>(state_->get_term(),
+                                          msg_type::append_entries_response,
+                                          id_,
+                                          req.get_src(),
+                                          log_store_->next_slot());
 
     ptr<snapshot> local_snp = get_last_snapshot();
     ulong log_term = 0;
     if (req.get_last_log_idx() < log_store_->next_slot()) {
         log_term = term_for_log(req.get_last_log_idx());
     }
-    bool log_okay = req.get_last_log_idx() == 0 || (log_term && req.get_last_log_term() == log_term)
-                    || (local_snp && local_snp->get_last_log_idx() == req.get_last_log_idx()
-                        && local_snp->get_last_log_term() == req.get_last_log_term());
+    bool log_okay =
+        req.get_last_log_idx() == 0 || (log_term && req.get_last_log_term() == log_term)
+        || (local_snp && local_snp->get_last_log_idx() == req.get_last_log_idx()
+            && local_snp->get_last_log_term() == req.get_last_log_term());
 
     int log_lv = log_okay ? L_TRACE : (supp_exp_warning ? L_INFO : L_WARN);
     static timer_helper log_timer(500 * 1000, true);
@@ -585,70 +673,121 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
              req.get_last_log_idx(),
              log_store_->next_slot() - 1);
         if (local_snp) {
-            p_lv(log_lv, "snp idx %zu term %zu", local_snp->get_last_log_idx(), local_snp->get_last_log_term());
+            p_lv(log_lv,
+                 "snp idx %zu term %zu",
+                 local_snp->get_last_log_idx(),
+                 local_snp->get_last_log_term());
         }
-        resp->set_next_batch_size_hint_in_bytes(state_machine_->get_next_batch_size_hint_in_bytes());
+        resp->set_next_batch_size_hint_in_bytes(
+            state_machine_->get_next_batch_size_hint_in_bytes());
         return resp;
+    }
+
+    // FMARK: check whether the leader certificate (for this leader and for this term) is
+    // received and verified
+    if (term_verified(req.get_term(), req.get_src())) {
+        p_tr("leader certificate of term %zu is verified", req.get_term());
+    } else {
+        p_wn("leader certificate of term %zu is not verified", req.get_term());
+        resp->need_lc();
+        resp->set_next_batch_size_hint_in_bytes(
+            state_machine_->get_next_batch_size_hint_in_bytes());
+        return resp;
+    }
+
+    ptr<buffer> hash_ptr = nullptr;
+    if (req.log_entries().size() > 0
+        && req.log_entries().at(0)->get_val_type() == log_val_type::hash_ptr) {
+        hash_ptr = buffer::clone(*req.log_entries().at(0)->get_buf_ptr());
+        p_in("hash pointer (%s) received from peer %d",
+             tobase64(*hash_ptr).c_str(),
+             req.get_src());
+        req.log_entries().erase(req.log_entries().begin());
+    }
+
+    ptr<buffer> leader_sig = nullptr;
+    ptr<log_entry> last_committed_app_log = nullptr;
+    if (req.log_entries().size() > 0
+        && req.log_entries().at(0)->get_val_type() == log_val_type::leader_sig) {
+        leader_sig = buffer::clone(*req.log_entries().at(0)->get_buf_ptr());
+        p_in("leader signature received from peer %d", req.get_src());
+        req.log_entries().erase(req.log_entries().begin());
+        // find the last app_log entry in log_entries
+        if (req.get_commit_idx() >= log_store_->next_slot()) {
+            // find the target log entry in the request
+            if (req.get_last_log_idx() < req.get_commit_idx() && req.get_last_log_idx() + req.log_entries().size() >= req.get_commit_idx()) {
+                last_committed_app_log = req.log_entries()[req.get_commit_idx() - req.get_last_log_idx() - 1];
+                p_in("last committed app_log entry found at %zu, next slot: %zu", req.get_commit_idx(), log_store_->next_slot());
+            } else {
+                p_wn("last committed app_log entry not received yet, ignore the leader signature");
+            }
+        } else {
+            for (auto it = req.get_commit_idx(); it >=0 ; it--) {
+                ptr<log_entry> entry = log_store_->entry_at(it);
+                if (entry->get_val_type() == log_val_type::app_log) {
+                    last_committed_app_log = entry;
+                    p_in("last committed app_log entry found at %zu, next slot: %zu", it, log_store_->next_slot());
+                    break;
+                }
+            }
+        }
     }
 
     // FMARK: check chain nature and leader sig
     size_t log_size = req.log_entries().size();
     // ptr<timer_t> timer = cs_new<timer_t>();
 
+    ulong log_idx = req.get_last_log_idx();
+    ulong prev_idx = log_idx;
+    int64_t conflict;
     if (log_size > 0) {
-        ulong log_idx = req.get_last_log_idx();
-        ulong prev_idx = log_idx;
-        int64_t conflict;
 
-        if (flag_use_ptr()) {
+        if (flag_use_ptr() && hash_ptr != nullptr) {
             // timer->start_timer();
-            if ((conflict = match_log_entry(req.log_entries(), prev_idx)) >= 0) {
-                p_wn("deny illegal hash pointer of requests appending %zu: match failure at %zu -> %zu",
+            p_tr("check hash pointer of requests appending %zu", log_idx + 1);
+            if ((conflict = match_log_entry(req.log_entries(), prev_idx + 1, hash_ptr))
+                != true) {
+                p_wn("deny illegal hash pointer of requests appending %zu: match failure "
+                     "at %zu -> %zu",
                      log_idx,
                      prev_idx,
                      conflict);
 
-                p_wn("Current NUM ENTRIES = %llu", log_store_->next_slot());
-                for (size_t k = 0; k < log_store_->next_slot(); k++) {
-                    p_wn("Current ENTRY %lld (%d): %s",
-                         k,
-                         log_store_->entry_at(k)->get_val_type(),
-                         tobase64(*create_hash(log_store_->entry_at(k), k)).c_str());
-                }
-
-                p_wn("RECV NUM ENTRIES = %llu", log_size);
-                for (size_t k = 0; k < log_size; k++) {
-                    p_wn("RECV REQ ENTRY %lld (%d): %s (%s)",
-                         k,
-                         req.log_entries()[k]->get_val_type(),
-                         tobase64(*create_hash(req.log_entries()[k], k + log_idx + 1)).c_str(),
-                         req.log_entries()[k]->get_val_type() == log_val_type::app_log
-                             ? req.log_entries()[k]->get_prev_ptr() == nullptr
-                                   ? "null"
-                                   : tobase64(*req.log_entries()[k]->get_prev_ptr()).c_str()
-                             : "");
-                }
-
                 resp->set_result_code(cmd_result_code::BAD_CHAIN);
                 return resp;
             } else {
-                p_db("req log idx %zu -- %zu passed pointer checks", log_idx + 1, log_idx + log_size);
+                p_db("req log idx %zu -- %zu passed pointer checks",
+                     log_idx + 1,
+                     log_idx + log_size);
             }
             // timer->add_record("ptr.check");
+        } else {
+            p_in("hash pointer is not used/received");
         }
+    }
 
-        if (flag_use_leader_sig()) {
-            // timer->start_timer();
-            if ((conflict = check_leader_sig(req.log_entries(), req.get_src())) >= 0) {
-                p_wn("deny illegal signature of requests appending %zu: item %zu", log_idx + 1 + conflict);
+    if (flag_use_leader_sig() && leader_sig != nullptr) {
+        if (last_committed_app_log == nullptr) {
+            p_wn("Node fall behind, leader signature is not verified");
+        } else {
+            if ((conflict = check_leader_sig(last_committed_app_log, leader_sig, req.get_src())) == false) {
+                p_wn("deny illegal signature of log entry: item %zu",
+                    req.get_term());
                 resp->set_result_code(cmd_result_code::BAD_LEADER_SIG);
                 return resp;
             } else {
-                p_db("req log idx %zu -- %zu passed leader sig checks", log_idx + 1, log_idx + log_size);
+                p_db("req log idx %zu -- %zu passed leader sig checks",
+                    log_idx + 1,
+                    log_idx + log_size);
+                last_committed_log_sig_ = leader_sig;
+                dump_leader_signatures(req.get_commit_idx(), req.get_term());
             }
-            // timer->add_record("ls.check");
         }
-
+    } else {
+        p_in("leader signature is not used/received");
+    }
+    
+    if (log_size > 0) {
         if (flag_use_cc()) {
             auto cc = req.get_certificate();
             if (cc) {
@@ -667,9 +806,12 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                 if (entry != nullptr) {
                     int32 pid = validate_commitment_certificate(cc, entry);
                     if (pid < 0) {
-                        p_db("[CC] validated CC of term %zu and index %zu", cc->get_term(), cc->get_index());
+                        p_db("[CC] validated CC of term %zu and index %zu",
+                             cc->get_term(),
+                             cc->get_index());
                     } else {
-                        p_wn("[CC] CC of term %zu and index %zu has bad signature from #%d",
+                        p_wn("[CC] CC of term %zu and index %zu has bad signature from "
+                             "#%d",
                              cc->get_term(),
                              cc->get_index(),
                              pid);
@@ -677,13 +819,14 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                         return resp;
                     }
                 } else {
-                    p_wn("cannot find original log entry %zu -- current chain length %zu, request range %zu ~ %zu",
+                    p_wn("cannot find original log entry %zu -- current chain length "
+                         "%zu, request range %zu ~ %zu. CC not verified!",
                          idx,
                          log_store_->next_slot() - 1,
                          ri_min,
                          ri_max);
-                    resp->set_result_code(cmd_result_code::BAD_CC);
-                    return resp;
+                    // resp->set_result_code(cmd_result_code::BAD_CC);
+                    // return resp;
                 }
                 // timer->add_record("cc.check");
             }
@@ -697,7 +840,8 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
 
     // Callback if necessary.
     cb_func::Param param(id_, leader_, -1, &req);
-    cb_func::ReturnCode cb_ret = ctx_->cb_func_.call(cb_func::GotAppendEntryReqFromLeader, &param);
+    cb_func::ReturnCode cb_ret =
+        ctx_->cb_func_.call(cb_func::GotAppendEntryReqFromLeader, &param);
     // If callback function decided to refuse this request, return here.
     if (cb_ret != cb_func::Ok) {
         // t_->add_sess(timer);
@@ -753,7 +897,9 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
             // should rollback commit index as well
             // (should not happen in Raft though).
             if (quick_commit_index_ >= log_idx) {
-                p_wn("rollback quick commit index from %zu to %zu", quick_commit_index_.load(), log_idx - 1);
+                p_wn("rollback quick commit index from %zu to %zu",
+                     quick_commit_index_.load(),
+                     log_idx - 1);
                 quick_commit_index_ = log_idx - 1;
             }
             if (sm_commit_index_ >= log_idx) {
@@ -774,7 +920,8 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                     p_in("rollback log %zu, term %zu", idx, old_entry->get_term());
 
                 } else if (old_entry->get_val_type() == log_val_type::conf) {
-                    p_in("revert from a prev config change to config at %llu", get_config()->get_log_idx());
+                    p_in("revert from a prev config change to config at %llu",
+                         get_config()->get_log_idx());
                     config_changing_ = false;
                 }
             }
@@ -789,7 +936,8 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
             if (entry->get_val_type() == log_val_type::app_log) {
                 ptr<buffer> buf = entry->get_buf_ptr();
                 buf->pos(0);
-                state_machine_->pre_commit_ext(state_machine::ext_op_params(log_idx, buf));
+                state_machine_->pre_commit_ext(
+                    state_machine::ext_op_params(log_idx, buf));
 
             } else if (entry->get_val_type() == log_val_type::conf) {
                 p_in("receive a config change from leader at %llu", log_idx);
@@ -807,7 +955,8 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         p_db("[after OVWR] log_idx: %ld, count: %ld\n", log_idx, cnt);
 
         if (rollback_in_progress) {
-            p_in("last log index after rollback and overwrite: %zu", log_store_->next_slot() - 1);
+            p_in("last log index after rollback and overwrite: %zu",
+                 log_store_->next_slot() - 1);
         }
 
         // Append new log entries
@@ -822,7 +971,8 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
             } else if (entry->get_val_type() == log_val_type::app_log) {
                 ptr<buffer> buf = entry->get_buf_ptr();
                 buf->pos(0);
-                state_machine_->pre_commit_ext(state_machine::ext_op_params(idx_for_entry, buf));
+                state_machine_->pre_commit_ext(
+                    state_machine::ext_op_params(idx_for_entry, buf));
             }
 
             if (stopping_) {
@@ -832,7 +982,8 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         }
 
         // End of batch.
-        log_store_->end_of_append_batch(req.get_last_log_idx() + 1, req.log_entries().size());
+        log_store_->end_of_append_batch(req.get_last_log_idx() + 1,
+                                        req.log_entries().size());
     }
 
     leader_ = req.get_src();
@@ -927,6 +1078,7 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         if (k >= 0) {
             ulong idx = k + req.get_last_log_idx() + 1;
             auto sig = get_signature(*req.log_entries()[k]->serialize_sig());
+            p_in("Set signature");
             resp->set_signature(sig, idx);
         }
         // timer->add_record("cc.replysig");
@@ -967,7 +1119,8 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
     }
 
     check_srv_to_leave_timeout();
-    if (srv_to_leave_ && srv_to_leave_->get_id() == resp.get_src() && srv_to_leave_->is_stepping_down()
+    if (srv_to_leave_ && srv_to_leave_->get_id() == resp.get_src()
+        && srv_to_leave_->is_stepping_down()
         && resp.get_next_idx() > srv_to_leave_target_idx_) {
         // Catch-up is done.
         p_in("server to be removed %d fully caught up the "
@@ -984,7 +1137,9 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
     bool need_to_catchup = true;
 
     ptr<peer> p = it->second;
-    p_tr("handle append entries resp (from %d), resp.get_next_idx(): %zu\n", (int)p->get_id(), resp.get_next_idx());
+    p_tr("handle append entries resp (from %d), resp.get_next_idx(): %zu\n",
+         (int)p->get_id(),
+         resp.get_next_idx());
 
     int64 bs_hint = resp.get_next_batch_size_hint_in_bytes();
     p_tr("peer %d batch size hint: %ld bytes", p->get_id(), bs_hint);
@@ -998,17 +1153,24 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
             p->set_next_log_idx(resp.get_next_idx());
             prev_matched_idx = p->get_matched_idx();
             new_matched_idx = resp.get_next_idx() - 1;
-            p_tr(
-                "peer %d, prev matched idx: %ld, new matched idx: %ld", p->get_id(), prev_matched_idx, new_matched_idx);
+            p_tr("peer %d, prev matched idx: %ld, new matched idx: %ld",
+                 p->get_id(),
+                 prev_matched_idx,
+                 new_matched_idx);
             p->set_matched_idx(new_matched_idx);
+            // p->set_last_accepted_log_idx(new_matched_idx);
         }
         cb_func::Param param(id_, leader_, p->get_id());
         param.ctx = &new_matched_idx;
-        CbReturnCode rc = ctx_->cb_func_.call(cb_func::GotAppendEntryRespFromPeer, &param);
+        CbReturnCode rc =
+            ctx_->cb_func_.call(cb_func::GotAppendEntryRespFromPeer, &param);
         (void)rc;
 
         // FMARK: verify signature
         // TODO: there needs an accurate predicate to tell whether a signature is expected
+        if (!resp.get_signature()) {
+            p_in("resp get signature is null");
+        }
         if (flag_use_cc() && resp.get_signature() != nullptr) {
             // auto timer = cs_new<timer_t>();
             // timer->start_timer();
@@ -1018,11 +1180,16 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
                 p_er("peer #%d's signature on entry %d is invalid: %s",
                      p->get_id(),
                      resp.get_sig_index(),
-                     resp.get_signature() == nullptr ? "null" : tobase64(*resp.get_signature()).c_str());
+                     resp.get_signature() == nullptr
+                         ? "null"
+                         : tobase64(*resp.get_signature()).c_str());
                 return;
             }
-
-            push_new_cert_signature(resp.get_signature(), p->get_id(), entry->get_term(), resp.get_sig_index());
+            p_in("Pushing new cert signature");
+            push_new_cert_signature(resp.get_signature(),
+                                    p->get_id(),
+                                    entry->get_term(),
+                                    resp.get_sig_index());
 
             // timer->add_record("cc.push");
             // t_->add_sess(timer);
@@ -1037,16 +1204,20 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
         // if (flag_use_cc()) {
         //     cert_lock_.unlock();
         // }
-        need_to_catchup = p->clear_pending_commit() || resp.get_next_idx() < log_store_->next_slot();
+        need_to_catchup =
+            p->clear_pending_commit() || resp.get_next_idx() < log_store_->next_slot();
     } else {
-        ulong prev_next_log = p->get_next_log_idx();
         std::lock_guard<std::mutex> guard(p->get_lock());
-        if (resp.get_next_idx() > 0 && p->get_next_log_idx() > resp.get_next_idx()) {
+        ulong prev_next_log = p->get_next_log_idx();
+        if (resp.get_next_idx() > 0 && prev_next_log > resp.get_next_idx()) {
             // fast move for the peer to catch up
             p->set_next_log_idx(resp.get_next_idx());
         } else {
             // if not, move one log backward.
-            p->set_next_log_idx(p->get_next_log_idx() - 1);
+            // WARNING: Make sure that `next_log_idx_` shouldn't be smaller than 0.
+            if (prev_next_log) {
+                p->set_next_log_idx(prev_next_log - 1);
+            }
         }
         bool suppress = p->need_to_suppress_error();
 
@@ -1112,7 +1283,8 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
             cs_new<custom_notification_msg>(custom_notification_msg::leadership_takeover);
 
         // Wrap it using log_entry.
-        ptr<log_entry> custom_noti_le = cs_new<log_entry>(0, custom_noti->serialize(), log_val_type::custom);
+        ptr<log_entry> custom_noti_le =
+            cs_new<log_entry>(0, custom_noti->serialize(), log_val_type::custom);
 
         req->log_entries().push_back(custom_noti_le);
 

@@ -20,7 +20,7 @@ limitations under the License.
 
 #include "srv_config.hxx"
 #include "openssl_ecdsa.hxx"
-
+#include <iostream>
 namespace nuraft {
 
 ptr<srv_config> srv_config::deserialize(buffer& buf) {
@@ -51,7 +51,8 @@ ptr<srv_config> srv_config::deserialize(buffer_serializer& bs) {
 
 ptr<buffer> srv_config::serialize() const {
     // FMARK: save public key
-    size_t total_size = sz_int + sz_int + (endpoint_.length() + 1) + (aux_.length() + 1) + 1 + sz_int + sz_ulong;
+    size_t total_size = sz_int + sz_int + (endpoint_.length() + 1) + (aux_.length() + 1)
+                        + 1 + sz_int + sz_ulong;
     ptr<buffer> keybuf;
     if (public_key_ != nullptr) {
         keybuf = public_key_->tobuf();
@@ -72,6 +73,24 @@ ptr<buffer> srv_config::serialize() const {
     }
     buf->pos(0);
     return buf;
+}
+
+void srv_config::set_public_key(ptr<pubkey_intf> pubkey) {
+    if (pubkey == nullptr) {
+        // std::cerr << "srv config setting pubkey is null";
+        return;
+    }
+    // std::cerr << "srv config setting pubkey" << pubkey->str();
+    public_key_ = pubkey;
+}
+
+void srv_config::set_private_key(ptr<seckey_intf> priv_key) {
+    if (priv_key == nullptr) {
+        // std::cerr << "srv config setting private key is null";
+        return;
+    }
+    // std::cerr << "srv config setting private key" << priv_key->str();
+    private_key_ = priv_key;
 }
 
 } // namespace nuraft

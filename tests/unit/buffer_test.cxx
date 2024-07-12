@@ -33,8 +33,7 @@ namespace buffer_test {
 int buffer_basic_test(size_t buf_size) {
     ptr<buffer> buf = buffer::alloc(buf_size);
 
-    uint seed = (uint)std::chrono::system_clock::now()
-                .time_since_epoch().count();
+    uint seed = (uint)std::chrono::system_clock::now().time_since_epoch().count();
     std::default_random_engine engine(seed);
     std::uniform_int_distribution<int32> distribution(1, 10000);
     auto rnd = std::bind(distribution, engine);
@@ -47,7 +46,7 @@ int buffer_basic_test(size_t buf_size) {
         buf->put(val);
     }
 
-    CHK_EQ( 100 * sz_int, buf->pos() );
+    CHK_EQ(100 * sz_int, buf->pos());
 
     ulong long_val = std::numeric_limits<uint>::max();
     long_val += rnd();
@@ -77,29 +76,25 @@ int buffer_basic_test(size_t buf_size) {
 
     for (int i = 0; i < 100; ++i) {
         int32 val = buf->get_int();
-        CHK_EQ( vals[i], val );
+        CHK_EQ(vals[i], val);
     }
 
     buf3->pos(0);
     for (int i = 0; i < 100; ++i) {
         int32 val = buf3->get_int();
-        CHK_EQ( vals[i], val );
+        CHK_EQ(vals[i], val);
     }
 
-    CHK_EQ( long_val, buf->get_ulong() );
-    CHK_EQ( b, buf->get_byte() );
-    CHK_EQ( std::string("a string"),
-            std::string(buf->get_str()) );
-    CHK_EQ( b1, buf->get_byte() );
-    CHK_EQ( 0, std::memcmp(raw_str, buf->get_raw(sizeof(raw_str)), sizeof(raw_str)) );
-    CHK_EQ( std::string("another string"),
-            std::string(buf->get_str()) );
-    CHK_EQ( std::string("another string"),
-            std::string(buf2->get_str()) );
-    CHK_EQ( ( 100 * sz_int +
-              2 * sz_byte + sizeof(raw_str) +
-              sz_ulong + strlen("a string") + 1 + strlen("another string") + 1 ),
-            buf->pos() );
+    CHK_EQ(long_val, buf->get_ulong());
+    CHK_EQ(b, buf->get_byte());
+    CHK_EQ(std::string("a string"), std::string(buf->get_str()));
+    CHK_EQ(b1, buf->get_byte());
+    CHK_EQ(0, std::memcmp(raw_str, buf->get_raw(sizeof(raw_str)), sizeof(raw_str)));
+    CHK_EQ(std::string("another string"), std::string(buf->get_str()));
+    CHK_EQ(std::string("another string"), std::string(buf2->get_str()));
+    CHK_EQ((100 * sz_int + 2 * sz_byte + sizeof(raw_str) + sz_ulong + strlen("a string")
+            + 1 + strlen("another string") + 1),
+           buf->pos());
 
     std::stringstream stream;
     long_val = std::numeric_limits<uint>::max();
@@ -115,19 +110,18 @@ int buffer_basic_test(size_t buf_size) {
     stream >> *lbuf1;
 
     ulong long_val_copy = lbuf1->get_ulong();
-    CHK_EQ( long_val, long_val_copy );
+    CHK_EQ(long_val, long_val_copy);
 
     return 0;
 }
 
 int buffer_serializer_test(bool little_endian) {
     ptr<buffer> buf = buffer::alloc(100);
-    buffer_serializer::endianness endian = (little_endian)
-                                           ? buffer_serializer::LITTLE
-                                           : buffer_serializer::BIG;
+    buffer_serializer::endianness endian =
+        (little_endian) ? buffer_serializer::LITTLE : buffer_serializer::BIG;
     buffer_serializer ss(buf, endian);
 
-    CHK_Z( ss.pos() );
+    CHK_Z(ss.pos());
 
     uint8_t u8 = 0x12;
     uint16_t u16 = 0x1234;
@@ -182,46 +176,45 @@ int buffer_serializer_test(bool little_endian) {
     }
 
     // Original buffer's cursor should not move.
-    CHK_Z( buf->pos() );
+    CHK_Z(buf->pos());
 
     buffer_serializer ss_read(buf, endian);
 
-    CHK_EQ( u8, ss_read.get_u8() );
-    CHK_EQ( u16, ss_read.get_u16() );
-    CHK_EQ( u32, ss_read.get_u32() );
-    CHK_EQ( u64, ss_read.get_u64() );
+    CHK_EQ(u8, ss_read.get_u8());
+    CHK_EQ(u16, ss_read.get_u16());
+    CHK_EQ(u32, ss_read.get_u32());
+    CHK_EQ(u64, ss_read.get_u64());
 
-    CHK_EQ( i8, ss_read.get_i8() );
-    CHK_EQ( i16, ss_read.get_i16() );
-    CHK_EQ( i32, ss_read.get_i32() );
-    CHK_EQ( i64, ss_read.get_i64() );
+    CHK_EQ(i8, ss_read.get_i8());
+    CHK_EQ(i16, ss_read.get_i16());
+    CHK_EQ(i32, ss_read.get_i32());
+    CHK_EQ(i64, ss_read.get_i64());
 
     // Binary without length.
     void* ptr_read = nullptr;
     ptr_read = ss_read.get_raw(helloworld.size());
-    CHK_EQ( helloworld, std::string((const char*)ptr_read, helloworld.size()) );
+    CHK_EQ(helloworld, std::string((const char*)ptr_read, helloworld.size()));
 
     // C-style string.
     const char* hw_cstr = ss_read.get_cstr();
-    CHK_EQ( helloworld, std::string(hw_cstr) );
+    CHK_EQ(helloworld, std::string(hw_cstr));
 
     // Binary with length.
     size_t len = 0;
     ptr_read = ss_read.get_bytes(len);
-    CHK_EQ( helloworld.size(), len );
-    CHK_EQ( helloworld, std::string((const char*)ptr_read, len) );
+    CHK_EQ(helloworld.size(), len);
+    CHK_EQ(helloworld, std::string((const char*)ptr_read, len));
 
     // String.
     std::string str_read = ss_read.get_str();
-    CHK_EQ( helloworld, str_read );
+    CHK_EQ(helloworld, str_read);
 
     // Buffer.
-    ptr<buffer> hw_buf_read =
-        buffer::alloc(helloworld.size() + sizeof(uint32_t));
+    ptr<buffer> hw_buf_read = buffer::alloc(helloworld.size() + sizeof(uint32_t));
     ss_read.get_buffer(hw_buf_read);
     buffer_serializer bs_hw_buf_read(hw_buf_read, endian);
     str_read = bs_hw_buf_read.get_str();
-    CHK_EQ( helloworld, str_read );
+    CHK_EQ(helloworld, str_read);
 
     // Out-of-bound read.
     {
@@ -236,15 +229,15 @@ int buffer_serializer_test(bool little_endian) {
     }
 
     // Position of both serializers should be the same.
-    CHK_EQ( ss.pos(), ss_read.pos() );
+    CHK_EQ(ss.pos(), ss_read.pos());
 
     // Original buffer's cursor should not move.
-    CHK_Z( buf->pos() );
+    CHK_Z(buf->pos());
 
     return 0;
 }
 
-}  // namespace buffer_test;
+} // namespace buffer_test
 using namespace buffer_test;
 
 int main(int argc, char** argv) {
@@ -252,15 +245,12 @@ int main(int argc, char** argv) {
 
     ts.options.printTestMessage = false;
 
-    ts.doTest( "buffer basic test",
-               buffer_basic_test,
-               TestRange<size_t>( {1024, 0x8000, 0x10000} ) );
+    ts.doTest("buffer basic test",
+              buffer_basic_test,
+              TestRange<size_t>({1024, 0x8000, 0x10000}));
 
-    ts.doTest( "buffer serializer test",
-               buffer_serializer_test,
-               TestRange<bool>( {true, false} ) );
+    ts.doTest(
+        "buffer serializer test", buffer_serializer_test, TestRange<bool>({true, false}));
 
     return 0;
 }
-
-

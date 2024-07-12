@@ -35,9 +35,13 @@ limitations under the License.
 #include "tracer.hxx"
 
 #include <cassert>
+#include <iostream>
 #include <random>
 #include <sstream>
 #include <thread>
+#include <fstream>
+#include <limits>
+
 
 namespace nuraft {
 
@@ -91,11 +95,18 @@ raft_server::raft_server(context* ctx, const init_options& opt)
     , srv_to_leave_(nullptr)
     , srv_to_leave_target_idx_(0)
     , conf_to_add_(nullptr)
-    , resp_handler_(
-          (rpc_handler)std::bind(&raft_server::handle_peer_resp, this, std::placeholders::_1, std::placeholders::_2))
-    , ex_resp_handler_(
-          (rpc_handler)std::bind(&raft_server::handle_ext_resp, this, std::placeholders::_1, std::placeholders::_2))
+    , resp_handler_((rpc_handler)std::bind(&raft_server::handle_peer_resp,
+                                           this,
+                                           std::placeholders::_1,
+                                           std::placeholders::_2))
+    , ex_resp_handler_((rpc_handler)std::bind(&raft_server::handle_ext_resp,
+                                              this,
+                                              std::placeholders::_1,
+                                              std::placeholders::_2))
     , last_snapshot_(ctx->state_machine_->last_snapshot()) {
+
+    // FMARK: record initial timestamp
+    init_timestamp_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
     const size_t BUFSIZE = 4096;
     char temp_buf[BUFSIZE];
@@ -129,9 +140,12 @@ raft_server::raft_server(context* ctx, const init_options& opt)
     ss << "   === INIT RAFT SERVER ===\n"
        << "commit index " << sm_commit_index_ << "\n"
        << "term " << state_->get_term() << "\n"
-       << "election timer " << (state_->is_election_timer_allowed() ? "allowed" : "not allowed") << "\n"
-       << "log store start " << log_store_->start_index() << ", end " << log_store_->next_slot() - 1 << "\n"
-       << "config log idx " << c_conf->get_log_idx() << ", prev log idx " << c_conf->get_prev_log_idx() << "\n";
+       << "election timer "
+       << (state_->is_election_timer_allowed() ? "allowed" : "not allowed") << "\n"
+       << "log store start " << log_store_->start_index() << ", end "
+       << log_store_->next_slot() - 1 << "\n"
+       << "config log idx " << c_conf->get_log_idx() << ", prev log idx "
+       << c_conf->get_prev_log_idx() << "\n";
     if (c_conf->is_async_replication()) {
         ss << " -- ASYNC REPLICATION --\n";
     }
@@ -165,7 +179,9 @@ raft_server::raft_server(context* ctx, const init_options& opt)
      *          Majority(S0 - 1) + Majority(S0) > S0 => Vote(A) < Majority(S0)
      * -|
      */
-    for (ulong i = std::max(sm_commit_index_ + 1, log_store_->start_index()); i < log_store_->next_slot(); ++i) {
+    for (ulong i = std::max(sm_commit_index_ + 1, log_store_->start_index());
+         i < log_store_->next_slot();
+         ++i) {
         ptr<log_entry> entry(log_store_->entry_at(i));
         if (entry->get_val_type() == log_val_type::conf) {
             p_in("detect a configuration change "
@@ -181,12 +197,14 @@ raft_server::raft_server(context* ctx, const init_options& opt)
     for (cluster_config::srv_itor it = srvs.begin(); it != srvs.end(); ++it) {
         ptr<srv_config> cur_srv = *it;
         if (cur_srv->get_id() != id_) {
-            timer_task<int32>::executor exec =
-                (timer_task<int32>::executor)std::bind(&raft_server::handle_hb_timeout, this, std::placeholders::_1);
-            peers_.insert(
-                std::make_pair(cur_srv->get_id(),
-                               cs_new<peer, ptr<srv_config>&, context&, timer_task<int32>::executor&, ptr<logger>&>(
-                                   cur_srv, *ctx_, exec, l_)));
+            timer_task<int32>::executor exec = (timer_task<int32>::executor)std::bind(
+                &raft_server::handle_hb_timeout, this, std::placeholders::_1);
+            peers_.insert(std::make_pair(cur_srv->get_id(),
+                                         cs_new<peer,
+                                                ptr<srv_config>&,
+                                                context&,
+                                                timer_task<int32>::executor&,
+                                                ptr<logger>&>(cur_srv, *ctx_, exec, l_)));
         } else {
             // Myself.
             im_learner_ = cur_srv->is_learner();
@@ -216,11 +234,40 @@ raft_server::raft_server(context* ctx, const init_options& opt)
         print_msg += temp_buf;
     }
 
-    snprintf(temp_buf, BUFSIZE, "my id: %d, %s\n", id_, (im_learner_) ? "learner" : "voting_member");
+    snprintf(temp_buf,
+             BUFSIZE,
+             "my id: %d, %s\n",
+             id_,
+             (im_learner_) ? "learner" : "voting_member");
     print_msg += temp_buf;
     snprintf(temp_buf, BUFSIZE, "num peers: %d\n", (int)peers_.size());
     print_msg += temp_buf;
     p_in(print_msg.c_str());
+
+    if (flag_use_leader_sig() && flag_use_cc() && flag_use_ptr()) {
+        p_in("SET PEERS START\n");
+        std::list<ptr<srv_config>>& srvs = c_conf->get_servers();
+        for (cluster_config::srv_itor it = srvs.begin(); it != srvs.end(); ++it) {
+            ptr<srv_config> cur_srv = *it;
+            if (cur_srv->get_id() != id_) {
+                ptr<peer> pp = peers_[cur_srv->get_id()];
+                if (pp != nullptr) {
+                    p_in("Reached 1");
+                    ptr<seckey_intf> sk =
+                        cs_new<seckey_t>(cur_srv->get_private_key_string());
+                    p_in("Reached 2");
+                    cur_srv->set_private_key(sk);
+                    p_in("Reached 3");
+                    ptr<pubkey_intf> pk = sk->derive();
+                    p_in("Reached 4");
+                    cur_srv->set_public_key(pk);
+                    p_in("Reached 5");
+                    pp->set_public_key(pk);
+                    p_in("Reached 6");
+                }
+            }
+        }
+    }
 
     if (opt.start_server_in_constructor_) {
         start_server(opt.skip_initial_election_timeout_);
@@ -242,7 +289,8 @@ void raft_server::start_server(bool skip_initial_election_timeout) {
         bg_commit_thread_ = std::thread(std::bind(&raft_server::commit_in_bg, this));
 
         bg_append_ea_ = new EventAwaiter();
-        bg_append_thread_ = std::thread(std::bind(&raft_server::append_entries_in_bg, this));
+        bg_append_thread_ =
+            std::thread(std::bind(&raft_server::append_entries_in_bg, this));
     }
 
     if (skip_initial_election_timeout) {
@@ -267,7 +315,8 @@ void raft_server::start_server(bool skip_initial_election_timeout) {
              params->election_timeout_lower_bound_,
              params->election_timeout_upper_bound_);
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(params->rpc_failure_backoff_));
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(params->rpc_failure_backoff_));
         restart_election_timer();
     }
     priority_change_timer_.reset();
@@ -297,10 +346,12 @@ void raft_server::update_rand_timeout() {
     ptr<raft_params> params = ctx_->get_params();
     uint seed = (uint)(std::chrono::system_clock::now().time_since_epoch().count() * id_);
     std::default_random_engine engine(seed);
-    std::uniform_int_distribution<int32> distribution(params->election_timeout_lower_bound_,
-                                                      params->election_timeout_upper_bound_);
+    std::uniform_int_distribution<int32> distribution(
+        params->election_timeout_lower_bound_, params->election_timeout_upper_bound_);
     rand_timeout_ = std::bind(distribution, engine);
-    p_in("new timeout range: %d -- %d", params->election_timeout_lower_bound_, params->election_timeout_upper_bound_);
+    p_in("new timeout range: %d -- %d",
+         params->election_timeout_lower_bound_,
+         params->election_timeout_upper_bound_);
 }
 
 void raft_server::update_params(const raft_params& new_params) {
@@ -323,10 +374,11 @@ void raft_server::update_params(const raft_params& new_params) {
 }
 
 void raft_server::apply_and_log_current_params() {
+    p_tr("In raft_server apply_and_log_current_params");
     ptr<raft_params> params = ctx_->get_params();
 
     // FMARK: add path to private key
-    p_in("parameters: "
+    p_in("apply_and_log_current_params(debug) : parameters: "
          "timeout %d - %d, heartbeat %d, "
          "leadership expiry %d, "
          "max batch %d, backoff %d, snapshot distance %d, "
@@ -338,7 +390,7 @@ void raft_server::apply_and_log_current_params() {
          "snapshot receiver %s, "
          "leadership transfer wait time %d, "
          "grace period of lagging state machine %d, "
-         "path to private key ~~%s~~",
+         "private key %s\n",
          params->election_timeout_lower_bound_,
          params->election_timeout_upper_bound_,
          params->heart_beat_interval_,
@@ -356,26 +408,45 @@ void raft_server::apply_and_log_current_params() {
          params->exclude_snp_receiver_from_quorum_ ? "EXCLUDED" : "INCLUDED",
          params->leadership_transfer_min_wait_time_,
          params->grace_period_of_lagging_state_machine_,
-         params->private_key_path.c_str());
+         params->private_key.c_str());
 
     status_check_timer_.set_duration_ms(params->heart_beat_interval_);
     status_check_timer_.reset();
 
-    leadership_transfer_timer_.set_duration_ms(params->leadership_transfer_min_wait_time_);
+    leadership_transfer_timer_.set_duration_ms(
+        params->leadership_transfer_min_wait_time_);
 
     // FMARK: read private key; initialize cluster config with pubkey of self
-    p_tr("loading private key from %s", params->private_key_path.c_str());
+    p_tr("private key %s", params->private_key.c_str());
     try {
-        private_key = cs_new<seckey_t>(params->private_key_path);
+        private_key_ = cs_new<seckey_t>(params->private_key.c_str());
     } catch (crypto_exception& e) {
-        p_er("cannot load private key from %s (%s)", params->private_key_path.c_str(), e.what());
-        private_key = cs_new<seckey_t>();
+        p_er("CRYPTO EXCEPTION");
+        p_er("cannot load private key, exception (%s)", e.what());
+        p_tr("Creating new private key if it doesn't exist");
+        if (!private_key_) {
+            // FMARK: RN: do not re-generate private key if it's already generated
+            private_key_ = cs_new<seckey_t>();
+            try {
+                private_key_->tofile(params->private_key);
+            } catch (crypto_exception& e) {
+                p_wn("cannot save private key to %s (%s)",
+                     params->private_key.c_str(),
+                     e.what());
+            }
+        }
+        p_tr("Finished creating new private key");
     }
-    public_key = private_key->derive();
-    config_->get_server(get_id())->set_public_key(public_key);
-
-    p_in("Server private key: %s", private_key->str().c_str());
-    p_in("Server public key: %s", public_key->str().c_str());
+    p_tr("public key derive 1");
+    public_key_ = private_key_->derive();
+    p_tr("public key derive 2");
+    config_->get_server(get_id())->set_public_key(public_key_);
+    p_tr("public key derive 3");
+    // p_tr("Private key is - ");
+    // p_tr("Server private key: %s", private_key_->str().c_str());
+    // p_tr("Public key is - ");
+    // p_tr("Server public key: %s", public_key_->str().c_str());
+    // p_tr("Finished apply_and_log_current_params");
 }
 
 raft_params raft_server::get_current_params() const { return *ctx_->get_params(); }
@@ -440,6 +511,18 @@ void raft_server::shutdown() {
         ctx_->rpc_listener_.reset();
         ctx_->rpc_cli_factory_.reset();
         ctx_->scheduler_.reset();
+    }
+
+    if (flag_save_election_list()) {
+        // FMARK: save election list to file
+        p_in("saving unsaved election list to file");
+        save_and_clean_election_list(1);
+    }
+
+    if (flag_use_leader_sig()) {
+        // FMARK: save leader signature to file
+        p_in("saving unsaved leader signature to file");
+        dump_leader_signatures();
     }
 
     p_in("reset all pointers.");
@@ -511,7 +594,8 @@ int32 raft_server::get_num_voting_members() {
 int32 raft_server::get_quorum_for_election() {
     ptr<raft_params> params = ctx_->get_params();
     int32 num_voting_members = get_num_voting_members();
-    if (params->custom_election_quorum_size_ <= 0 || params->custom_election_quorum_size_ > num_voting_members) {
+    if (params->custom_election_quorum_size_ <= 0
+        || params->custom_election_quorum_size_ > num_voting_members) {
         return num_voting_members / 2;
     }
     return params->custom_election_quorum_size_ - 1;
@@ -532,7 +616,8 @@ int32 raft_server::get_quorum_for_commit() {
         }
     }
 
-    if (params->custom_commit_quorum_size_ <= 0 || params->custom_commit_quorum_size_ > num_voting_members) {
+    if (params->custom_commit_quorum_size_ <= 0
+        || params->custom_commit_quorum_size_ > num_voting_members) {
         return num_voting_members / 2;
     }
     return params->custom_commit_quorum_size_ - 1;
@@ -543,7 +628,8 @@ int32 raft_server::get_leadership_expiry() {
     int expiry = params->leadership_expiry_;
     if (expiry == 0) {
         // If 0, default expiry: 20x of heartbeat.
-        expiry = params->heart_beat_interval_ * raft_server::raft_limits_.leadership_limit_;
+        expiry =
+            params->heart_beat_interval_ * raft_server::raft_limits_.leadership_limit_;
     }
     return expiry;
 }
@@ -580,7 +666,8 @@ size_t raft_server::get_num_stale_peers() {
     size_t count = 0;
     for (auto& entry: peers_) {
         ptr<peer>& pp = entry.second;
-        if (get_last_log_idx() > pp->get_matched_idx() + ctx_->get_params()->stale_log_gap_) {
+        if (get_last_log_idx()
+            > pp->get_matched_idx() + ctx_->get_params()->stale_log_gap_) {
             count++;
         }
     }
@@ -618,12 +705,14 @@ ptr<resp_msg> raft_server::process_req(req_msg& req) {
     }
 
     recur_lock(lock_);
-    if (req.get_type() == msg_type::append_entries_request || req.get_type() == msg_type::request_vote_request
+    if (req.get_type() == msg_type::append_entries_request
+        || req.get_type() == msg_type::request_vote_request
         || req.get_type() == msg_type::install_snapshot_request) {
         // we allow the server to be continue after term updated to save a round message
         bool term_updated = update_term(req.get_term());
 
-        if (!im_learner_ && !hb_alive_ && term_updated && req.get_type() == msg_type::request_vote_request) {
+        if (!im_learner_ && !hb_alive_ && term_updated
+            && req.get_type() == msg_type::request_vote_request) {
             // If someone has newer term, that means leader has not been
             // elected in the current term, and this node's election timer
             // has been reset by this request.
@@ -650,11 +739,14 @@ ptr<resp_msg> raft_server::process_req(req_msg& req) {
 
     } else if (req.get_type() == msg_type::ping_request) {
         p_in("got ping from %d", req.get_src());
-        resp = cs_new<resp_msg>(state_->get_term(), msg_type::ping_response, id_, req.get_src());
+        resp = cs_new<resp_msg>(
+            state_->get_term(), msg_type::ping_response, id_, req.get_src());
 
     } else if (req.get_type() == msg_type::priority_change_request) {
         resp = handle_priority_change_req(req);
 
+    } else if (req.get_type() == msg_type::broadcast_leader_certificate_request) {
+        resp = handle_leader_certificate_request(req);
     } else {
         // extended requests
         resp = handle_ext_msg(req);
@@ -701,16 +793,9 @@ void raft_server::reset_peer_info() {
         // It will be rolled back and overwritten if this node
         // re-joins the cluster.
         ptr<buffer> new_conf_buf(my_next_config->serialize());
-        ptr<log_entry> entry(cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
+        ptr<log_entry> entry(
+            cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
 
-        // FMARK: add sig
-        if (flag_use_leader_sig()) {
-            // auto timer = cs_new<timer_t>();
-            // timer->start_timer();
-            entry->set_signature(get_signature(*entry->serialize_sig()));
-            // timer->add_record("ls.init.rpi");
-            // t_->add_sess(timer);
-        }
 
         store_log_entry(entry, log_store_->next_slot() - 1);
     }
@@ -764,7 +849,10 @@ void raft_server::handle_peer_resp(ptr<resp_msg>& resp, ptr<rpc_exception>& err)
          resp->get_term(),
          resp->get_next_idx());
 
-    p_tr("src: %d, dst: %d, resp->get_term(): %d\n", (int)resp->get_src(), (int)resp->get_dst(), (int)resp->get_term());
+    p_tr("src: %d, dst: %d, resp->get_term(): %d\n",
+         (int)resp->get_src(),
+         (int)resp->get_dst(),
+         (int)resp->get_term());
 
     if (resp->get_accepted()) {
         // On accepted response, reset response timer.
@@ -773,7 +861,9 @@ void raft_server::handle_peer_resp(ptr<resp_msg>& resp, ptr<rpc_exception>& err)
             peer* pp = entry->second.get();
             int rpc_errs = pp->get_rpc_errs();
             if (rpc_errs >= raft_server::raft_limits_.warning_limit_) {
-                p_wn("recovered from RPC failure from peer %d, %d errors", resp->get_src(), rpc_errs);
+                p_wn("recovered from RPC failure from peer %d, %d errors",
+                     resp->get_src(),
+                     rpc_errs);
             }
             pp->reset_rpc_errs();
             pp->reset_resp_timer();
@@ -817,8 +907,13 @@ void raft_server::handle_peer_resp(ptr<resp_msg>& resp, ptr<rpc_exception>& err)
         handle_custom_notification_resp(*resp);
         break;
 
+    case msg_type::broadcast_leader_certificate_response:
+        handle_leader_certificate_resp(*resp);
+        break;
+
     default:
-        p_er("received an unexpected response: %s, ignore it", msg_type_to_string(resp->get_type()).c_str());
+        p_er("received an unexpected response: %s, ignore it",
+             msg_type_to_string(resp->get_type()).c_str());
         break;
     }
 }
@@ -837,12 +932,14 @@ void raft_server::send_reconnect_request() {
     auto entry = peers_.find(leader_);
     if (entry != peers_.end()) {
         ptr<peer> p_leader = entry->second;
-        ptr<req_msg> req = cs_new<req_msg>(state_->get_term(), msg_type::reconnect_request, id_, leader_, 0, 0, 0);
+        ptr<req_msg> req = cs_new<req_msg>(
+            state_->get_term(), msg_type::reconnect_request, id_, leader_, 0, 0, 0);
 
         if (p_leader->make_busy()) {
             p_leader->send_req(p_leader, req, ex_resp_handler_);
         } else {
-            p_er("previous message to leader %d hasn't been responded yet", p_leader->get_id());
+            p_er("previous message to leader %d hasn't been responded yet",
+                 p_leader->get_id());
         }
 
     } else {
@@ -855,7 +952,8 @@ void raft_server::send_reconnect_request() {
 
 ptr<resp_msg> raft_server::handle_reconnect_req(req_msg& req) {
     int32 srv_id = req.get_src();
-    ptr<resp_msg> resp(cs_new<resp_msg>(state_->get_term(), msg_type::reconnect_response, id_, srv_id));
+    ptr<resp_msg> resp(
+        cs_new<resp_msg>(state_->get_term(), msg_type::reconnect_response, id_, srv_id));
     if (role_ != srv_role::leader) {
         p_er("this node is not a leader "
              "(upon re-connect req from peer %d)",
@@ -921,7 +1019,8 @@ void raft_server::become_leader() {
         role_ = srv_role::leader;
         leader_ = id_;
         srv_to_join_.reset();
-        leadership_transfer_timer_.set_duration_ms(params->leadership_transfer_min_wait_time_);
+        leadership_transfer_timer_.set_duration_ms(
+            params->leadership_transfer_min_wait_time_);
         leadership_transfer_timer_.reset();
         precommit_index_ = log_store_->next_slot() - 1;
         p_in("state machine commit index %zu, "
@@ -958,20 +1057,14 @@ void raft_server::become_leader() {
         }
 
         // WARNING: WE SHOULD NOT CHANGE THE ORIGINAL CONTENTS DIRECTLY!
-        ptr<cluster_config> last_config_cloned = cluster_config::deserialize(*last_config->serialize());
+        ptr<cluster_config> last_config_cloned =
+            cluster_config::deserialize(*last_config->serialize());
         last_config_cloned->set_log_idx(log_store_->next_slot());
         ptr<buffer> conf_buf = last_config_cloned->serialize();
-        ptr<log_entry> entry(cs_new<log_entry>(state_->get_term(), conf_buf, log_val_type::conf));
+        ptr<log_entry> entry(
+            cs_new<log_entry>(state_->get_term(), conf_buf, log_val_type::conf));
         p_in("[BECOME LEADER] appended new config at %zu\n", log_store_->next_slot());
 
-        // FMARK: add sig
-        if (flag_use_leader_sig()) {
-            // auto timer = cs_new<timer_t>();
-            // timer->start_timer();
-            entry->set_signature(get_signature(*entry->serialize_sig()));
-            // timer->add_record("ls.init.bcl");
-            // t_->add_sess(timer);
-        }
 
         store_log_entry(entry);
         config_changing_ = true;
@@ -990,7 +1083,14 @@ void raft_server::become_leader() {
     pre_vote_.failure_count_ = 0;
     data_fresh_ = true;
 
-    request_append_entries();
+    // request_append_entries();
+    if (peers_.size() == 0 || get_quorum_for_commit() == 0) {
+        p_tr("append entries requested for one node cluster or quorum size 1 (including "
+             "leader)");
+        commit(precommit_index_.load());
+    }
+
+    if (flag_use_election_list()) broadcast_leader_certificate();
 
     if (my_priority_ == 0 && get_num_voting_members() > 1) {
         // If this member's priority is zero, this node owns a temporary
@@ -1052,9 +1152,13 @@ void raft_server::check_leadership_transfer() {
     int32 successor_id = -1;
     int32 max_priority = my_priority_;
     ulong cur_commit_idx = quick_commit_index_;
+    p_in("Number of peers %d", peers_.size());
     for (auto& entry: peers_) {
         ptr<peer> peer_elem = entry.second;
         const srv_config& s_conf = peer_elem->get_config();
+        // p_in("server config id %d, endpoint %d, dc id %d, priority %d, public key %d",
+        // s_conf.get_id(), s_conf.get_endpoint(), s_conf.get_dc_id(),
+        // s_conf.get_priority(), s_conf.get_public_key()->str());
         int32 cur_priority = s_conf.get_priority();
         if (cur_priority > max_priority) {
             max_priority = cur_priority;
@@ -1145,7 +1249,8 @@ void raft_server::yield_leadership(bool immediate_yield, int successor_id) {
             ptr<peer>& pp = entry.second;
             uint64_t pp_last_resp_ms = pp->get_resp_timer_us() / 1000;
 
-            if (srv_id != id_ && pp_last_resp_ms <= hb_interval_ms && pp->get_config().get_priority() > max_priority) {
+            if (srv_id != id_ && pp_last_resp_ms <= hb_interval_ms
+                && pp->get_config().get_priority() > max_priority) {
                 max_priority = pp->get_config().get_priority();
                 candidate_id = srv_id;
                 candidate_endpoint = pp->get_config().get_endpoint();
@@ -1223,7 +1328,8 @@ bool raft_server::request_leadership() {
         cs_new<custom_notification_msg>(custom_notification_msg::request_resignation);
 
     // Wrap it using log_entry.
-    ptr<log_entry> custom_noti_le = cs_new<log_entry>(0, custom_noti->serialize(), log_val_type::custom);
+    ptr<log_entry> custom_noti_le =
+        cs_new<log_entry>(0, custom_noti->serialize(), log_val_type::custom);
 
     req->log_entries().push_back(custom_noti_le);
     pp->send_req(pp, req, resp_handler_);
@@ -1233,6 +1339,7 @@ bool raft_server::request_leadership() {
 
 void raft_server::become_follower() {
     // stop hb for all peers
+    dump_leader_signatures(); // FMARK: RN: immediately write leader signature to file
     p_tr("  FOLLOWER\n");
     {
         std::lock_guard<std::mutex> ll(cli_lock_);
@@ -1262,6 +1369,8 @@ void raft_server::become_follower() {
 
 bool raft_server::update_term(ulong term) {
     if (term > state_->get_term()) {
+        ulong last_term = state_->get_term();
+        dump_leader_signatures();
         state_->set_term(term);
         state_->set_voted_for(-1);
         state_->allow_election_timer(true);
@@ -1302,7 +1411,8 @@ ptr<resp_msg> raft_server::handle_ext_msg(req_msg& req) {
         return handle_custom_notification_req(req);
 
     default:
-        p_er("received request: %s, ignore it", msg_type_to_string(req.get_type()).c_str());
+        p_er("received request: %s, ignore it",
+             msg_type_to_string(req.get_type()).c_str());
         break;
     }
 
@@ -1347,14 +1457,17 @@ void raft_server::handle_ext_resp(ptr<resp_msg>& resp, ptr<rpc_exception>& err) 
         break;
 
     default:
-        p_er("received an unexpected response message type %s", msg_type_to_string(resp->get_type()).c_str());
+        p_er("received an unexpected response message type %s",
+             msg_type_to_string(resp->get_type()).c_str());
         break;
     }
 }
 
 void raft_server::handle_ext_resp_err(rpc_exception& err) {
     ptr<req_msg> req = err.req();
-    p_in("receive an rpc error response from peer server, %s %d", err.what(), req->get_type());
+    p_in("receive an rpc error response from peer server, %s %d",
+         err.what(),
+         req->get_type());
 
     if (req->get_type() == msg_type::install_snapshot_request) {
         if (srv_to_join_ && srv_to_join_->get_id() == req->get_dst()) {
@@ -1370,7 +1483,8 @@ void raft_server::handle_ext_resp_err(rpc_exception& err) {
         }
     }
 
-    if (req->get_type() != msg_type::sync_log_request && req->get_type() != msg_type::join_cluster_request
+    if (req->get_type() != msg_type::sync_log_request
+        && req->get_type() != msg_type::join_cluster_request
         && req->get_type() != msg_type::leave_cluster_request) {
         return;
     }
@@ -1396,15 +1510,17 @@ void raft_server::handle_ext_resp_err(rpc_exception& err) {
         // when to stop retrying, as rpc backoff is the same.
         p_db("retry the request");
         p->slow_down_hb();
-        timer_task<void>::executor exec =
-            (timer_task<void>::executor)std::bind(&raft_server::on_retryable_req_err, this, p, req);
+        timer_task<void>::executor exec = (timer_task<void>::executor)std::bind(
+            &raft_server::on_retryable_req_err, this, p, req);
         ptr<delayed_task> task(cs_new<timer_task<void>>(exec));
         schedule_task(task, p->get_current_hb_interval());
     }
 }
 
 void raft_server::on_retryable_req_err(ptr<peer>& p, ptr<req_msg>& req) {
-    p_db("retry the request %s for %d", msg_type_to_string(req->get_type()).c_str(), p->get_id());
+    p_db("retry the request %s for %d",
+         msg_type_to_string(req->get_type()).c_str(),
+         p->get_id());
     if (p->make_busy()) {
         p->send_req(p, req, ex_resp_handler_);
     } else {
@@ -1453,16 +1569,8 @@ void raft_server::set_user_ctx(const std::string& ctx) {
     cloned_config->set_user_ctx(ctx);
 
     ptr<buffer> new_conf_buf = cloned_config->serialize();
-    ptr<log_entry> entry = cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf);
-
-    // FMARK: add sig
-    if (flag_use_leader_sig()) {
-        // auto timer = cs_new<timer_t>();
-        // timer->start_timer();
-        entry->set_signature(get_signature(*entry->serialize_sig()));
-        // timer->add_record("ls.init.sctx");
-        // t_->add_sess(timer);
-    }
+    ptr<log_entry> entry =
+        cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf);
 
     store_log_entry(entry);
     request_append_entries();
@@ -1511,6 +1619,7 @@ raft_server::peer_info raft_server::get_peer_info(int32 srv_id) const {
     peer_info ret;
     ptr<peer> pp = entry->second;
     ret.id_ = pp->get_id();
+    // ret.last_log_idx_ = pp->get_last_accepted_log_idx();
     ret.last_log_idx_ = pp->get_next_log_idx() - 1;
     ret.last_succ_resp_us_ = pp->get_resp_timer_us();
     return ret;
@@ -1525,6 +1634,7 @@ std::vector<raft_server::peer_info> raft_server::get_peer_info_all() const {
         peer_info pi;
         ptr<peer> pp = entry.second;
         pi.id_ = pp->get_id();
+        // pi.last_log_idx_ = pp->get_last_accepted_log_idx();
         pi.last_log_idx_ = pp->get_next_log_idx() - 1;
         pi.last_succ_resp_us_ = pp->get_resp_timer_us();
         ret.push_back(pi);
@@ -1564,6 +1674,29 @@ ulong raft_server::store_log_entry(ptr<log_entry>& entry, ulong index) {
         log_store_->write_at(log_index, entry);
     }
 
+    {
+        std::unique_lock<std::mutex> lock(hash_cache_lock_);
+        if (hash_cache_.find(log_index) == hash_cache_.end()) {
+            // not in cache
+            ptr<buffer> prev_hash = nullptr;
+            if (hash_cache_.find(log_index - 1) != hash_cache_.end()) {
+                // previous hash is in cachef
+                prev_hash = hash_cache_[log_index - 1];
+            }
+            ptr<buffer> hash = nullptr;
+            if (entry->get_val_type() == log_val_type::app_log) {
+                hash = create_hash(entry, prev_hash, log_index);
+                hash_cache_[log_index] = hash;
+            } else
+                hash_cache_[log_index] = prev_hash;
+            p_in("hash cache updated for log index %zu -> %s",
+                 log_index,
+                 (hash != nullptr)
+                     ? tobase64(*hash).c_str()
+                     : "null");
+        }
+    }
+
     if (entry->get_val_type() == log_val_type::conf) {
         // Force persistence of config_change logs to guarantee the durability of
         // cluster membership change log entries.  Losing cluster membership log
@@ -1588,59 +1721,121 @@ ulong raft_server::store_log_entry(ptr<log_entry>& entry, ulong index) {
  * FMARK:
  * @param index index of the appending point of target chain
  *
- * @return -1 on pass; index of failed entry on fail;
+ * @return true on pass;
  */
-ssize_t raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries, ulong& index) {
+bool raft_server::match_log_entry(std::vector<ptr<log_entry>>& entries,
+                                  ulong index,
+                                  ptr<buffer> target_hash) {
+    p_tr("number of entries %zu, index %zu", entries.size(), index);
+    for (auto& entry: entries) {
+        p_tr("entry %zu, term %zu, size %zu, type %d",
+             entry->get_term(),
+             entry->get_term(),
+             entry->get_buf().size(),
+             entry->get_val_type());
+    }
     ptr<log_entry> prev_entry = log_store_->last_app_log_entry();
     ssize_t prev_index = (ssize_t)log_store_->last_app_log_idx();
-    ulong starter = index + 1;
-    if (index > 0 && index < log_store_->next_slot() - 1) {
-        prev_index = index;
-        while (prev_index > 0 && log_store_->entry_at(prev_index)->get_val_type() != log_val_type::app_log) {
-            prev_index--;
+    // ulong starter = index + 1;
+
+    // Skipping already existing (with the same term) logs.
+    size_t cnt = 0;
+    while (index < log_store_->next_slot() && cnt < entries.size()) {
+        if (log_store_->term_at(index) == entries.at(cnt)->get_term()) {
+            index++;
+            cnt++;
+        } else {
+            break;
         }
-        prev_entry = log_store_->entry_at(prev_index);
+    }
+
+    ptr<buffer> base_hash = nullptr;
+    std::vector<ptr<log_entry>> new_entries;
+    {
+        std::unique_lock<std::mutex> lock(hash_cache_lock_);
+        if (hash_cache_.find(index - 1) != hash_cache_.end()) {
+            lock.unlock();
+            base_hash = hash_cache_[index - 1];
+            new_entries.insert(new_entries.begin(), entries.begin() + cnt, entries.end());
+        } else {
+            base_hash = hash_cache_.rbegin()->second;
+            auto logs_to_append = log_store_->log_entries(hash_cache_.rbegin()->first, index);
+            new_entries.insert(new_entries.begin(), logs_to_append->begin(), logs_to_append->end());
+            new_entries.insert(new_entries.begin(), entries.begin(), entries.end());
+            p_in("delayed verification: verifying log entries from %zu to %zu",
+                 hash_cache_.rbegin()->first,
+                 index);
+        }
+    }
+
+    if (index <= sm_commit_index_) {
+        p_er("next index %zu is less than or equal to state machine commit index %zu",
+             index,
+             sm_commit_index_.load());
+        return false;
+    }
+    if (index > log_store_->next_slot()) {
+        p_wn("index %zu is greater than next slot %zu", index, log_store_->next_slot());
+        return false;
     }
     // if (!check_hash(entries[0], log_store_->entry_at(index), index)) return 0;
-    for (ulong i = 0; i < (ulong)entries.size(); i++) {
-        if (entries[i]->get_val_type() != log_val_type::app_log) continue;
-        if (!check_hash(entries[i], prev_entry, prev_index)) {
-            index = prev_index;
-            return (ssize_t)(i + starter);
+    // bool ret = check_hash(entries, base_hash, target_hash, index);
+
+    // get sub vector cnt:end from entries
+    std::map<ulong, ptr<buffer>> hash_cache_to_update;
+    bool ret =
+        check_hash(new_entries, base_hash, target_hash, index, hash_cache_to_update);
+
+    if (!ret) {
+        if (base_hash == nullptr) {
+            p_er("hash pointers are of different lengths, length of target hash %zu",
+                 target_hash->size());
+        } else {
+            p_er("expected hash %s, but got %s",
+                 tobase64(*base_hash).c_str(),
+                 tobase64(*target_hash).c_str());
         }
-        prev_entry = entries[i];
-        prev_index = starter + i;
+    } else {
+        // apply hash_cache_to_update to hash_cache_
+        std::unique_lock<std::mutex> lock(hash_cache_lock_);
+        for (auto& it: hash_cache_to_update) {
+            hash_cache_[it.first] = it.second;
+            p_in("hash cache updated for log index %zu -> %s",
+                 it.first, (it.second != nullptr) ? tobase64(*it.second).c_str() : "null");
+        }
     }
-    return (ssize_t)-1;
+    return ret;
 }
 
+
 /**
- * FMARK:
+ * FMARK: new check_leader_sig
  *
- * @return -1 on pass; index of failed entry on fail;
  */
-ssize_t raft_server::check_leader_sig(std::vector<ptr<log_entry>>& entries, int32 signer) {
-    auto entry = peers_.find(signer);
-    if (entry == peers_.end()) {
-        p_ft("cannot find signer %d!", signer);
+bool raft_server::check_leader_sig(ptr<log_entry> entry, ptr<buffer> sig,
+                                      int32 signer_id) {
+    auto signer = peers_.find(signer_id);
+    if (signer == peers_.end()) {
+        p_ft("cannot find signer %d!", signer_id);
         ctx_->state_mgr_->system_exit(N22_unrecoverable_isolation);
     }
 
-    ptr<peer> p_signer = entry->second;
+    ptr<peer> p_signer = signer->second;
 
-    for (ulong i = 0; i < (ulong)entries.size(); i++) {
-        if (entries[i]->get_val_type() != log_val_type::app_log) continue;
-        if (!p_signer->verify_signature(entries[i]->serialize_sig(), entries[i]->get_sig_ptr())) {
-            return (ssize_t)(i);
-        }
+    if (entry->get_val_type() != log_val_type::app_log) return true;
+    p_tr("Verifying signature");
+    if (!entry->serialize_sig()) {
+        p_in("log entry msg is null");
+        return true;
     }
-    return (ssize_t)-1;
+    return p_signer->verify_signature(entry->serialize_sig(), sig);
 }
 
-int32 raft_server::validate_commitment_certificate(ptr<certificate> cert, ptr<log_entry> entry) {
+int32 raft_server::validate_commitment_certificate(ptr<certificate> cert,
+                                                   ptr<log_entry> entry) {
     for (auto& it: cert->get_sigs()) {
         if (it.first == id_) {
-            if (!public_key->verify_md(*entry->serialize_sig(), *it.second)) {
+            if (!public_key_->verify_md(*entry->serialize_sig(), *it.second)) {
                 return it.first;
             }
             continue;
@@ -1657,22 +1852,30 @@ int32 raft_server::validate_commitment_certificate(ptr<certificate> cert, ptr<lo
 }
 
 // FMARK: push new signature
-bool raft_server::push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term, ulong index) {
+bool raft_server::push_new_cert_signature(ptr<buffer> sig,
+                                          int32 pid,
+                                          ulong term,
+                                          ulong index) {
     auto current_commit_index = quick_commit_index_.load();
     if (index <= current_commit_index) {
-        p_db("received a stale signature of index %zu (current committed %zu) from peer #%d",
+        p_db("received a stale signature of index %zu (current committed %zu) from peer "
+             "#%d",
              index,
              current_commit_index,
              pid);
         return false;
     }
 
-    p_db("[CC] adding new signature from peer #%d of index %zu at term %zu", pid, index, term);
+    p_db("[CC] adding new signature from peer #%d of index %zu at term %zu",
+         pid,
+         index,
+         term);
     auto it = working_certs_.find(index);
     if (it == working_certs_.end()) {
         auto new_cert = cs_new<certificate>(config_->get_servers().size(), term, index);
         new_cert->insert(pid, sig);
-        new_cert->insert(id_, get_signature(*log_store_->entry_at(index)->serialize_sig()));
+        new_cert->insert(id_,
+                         get_signature(*log_store_->entry_at(index)->serialize_sig()));
         {
             std::lock_guard<std::mutex> guard(cert_lock_);
             working_certs_[index] = new_cert;
@@ -1692,11 +1895,17 @@ bool raft_server::push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term
             for (auto idx: removers) {
                 working_certs_.erase(idx);
             }
-            p_in("[CC] certificate of index %zu at term %zu ready to commit", index, term);
+            p_in(
+                "[CC] certificate of index %zu at term %zu ready to commit", index, term);
             return true;
         }
     }
     return false;
+}
+
+// FMARK: get new leader certificate
+void raft_server::new_leader_certificate() {
+    leader_cert_ = cs_new<leader_certificate>();
 }
 
 CbReturnCode raft_server::invoke_callback(cb_func::Type type, cb_func::Param* param) {
@@ -1712,12 +1921,14 @@ void raft_server::set_inc_term_func(srv_state::inc_term_func func) {
 
 raft_server::limits raft_server::get_raft_limits() { return raft_limits_; }
 
-void raft_server::set_raft_limits(const raft_server::limits& new_limits) { raft_limits_ = new_limits; }
+void raft_server::set_raft_limits(const raft_server::limits& new_limits) {
+    raft_limits_ = new_limits;
+}
 
 void raft_server::check_overall_status() { check_leadership_transfer(); }
 
 // FMARK: sign message
-ptr<buffer> raft_server::get_signature(buffer& msg) { return private_key->sign_md(msg); }
+ptr<buffer> raft_server::get_signature(buffer& msg) { return private_key_->sign_md(msg); }
 
 // FMARK: flag wrappers
 
@@ -1726,4 +1937,53 @@ bool raft_server::flag_use_ptr() { return get_current_params().use_chain_ptr_; }
 bool raft_server::flag_use_leader_sig() { return get_current_params().use_leader_sig_; }
 
 bool raft_server::flag_use_cc() { return get_current_params().use_commitment_cert_; }
+
+bool raft_server::flag_use_election_list() {
+    return get_current_params().use_election_list_;
+}
+
+bool raft_server::flag_save_election_list() {
+    return get_current_params().save_election_list_;
+}
+
+ulong raft_server::get_election_list_max() {
+    return get_current_params().election_list_max_;
+}
+
+void raft_server::dump_leader_signatures() {
+    dump_leader_signatures(quick_commit_index_, log_store_->entry_at(quick_commit_index_)->get_term());
+}
+
+void raft_server::dump_leader_signatures(unsigned long long commit_index, ulong term) {
+    if (last_committed_log_sig_ == nullptr) {
+        p_db("no leader signature to save");
+        return;
+    }
+
+    std::string dir = ctx_->get_params()->forensics_output_path_;
+    if (!boost::filesystem::exists(dir)) {
+        boost::filesystem::create_directory(dir);
+    }
+    std::string filename =
+        get_leader_sig_file_name(dir); // file name should be unique by using
+                                            // timestamp, server id
+
+    std::ofstream file(filename, std::ios::binary | std::ios::app);
+    if (!file.is_open()) {
+        p_er("cannot open file %s for saving election list", filename.c_str());
+        return;
+    }
+    uint8_t size_t_size = sizeof(size_t);
+    file.write(reinterpret_cast<const char*>(&size_t_size), 1); // Write system size_t size to file first
+    file.write(reinterpret_cast<const char*>(&term), sizeof(ulong));
+    file.write(reinterpret_cast<const char*>(&commit_index), sizeof(unsigned long long));
+    ptr<buffer> leader_sig = last_committed_log_sig_;
+    size_t len = leader_sig->size();
+    file.write(reinterpret_cast<const char*>(&len), sizeof(size_t));
+    file.write(reinterpret_cast<const char*>(leader_sig->data_begin()), len);
+
+    file.close();
+    p_db("leader signatures for term %zu saved to %s", term, filename.c_str());
+}
+
 } // namespace nuraft

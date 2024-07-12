@@ -29,10 +29,10 @@ limitations under the License.
 #include <set>
 #include <sstream>
 
-#define INT_UNUSED      int ATTR_UNUSED
-#define VOID_UNUSED     void ATTR_UNUSED
-#define STR_UNUSED      std::string ATTR_UNUSED
-#define _msg(...)       TestSuite::_msg(__VA_ARGS__);
+#define INT_UNUSED int ATTR_UNUSED
+#define VOID_UNUSED void ATTR_UNUSED
+#define STR_UNUSED std::string ATTR_UNUSED
+#define _msg(...) TestSuite::_msg(__VA_ARGS__);
 
 using namespace nuraft;
 
@@ -45,8 +45,7 @@ public:
         , lastCommittedConfigIdx(0)
         , targetSnpReadFailures(0)
         , snpDelayMs(0)
-        , myLog(logger)
-    {
+        , myLog(logger) {
         (void)myLog;
     }
 
@@ -81,12 +80,8 @@ public:
         rollbacks.push_back(log_idx);
     }
 
-    void save_logical_snp_obj(snapshot& s,
-                              ulong& obj_id,
-                              buffer& data,
-                              bool is_first_obj,
-                              bool is_last_obj)
-    {
+    void save_logical_snp_obj(
+        snapshot& s, ulong& obj_id, buffer& data, bool is_first_obj, bool is_last_obj) {
         if (snpDelayMs) {
             TestSuite::sleep_ms(snpDelayMs);
         }
@@ -115,7 +110,7 @@ public:
 
         int32 data_size = bs.get_i32();
         ptr<buffer> data_commit = buffer::alloc(data_size);
-        bs.get_buffer( data_commit );
+        bs.get_buffer(data_commit);
 
         commits[log_idx] = data_commit;
 
@@ -126,20 +121,17 @@ public:
         obj_id++;
     }
 
-    bool apply_snapshot(snapshot& s) {
-        return true;
-    }
+    bool apply_snapshot(snapshot& s) { return true; }
 
     int read_logical_snp_obj(snapshot& s,
                              void*& user_snp_ctx,
                              ulong obj_id,
                              ptr<buffer>& data_out,
-                             bool& is_last_obj)
-    {
+                             bool& is_last_obj) {
         if (!user_snp_ctx) {
             // Create a dummy context with a magic number.
             int ctx = 0xabcdef;
-            user_snp_ctx = malloc( sizeof(ctx) );
+            user_snp_ctx = malloc(sizeof(ctx));
             memcpy(user_snp_ctx, &ctx, sizeof(ctx));
 
             std::lock_guard<std::mutex> ll(openedUserCtxsLock);
@@ -154,7 +146,7 @@ public:
         if (obj_id == 0) {
             // First object contains metadata:
             //   Put first log index and the last log index.
-            data_out = buffer::alloc( sizeof(ulong) * 2 );
+            data_out = buffer::alloc(sizeof(ulong) * 2);
             buffer_serializer bs(data_out);
 
             ulong first_idx = 0;
@@ -179,17 +171,16 @@ public:
         if (entry == commits.end()) {
             // Corresponding log number doesn't exist,
             // it happens when that log number is used for config change.
-            data_out = buffer::alloc( sizeof(ulong) );
+            data_out = buffer::alloc(sizeof(ulong));
             buffer_serializer bs(data_out);
-            bs.put_u64( obj_id );
+            bs.put_u64(obj_id);
         } else {
             ptr<buffer> local_data = entry->second;
-            data_out = buffer::alloc( sizeof(ulong) + sizeof(int32) +
-                                      local_data->size() );
+            data_out = buffer::alloc(sizeof(ulong) + sizeof(int32) + local_data->size());
             buffer_serializer bs(data_out);
-            bs.put_u64( obj_id );
-            bs.put_i32( (int32)local_data->size() );
-            bs.put_buffer( *local_data );
+            bs.put_u64(obj_id);
+            bs.put_i32((int32)local_data->size());
+            bs.put_buffer(*local_data);
         }
 
         if (obj_id == s.get_last_log_idx()) {
@@ -229,10 +220,9 @@ public:
         return std::max(entry->first, lastCommittedConfigIdx.load());
     }
 
-    void create_snapshot(snapshot& s,
-                         async_result<bool>::handler_type& when_done)
-    {
-        {   std::lock_guard<std::mutex> ll(lastSnapshotLock);
+    void create_snapshot(snapshot& s, async_result<bool>::handler_type& when_done) {
+        {
+            std::lock_guard<std::mutex> ll(lastSnapshotLock);
             // NOTE: We only handle logical snapshot.
             ptr<buffer> snp_buf = s.serialize();
             lastSnapshot = snapshot::deserialize(*snp_buf);
@@ -242,17 +232,11 @@ public:
         when_done(ret, except);
     }
 
-    void set_next_batch_size_hint_in_bytes(ulong to) {
-        customBatchSize = to;
-    }
+    void set_next_batch_size_hint_in_bytes(ulong to) { customBatchSize = to; }
 
-    int64 get_next_batch_size_hint_in_bytes() {
-        return customBatchSize;
-    }
+    int64 get_next_batch_size_hint_in_bytes() { return customBatchSize; }
 
-    const std::list<uint64_t>& getRollbackIdxs() const {
-        return rollbacks;
-    }
+    const std::list<uint64_t>& getRollbackIdxs() const { return rollbacks; }
 
     bool isSame(const TestSm& with, bool check_precommit = false) {
         // NOTE:
@@ -278,9 +262,7 @@ public:
 
                 e1_buf->pos(0);
                 e2_buf->pos(0);
-                if ( memcmp( e1_buf->data(),
-                             e2_buf->data(),
-                             e1_buf->size() ) ) return false;
+                if (memcmp(e1_buf->data(), e2_buf->data(), e1_buf->size())) return false;
             }
         }
 
@@ -295,9 +277,7 @@ public:
 
             e1_buf->pos(0);
             e2_buf->pos(0);
-            if ( memcmp( e1_buf->data(),
-                         e2_buf->data(),
-                         e1_buf->size() ) ) return false;
+            if (memcmp(e1_buf->data(), e2_buf->data(), e1_buf->size())) return false;
         }
 
         return true;
@@ -311,6 +291,19 @@ public:
             const char* str = bb->get_str();
             bb->pos(0);
             if (std::string(str) == msg) {
+                return entry.first;
+            }
+        }
+        return 0;
+    }
+
+    ulong isCommitted(const int msg) {
+        std::lock_guard<std::mutex> ll(dataLock);
+        for (auto& entry: commits) {
+            ptr<buffer> bb = entry.second;
+            bb->pos(0);
+            auto num = bb->get_int();
+            if (num == msg) {
                 return entry.first;
             }
         }
@@ -335,13 +328,9 @@ public:
         }
     }
 
-    void setSnpReadFailure(int num_failures) {
-        targetSnpReadFailures = num_failures;
-    }
+    void setSnpReadFailure(int num_failures) { targetSnpReadFailures = num_failures; }
 
-    void setSnpDelay(size_t delay_ms) {
-        snpDelayMs = delay_ms;
-    }
+    void setSnpDelay(size_t delay_ms) { snpDelayMs = delay_ms; }
 
 private:
     std::map<uint64_t, ptr<buffer>> preCommits;
@@ -368,28 +357,19 @@ private:
 
 class TestMgr : public state_mgr {
 public:
-    TestMgr(int srv_id,
-            const std::string& endpoint)
+    TestMgr(int srv_id, const std::string& endpoint)
         : myId(srv_id)
         , myEndpoint(endpoint)
-        , curLogStore( cs_new<inmem_log_store>() )
-    {
-        mySrvConfig = cs_new<srv_config>
-                      ( srv_id,
-                        1,
-                        endpoint,
-                        "server " + std::to_string(srv_id),
-                        false,
-                        50 );
+        , curLogStore(cs_new<inmem_log_store>()) {
+        mySrvConfig = cs_new<srv_config>(
+            srv_id, 1, endpoint, "server " + std::to_string(srv_id), false, 50);
 
         savedConfig = cs_new<cluster_config>();
         savedConfig->get_servers().push_back(mySrvConfig);
     }
     ~TestMgr() {}
 
-    ptr<cluster_config> load_config() {
-        return savedConfig;
-    }
+    ptr<cluster_config> load_config() { return savedConfig; }
     void save_config(const cluster_config& config) {
         ptr<buffer> buf = config.serialize();
         savedConfig = cluster_config::deserialize(*buf);
@@ -398,18 +378,10 @@ public:
         ptr<buffer> buf = state.serialize();
         savedState = srv_state::deserialize(*buf);
     }
-    ptr<srv_state> read_state() {
-        return savedState;
-    }
-    ptr<log_store> load_log_store() {
-        return curLogStore;
-    }
-    int32 server_id() {
-        return myId;
-    }
-    void system_exit(const int exit_code) {
-        abort();
-    }
+    ptr<srv_state> read_state() { return savedState; }
+    ptr<log_store> load_log_store() { return curLogStore; }
+    int32 server_id() { return myId; }
+    void system_exit(const int exit_code) { abort(); }
 
     ptr<srv_config> get_srv_config() const { return mySrvConfig; }
 
@@ -438,9 +410,8 @@ static VOID_UNUSED reset_log_files() {
     (void)r;
 
 #else
-    #makeerror "not supported platform"
+#makeerror "not supported platform"
 #endif
 }
 
 } // namespace raft_functional_common
-

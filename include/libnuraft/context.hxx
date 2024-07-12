@@ -39,30 +39,27 @@ class state_machine;
 class state_mgr;
 struct context {
 public:
-    context( ptr<state_mgr>& mgr,
-             ptr<state_machine>& m,
-             ptr<rpc_listener>& listener,
-             ptr<logger>& l,
-             ptr<rpc_client_factory>& cli_factory,
-             ptr<delayed_task_scheduler>& scheduler,
-             const raft_params& params )
+    context(ptr<state_mgr>& mgr,
+            ptr<state_machine>& m,
+            ptr<rpc_listener>& listener,
+            ptr<logger>& l,
+            ptr<rpc_client_factory>& cli_factory,
+            ptr<delayed_task_scheduler>& scheduler,
+            const raft_params& params)
         : state_mgr_(mgr)
         , state_machine_(m)
         , rpc_listener_(listener)
         , logger_(l)
         , rpc_cli_factory_(cli_factory)
         , scheduler_(scheduler)
-        , params_( cs_new<raft_params>(params) )
-        {}
+        , params_(cs_new<raft_params>(params)) {}
 
     /**
      * Register an event callback function.
      *
      * @param func Callback function to register.
      */
-    void set_cb_func(cb_func::func_type func) {
-        cb_func_ = cb_func(func);
-    }
+    void set_cb_func(cb_func::func_type func) { cb_func_ = cb_func(func); }
 
     /**
      * Return the pointer to current Raft parameters.
@@ -137,6 +134,6 @@ public:
     mutable std::mutex ctx_lock_;
 };
 
-}
+} // namespace nuraft
 
 #endif //_CONTEXT_HXX_

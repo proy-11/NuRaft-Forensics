@@ -51,6 +51,7 @@ enum cmd_result_code {
     BAD_CHAIN = -100,
     BAD_LEADER_SIG = -101,
     BAD_CC = -102,
+    NO_LC = -103,
     FAILED = -32768,
 };
 
@@ -218,14 +219,17 @@ public:
              {cmd_result_code::TIMEOUT, "Request timeout."},
              {cmd_result_code::NOT_LEADER, "This node is not a leader."},
              {cmd_result_code::BAD_REQUEST, "Invalid request."},
-             {cmd_result_code::SERVER_ALREADY_EXISTS, "Server already exists in the cluster."},
-             {cmd_result_code::CONFIG_CHANGING, "Previous configuration change has not been committed yet."},
+             {cmd_result_code::SERVER_ALREADY_EXISTS,
+              "Server already exists in the cluster."},
+             {cmd_result_code::CONFIG_CHANGING,
+              "Previous configuration change has not been committed yet."},
              {cmd_result_code::SERVER_IS_JOINING, "Other server is being added."},
              {cmd_result_code::SERVER_NOT_FOUND, "Cannot find server."},
              {cmd_result_code::CANNOT_REMOVE_LEADER, "Cannot remove leader."},
              {cmd_result_code::BAD_CHAIN, "Chain nature violated."},
              {cmd_result_code::BAD_LEADER_SIG, "Leader signature invalid."},
              {cmd_result_code::BAD_CC, "CC invalid."},
+             {cmd_result_code::NO_LC, "No LC found for this leader."},
              {cmd_result_code::FAILED, "Failed."}});
         auto entry = code_str_map.find((int)code);
         if (entry == code_str_map.end()) {
@@ -272,7 +276,8 @@ private:
 };
 
 // For backward compatibility.
-template <typename T, typename TE = ptr<std::exception>> using async_result = cmd_result<T, TE>;
+template <typename T, typename TE = ptr<std::exception>>
+using async_result = cmd_result<T, TE>;
 
 } // namespace nuraft
 

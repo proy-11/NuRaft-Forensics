@@ -34,7 +34,7 @@ ptr<snapshot> snapshot::deserialize(buffer_serializer& bs) {
     ulong last_log_idx = bs.get_u64();
     ulong last_log_term = bs.get_u64();
     ulong size = bs.get_u64();
-    ptr<cluster_config> conf( cluster_config::deserialize(bs) );
+    ptr<cluster_config> conf(cluster_config::deserialize(bs));
     return cs_new<snapshot>(last_log_idx, last_log_term, conf, size, snp_type);
 }
 
@@ -50,5 +50,4 @@ ptr<buffer> snapshot::serialize() {
     return buf;
 }
 
-} // namespace nuraft;
-
+} // namespace nuraft

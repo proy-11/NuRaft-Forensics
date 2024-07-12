@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
-# find_package(Boost 1.74.0 COMPONENTS asio filesystem)
 project(NuRaft VERSION 1.0.0 LANGUAGES CXX)
+find_package(Boost 1.74.0 REQUIRED COMPONENTS filesystem)
 
 set(CMAKE_THREAD_LIBS_INIT "-lpthread")
 set(CMAKE_HAVE_THREADS_LIBRARY 1)
@@ -55,7 +55,7 @@ else ()
                     /usr/local/include
                     /usr/include)
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DASIO_STANDALONE -lboost_system")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DASIO_STANDALONE")
 
 endif ()
 
@@ -227,7 +227,8 @@ set(LIBRARIES
     ${LIBCRYPTOPP}
     ${LIBBOOST_SYSTEM}
     ${LIBDL}
-    ${LIBZ})
+    ${LIBZ}
+    ${Boost_LIBRARIES})
 
 
 # === Paths ===
@@ -266,6 +267,7 @@ set(RAFT_CORE
     ${ROOT_SRC}/cluster_config.cxx
     ${ROOT_SRC}/crc32.cxx
     ${ROOT_SRC}/openssl_ecdsa.cxx
+    ${ROOT_SRC}/election_list.cxx
     ${ROOT_SRC}/error_code.cxx
     ${ROOT_SRC}/global_mgr.cxx
     ${ROOT_SRC}/handle_append_entries.cxx
@@ -279,6 +281,7 @@ set(RAFT_CORE
     ${ROOT_SRC}/handle_user_cmd.cxx
     ${ROOT_SRC}/handle_vote.cxx
     ${ROOT_SRC}/launcher.cxx
+    ${ROOT_SRC}/leader_certificate.cxx
     ${ROOT_SRC}/peer.cxx
     ${ROOT_SRC}/raft_server.cxx
     ${ROOT_SRC}/snapshot.cxx
@@ -299,6 +302,7 @@ set_target_properties(static_lib PROPERTIES OUTPUT_NAME ${LIBRARY_NAME} CLEAN_DI
 
 add_library(shared_lib SHARED ${STATIC_LIB_SRC})
 set_target_properties(shared_lib PROPERTIES OUTPUT_NAME ${LIBRARY_NAME} CLEAN_DIRECT_OUTPUT 1)
+target_link_libraries(shared_lib ${LIBBOOST_SYSTEM} ${Boost_LIBRARIES})
 if (APPLE)
     target_link_libraries(shared_lib ${LIBRARIES})
 endif ()

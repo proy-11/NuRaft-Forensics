@@ -93,11 +93,15 @@ struct raft_params {
         , use_chain_ptr_(true)
         , use_leader_sig_(true)
         , use_commitment_cert_(true)
+        , use_election_list_(true)
+        , save_election_list_(true)
+        , forensics_output_path_("forensics_out")
+        , election_list_max_(10)
         , locking_method_type_(dual_mutex)
         , return_method_(blocking)
         , auto_forwarding_req_timeout_(0)
         , grace_period_of_lagging_state_machine_(0)
-        , private_key_path("") {}
+        , private_key("") {}
 
     /**
      * Election timeout upper bound in milliseconds
@@ -336,7 +340,8 @@ struct raft_params {
      * @return Heartbeat interval in millisecond.
      */
     int max_hb_interval() const {
-        return std::max(heart_beat_interval_, election_timeout_lower_bound_ - (heart_beat_interval_ / 2));
+        return std::max(heart_beat_interval_,
+                        election_timeout_lower_bound_ - (heart_beat_interval_ / 2));
     }
 
 public:
@@ -519,6 +524,30 @@ public:
     bool use_commitment_cert_;
 
     /**
+     * @brief FMARK: If true, use election list
+     *
+     */
+    bool use_election_list_;
+
+    /**
+     * @brief FMARK: periodically save election list to files
+     *
+     */
+    bool save_election_list_;
+
+    /**
+     * @brief FMARK: forensics output path
+     *
+     */
+    std::string forensics_output_path_;
+
+    /**
+     * @brief FMARK: election list max entries in memory before dumping to file
+     *
+     */
+    ulong election_list_max_;
+
+    /**
      * Choose the type of lock that will be used by user threads.
      */
     locking_method_type locking_method_type_;
@@ -548,10 +577,10 @@ public:
     int32 grace_period_of_lagging_state_machine_;
 
     /**
-     * @brief path to private key; if non-existing, create a random one
+     * @brief private key string; if non-existing, create a random one
      *
      */
-    std::string private_key_path;
+    std::string private_key;
 };
 
 } // namespace nuraft

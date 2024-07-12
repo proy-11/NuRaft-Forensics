@@ -37,7 +37,9 @@ void raft_server::set_priority(const int srv_id, const int new_priority) {
 
     // Do nothing if not a leader.
     if (id_ != leader_) {
-        p_in("Got set_priority request but I'm not a leader: my ID %d, leader %d", id_, leader_.load());
+        p_in("Got set_priority request but I'm not a leader: my ID %d, leader %d",
+             id_,
+             leader_.load());
 
         if (!is_leader_alive()) {
             p_wn("No live leader now, broadcast priority change");
@@ -77,7 +79,10 @@ void raft_server::set_priority(const int srv_id, const int new_priority) {
     for (auto& entry: s_confs) {
         srv_config* s_conf = entry.get();
         if (s_conf->get_id() == srv_id) {
-            p_in("Change server %d priority %d -> %d", srv_id, s_conf->get_priority(), new_priority);
+            p_in("Change server %d priority %d -> %d",
+                 srv_id,
+                 s_conf->get_priority(),
+                 new_priority);
             s_conf->set_priority(new_priority);
         }
     }
@@ -85,19 +90,12 @@ void raft_server::set_priority(const int srv_id, const int new_priority) {
     // Create a log for new configuration, it should be replicated.
     cloned_config->set_log_idx(log_store_->next_slot());
     ptr<buffer> new_conf_buf(cloned_config->serialize());
-    ptr<log_entry> entry(cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
+    ptr<log_entry> entry(
+        cs_new<log_entry>(state_->get_term(), new_conf_buf, log_val_type::conf));
 
     config_changing_ = true;
     uncommitted_config_ = cloned_config;
 
-    // FMARK: add sig
-    if (flag_use_leader_sig()) {
-        // auto timer = cs_new<timer_t>();
-        // timer->start_timer();
-        entry->set_signature(get_signature(*entry->serialize_sig()));
-        // timer->add_record("ls.init.spry");
-        // t_->add_sess(timer);
-    }
 
     store_log_entry(entry);
     request_append_entries();
@@ -111,7 +109,10 @@ void raft_server::broadcast_priority_change(const int srv_id, const int new_prio
     for (auto& entry: cur_config->get_servers()) {
         srv_config* s_conf = entry.get();
         if (s_conf->get_id() == srv_id) {
-            p_in("Change server %d priority %d -> %d", srv_id, s_conf->get_priority(), new_priority);
+            p_in("Change server %d priority %d -> %d",
+                 srv_id,
+                 s_conf->get_priority(),
+                 new_priority);
             s_conf->set_priority(new_priority);
         }
     }
@@ -149,7 +150,8 @@ void raft_server::broadcast_priority_change(const int srv_id, const int new_prio
 
 ptr<resp_msg> raft_server::handle_priority_change_req(req_msg& req) {
     // NOTE: now this function is protected by lock.
-    ptr<resp_msg> resp(cs_new<resp_msg>(req.get_term(), msg_type::priority_change_response, id_, req.get_src()));
+    ptr<resp_msg> resp(cs_new<resp_msg>(
+        req.get_term(), msg_type::priority_change_response, id_, req.get_src()));
 
     std::vector<ptr<log_entry>>& v = req.log_entries();
     if (!v.size()) {
@@ -180,7 +182,10 @@ ptr<resp_msg> raft_server::handle_priority_change_req(req_msg& req) {
         srv_config* s_conf = entry.get();
         if (s_conf->get_id() == t_id) {
             resp->accept(log_store_->next_slot());
-            p_in("change peer %d priority: %d -> %d", t_id, s_conf->get_priority(), t_priority);
+            p_in("change peer %d priority: %d -> %d",
+                 t_id,
+                 s_conf->get_priority(),
+                 t_priority);
             s_conf->set_priority(t_priority);
             return resp;
         }
@@ -191,7 +196,9 @@ ptr<resp_msg> raft_server::handle_priority_change_req(req_msg& req) {
 }
 
 void raft_server::handle_priority_change_resp(resp_msg& resp) {
-    p_in("got response from peer %d: %s", resp.get_src(), resp.get_accepted() ? "success" : "fail");
+    p_in("got response from peer %d: %s",
+         resp.get_src(),
+         resp.get_accepted() ? "success" : "fail");
 }
 
 void raft_server::decay_target_priority() {
@@ -201,7 +208,10 @@ void raft_server::decay_target_priority() {
     // Should be bigger than 0.
     int32 prev_priority = target_priority_;
     target_priority_ = std::max(1, target_priority_ - gap);
-    p_in("[PRIORITY] decay, target %d -> %d, mine %d", prev_priority, target_priority_, my_priority_);
+    p_in("[PRIORITY] decay, target %d -> %d, mine %d",
+         prev_priority,
+         target_priority_,
+         my_priority_);
 
     // Once `target_priority_` becomes 1,
     // `priority_change_timer_` starts ticking.

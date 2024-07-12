@@ -94,6 +94,6 @@ public:
     virtual void system_exit(const int exit_code) = 0;
 };
 
-}
+} // namespace nuraft
 
 #endif //_STATE_MGR_HXX_

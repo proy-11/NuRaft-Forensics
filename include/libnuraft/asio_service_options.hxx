@@ -33,9 +33,13 @@ struct asio_service_meta_cb_params {
                                 uint64_t lt = 0,
                                 uint64_t li = 0,
                                 uint64_t ci = 0)
-        : msg_type_(m), src_id_(s), dst_id_(d)
-        , term_(t), log_term_(lt), log_idx_(li), commit_idx_(ci)
-        {}
+        : msg_type_(m)
+        , src_id_(s)
+        , dst_id_(d)
+        , term_(t)
+        , log_term_(lt)
+        , log_idx_(li)
+        , commit_idx_(ci) {}
 
     // Type of request.
     int msg_type_;
@@ -73,8 +77,7 @@ struct asio_service_options {
         , write_resp_meta_(nullptr)
         , read_resp_meta_(nullptr)
         , invoke_resp_cb_on_empty_meta_(true)
-        , verify_sn_(nullptr)
-        {}
+        , verify_sn_(nullptr) {}
 
     // Number of ASIO worker threads.
     // If zero, it will be automatically set to number of cores.
@@ -92,24 +95,24 @@ struct asio_service_options {
     std::string root_cert_file_;
 
     // Callback function for writing Raft RPC request metadata.
-    std::function< std::string(const asio_service_meta_cb_params&) > write_req_meta_;
+    std::function<std::string(const asio_service_meta_cb_params&)> write_req_meta_;
 
     // Callback function for reading and verifying Raft RPC request metadata.
     // If it returns false, the request will be discarded.
-    std::function< bool( const asio_service_meta_cb_params&,
-                         const std::string& ) > read_req_meta_;
+    std::function<bool(const asio_service_meta_cb_params&, const std::string&)>
+        read_req_meta_;
 
     // If `true`, it will invoke `read_req_meta_` even though
     // the received meta is empty.
     bool invoke_req_cb_on_empty_meta_;
 
     // Callback function for writing Raft RPC response metadata.
-    std::function< std::string(const asio_service_meta_cb_params&) > write_resp_meta_;
+    std::function<std::string(const asio_service_meta_cb_params&)> write_resp_meta_;
 
     // Callback function for reading and verifying Raft RPC response metadata.
     // If it returns false, the response will be ignored.
-    std::function< bool( const asio_service_meta_cb_params&,
-                         const std::string& ) > read_resp_meta_;
+    std::function<bool(const asio_service_meta_cb_params&, const std::string&)>
+        read_resp_meta_;
 
     // If `true`, it will invoke `read_resp_meta_` even though
     // the received meta is empty.
@@ -117,8 +120,7 @@ struct asio_service_options {
 
     // Callback function for verifying certificate subject name.
     // If not given, subject name will not be verified.
-    std::function< bool(const std::string&) > verify_sn_;
+    std::function<bool(const std::string&)> verify_sn_;
 };
 
-}
-
+} // namespace nuraft

@@ -1,5 +1,5 @@
 .vscode/
-build
+build*
 debug/
 Debug/
 .vs/
@@ -14,6 +14,7 @@ nbproject/
 *.exe
 *.ilk
 *.lib
+.*
 
 **/benchmark_results
 CMakeLists.txt_bkp
