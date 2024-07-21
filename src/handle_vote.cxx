@@ -206,7 +206,6 @@ void raft_server::initiate_vote(bool force_vote) {
         //  1) my priority satisfies the target, OR
         //  2) I'm the only node in the group.
         ulong last_term = state_->get_term();
-        dump_leader_signatures();
         state_->inc_term();
         state_->set_voted_for(-1);
         role_ = srv_role::candidate;

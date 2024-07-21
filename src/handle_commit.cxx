@@ -40,11 +40,6 @@ namespace nuraft {
 void raft_server::commit(ulong target_idx) {
     if (target_idx > quick_commit_index_) {
         quick_commit_index_ = target_idx;
-        if (role_ == leader && log_store_->entry_at(quick_commit_index_)->get_val_type() == log_val_type::app_log) {
-            // FMARK: RN: update last committed log entry leader signature
-            last_committed_log_sig_ = this->get_signature(*log_store_->entry_at(quick_commit_index_)->serialize_sig());
-            dump_leader_signatures();
-        }
         lagging_sm_target_index_ = target_idx;
         p_tr("trigger commit upto %lu", quick_commit_index_.load());
 

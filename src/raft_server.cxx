@@ -103,7 +103,8 @@ raft_server::raft_server(context* ctx, const init_options& opt)
                                               this,
                                               std::placeholders::_1,
                                               std::placeholders::_2))
-    , last_snapshot_(ctx->state_machine_->last_snapshot()) {
+    , last_snapshot_(ctx->state_machine_->last_snapshot())
+    , last_commit_cert_idx_dump_(0) {
 
     // FMARK: record initial timestamp
     init_timestamp_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -517,12 +518,6 @@ void raft_server::shutdown() {
         // FMARK: save election list to file
         p_in("saving unsaved election list to file");
         save_and_clean_election_list(1);
-    }
-
-    if (flag_use_leader_sig()) {
-        // FMARK: save leader signature to file
-        p_in("saving unsaved leader signature to file");
-        dump_leader_signatures();
     }
 
     p_in("reset all pointers.");
@@ -1339,7 +1334,6 @@ bool raft_server::request_leadership() {
 
 void raft_server::become_follower() {
     // stop hb for all peers
-    dump_leader_signatures(); // FMARK: RN: immediately write leader signature to file
     p_tr("  FOLLOWER\n");
     {
         std::lock_guard<std::mutex> ll(cli_lock_);
@@ -1370,7 +1364,6 @@ void raft_server::become_follower() {
 bool raft_server::update_term(ulong term) {
     if (term > state_->get_term()) {
         ulong last_term = state_->get_term();
-        dump_leader_signatures();
         state_->set_term(term);
         state_->set_voted_for(-1);
         state_->allow_election_timer(true);
@@ -1909,6 +1902,33 @@ void raft_server::new_leader_certificate() {
     leader_cert_ = cs_new<leader_certificate>();
 }
 
+void raft_server::dump_commit_cert(srv_role role, ptr<certificate> cert) {
+    if (last_commit_cert_idx_dump_ == cert->get_index()) return;
+    last_commit_cert_idx_dump_ = cert->get_index();
+    std::string dir = ctx_->get_params()->forensics_output_path_;
+    if (!boost::filesystem::exists(dir)) {
+        boost::filesystem::create_directory(dir);
+    }
+    std::string filename =
+        get_commit_cert_file_name(dir); // file name should be unique by using
+                                            // timestamp, server id
+
+    std::ofstream file(filename, std::ios::binary | std::ios::app);
+    if (!file.is_open()) {
+        p_er("cannot open file %s for saving commitment certificates", filename.c_str());
+        return;
+    }
+    uint8_t size_t_size = sizeof(size_t);
+    file.write(reinterpret_cast<const char*>(&size_t_size), 1); // Write system size_t size to file first
+    auto cert_serialized = cert->serialize();
+    auto cert_serialized_size = cert_serialized->size();
+    file.write(reinterpret_cast<const char*>(&cert_serialized_size), sizeof(size_t));
+    file.write(reinterpret_cast<const char*>(cert_serialized->data_begin()), cert_serialized->size());
+
+    file.close();
+    p_db("commitment certificate for term %zu saved to %s", cert->get_term(), filename.c_str());
+}
+
 CbReturnCode raft_server::invoke_callback(cb_func::Type type, cb_func::Param* param) {
     CbReturnCode rc = ctx_->cb_func_.call(type, param);
     return rc;
@@ -1951,16 +1971,7 @@ ulong raft_server::get_election_list_max() {
     return get_current_params().election_list_max_;
 }
 
-void raft_server::dump_leader_signatures() {
-    dump_leader_signatures(quick_commit_index_, log_store_->entry_at(quick_commit_index_)->get_term());
-}
-
-void raft_server::dump_leader_signatures(unsigned long long commit_index, ulong term) {
-    if (last_committed_log_sig_ == nullptr) {
-        p_db("no leader signature to save");
-        return;
-    }
-
+void raft_server::dump_leader_signatures(unsigned long long idx, ulong term, ptr<buffer> leader_sig) {
     std::string dir = ctx_->get_params()->forensics_output_path_;
     if (!boost::filesystem::exists(dir)) {
         boost::filesystem::create_directory(dir);
@@ -1977,8 +1988,7 @@ void raft_server::dump_leader_signatures(unsigned long long commit_index, ulong 
     uint8_t size_t_size = sizeof(size_t);
     file.write(reinterpret_cast<const char*>(&size_t_size), 1); // Write system size_t size to file first
     file.write(reinterpret_cast<const char*>(&term), sizeof(ulong));
-    file.write(reinterpret_cast<const char*>(&commit_index), sizeof(unsigned long long));
-    ptr<buffer> leader_sig = last_committed_log_sig_;
+    file.write(reinterpret_cast<const char*>(&idx), sizeof(unsigned long long));
     size_t len = leader_sig->size();
     file.write(reinterpret_cast<const char*>(&len), sizeof(size_t));
     file.write(reinterpret_cast<const char*>(leader_sig->data_begin()), len);

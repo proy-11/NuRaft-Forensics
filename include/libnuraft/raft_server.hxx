@@ -815,6 +815,7 @@ protected:
 
     // FMARK: certificate operations
     bool push_new_cert_signature(ptr<buffer> sig, int32 pid, ulong term, ulong index, int quorum_ratio_reciprocal = 2);
+    void dump_commit_cert(srv_role role, ptr<certificate> cert);
 
     ptr<resp_msg> handle_out_of_log_msg(req_msg& req,
                                         ptr<custom_notification_msg> msg,
@@ -846,9 +847,9 @@ protected:
 
     std::string get_election_list_file_name(const std::string& data_dir);
     std::string get_leader_sig_file_name(const std::string& data_dir);
+    std::string get_commit_cert_file_name(const std::string& data_dir);
 
-    void dump_leader_signatures();
-    void dump_leader_signatures(unsigned long long commit_index, ulong term);
+    void dump_leader_signatures(unsigned long long idx, ulong term, ptr<buffer> leader_sig);
 
     /**
      * @brief check whether the term has been verified with a valid leader certificate.
@@ -931,9 +932,6 @@ protected:
     std::map<ulong, ptr<buffer>> hash_cache_;
     std::mutex hash_cache_lock_;
 
-    // FMARK: RN: leader signatures
-    // std::map<int32, ptr<buffer>> leader_sigs_;
-    ptr<buffer> last_committed_log_sig_;
 
     /**
      * (Read-only)
@@ -1409,6 +1407,9 @@ protected:
 
     // FMARK: initial timestamp
     std::chrono::microseconds::rep init_timestamp_;
+
+    // FMARK: RN: prevent repeated commit cert dumps
+    ulong last_commit_cert_idx_dump_;
 };
 
 } // namespace nuraft
