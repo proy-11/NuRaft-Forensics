@@ -40,11 +40,17 @@ class leader_signatures:
         for k, idx, v in self.ls:
             last_of_each_term[k] = (idx, v)
         return last_of_each_term
+    
+    def add_to_dict(self, d):
+        for k, idx, v in self.ls:
+            if (k, idx) not in d:
+                d[(k, idx)] = [v]
+            else:
+                d[(k, idx)].append(v)
 
 
 if __name__ == "__main__":
     # Example usage
-    ls_list = []
     for file in os.listdir(sys.argv[1]):
         if not file.startswith("ls"):
             continue
@@ -56,9 +62,5 @@ if __name__ == "__main__":
         
         print(f"File: {file}, Timestamp: {date_time}, Peer: {peer_number}")
         ls = leader_signatures(f"{sys.argv[1]}/{file}")
-        ls_list.append(ls.get_last_of_each_term())
         print(ls)
-    if all(i == ls_list[0] for i in ls_list):
-        print("All leader sigs of all term are the same.")
-    else:
-        print("Leader sigs are different.")
+    

@@ -114,14 +114,14 @@ else
 fi
 
 
-echo -n "Test leader signatures of all terms"
+echo -n "Test commit certs of all terms"
 
 
 # Capture the output of the command
-output=$(python $(dirname $0)/../../scripts/forensics/leader_signatures.py $workdir/forensics_out)
+output=$(python $(dirname $0)/../../scripts/forensics/commit_cert.py $workdir/forensics_out)
 
 # check the last line of the output
-if [[ $(tail -n 1 <<< "$output") == "All leader sigs of all term are the same." ]]; then
+if [[ $(tail -n 1 <<< "$output") == "All commit certs are the same." ]]; then
     echo " [ PASS ]"
 else
     echo " [ FAILED ]"
