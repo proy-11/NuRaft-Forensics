@@ -10,10 +10,10 @@ mkdir -p $output_dir
 R_OUT_PATH=$output_dir $test_bin > $output_dir/test.log 2>&1
 
 # process results
-output=$(python $(dirname $0)/../../scripts/forensics/leader_signatures.py $output_dir/forensics_out)
+output=$(python $(dirname $0)/../../scripts/forensics/commit_cert.py $output_dir/forensics_out)
 
 # check the last line of the output
-if [[ $(tail -n 1 <<< "$output") == "Leader sigs are different." ]]; then
+if [[ $(tail -n 1 <<< "$output") == "Commit certs are different." ]]; then
     echo " Found evidence of split brain attack. [ PASSED ]"
 else
     echo " No evidence of split brain attack. [ FAILED ]"

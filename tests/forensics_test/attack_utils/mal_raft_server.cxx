@@ -53,7 +53,6 @@ ptr<req_msg> mal_raft_server::create_append_entries_req(peer& p) {
     starting_idx = log_store_->start_index();
     cur_nxt_idx = precommit_index_ + 1;
     commit_idx = quick_commit_index_;
-    auto last_committed_log_sig_local = last_committed_log_sig_;
     term = state_->get_term();
     p_in("Current next index of peer #%d: %llu (%llu)",
          p.get_id(),
@@ -301,52 +300,29 @@ ptr<req_msg> mal_raft_server::create_append_entries_req(peer& p) {
         }
     }
 
-    ulong last_committed_app_log_idx = commit_idx;
-    while (log_store_->entry_at(last_committed_app_log_idx)->get_val_type()
-               != log_val_type::app_log
-           && last_committed_app_log_idx > 0) {
-        last_committed_app_log_idx--;
-    }
-
     // FMARK: RN: new leader sig
-    if (flag_use_leader_sig()) {
+    if (log_entries && flag_use_leader_sig()) {
         // FMARK: RN: shared the leader signatures of the last committed log entry instead
         // of the last shared log entry
-        if (group_idx == 0) {
-            if (last_committed_log_sig_local != nullptr
-                && log_store_->term_at(last_committed_app_log_idx) == term) {
+        auto entry_to_sign = log_entries->rbegin();
+        p_in("log_entries size %zu", log_entries->size());
+        while (entry_to_sign != log_entries->rend()) {
+            if ((*entry_to_sign)->get_val_type() == log_val_type::app_log) {
                 // insert the leader signature for the last app_log entry into v
-                ptr<log_entry> leader_sig_le = cs_new<log_entry>(
-                    0, last_committed_log_sig_local, log_val_type::leader_sig);
-                v.push_back(leader_sig_le);
-                p_in("leader signature on log %zu sent to peer %d",
-                     commit_idx,
-                     p.get_id());
-            } else {
-                p_in("leader signature not sent to peer %d", p.get_id());
-            }
-        } else {
-            // MAL_RAFT_SERVER: the leader signature is modified by adding 1 to the
-            // payload. Recalculate the leader sig for the last committed log entry.
-            if (log_store_->term_at(last_committed_app_log_idx) == term) {
-                auto last_committed_log_entry = log_store_->entry_at(quick_commit_index_);
-                auto new_payload = buffer::clone(last_committed_log_entry->get_buf());
-                incr_payload(*new_payload);
-                auto mal_leader_sig = this->get_signature(
-                    *cs_new<log_entry>(last_committed_log_entry->get_term(), new_payload)
-                         ->serialize_sig());
-
+                auto entry_serialized = (*entry_to_sign)->serialize_sig();
+                auto sig = this->get_signature(*entry_serialized);
                 ptr<log_entry> leader_sig_le =
-                    cs_new<log_entry>(0, mal_leader_sig, log_val_type::leader_sig);
+                    cs_new<log_entry>(0, sig, log_val_type::leader_sig);
                 v.push_back(leader_sig_le);
-
-                p_in("(re-calculated malicious) leader signature on log %zu sent to peer "
-                     "%d",
-                     commit_idx,
-                     p.get_id());
-            } else {
-                p_in("(malicious) leader signature not sent to peer %d", p.get_id());
+                p_in("leader signature on log %zu sent to peer %d", adjusted_end_idx - (log_entries->rend() - entry_to_sign), p.get_id());
+                dump_leader_signatures(adjusted_end_idx - (log_entries->rend() - entry_to_sign), last_log_term, sig);
+                break;
             }
+            // Process the entry and then move to the previous one
+            ++entry_to_sign;
+        }
+        if (v.empty() || v.back()->get_val_type() != log_val_type::leader_sig) {
+            p_in("leader signature not sent to peer %d", p.get_id());
         }
     }
 
@@ -381,6 +357,7 @@ ptr<req_msg> mal_raft_server::create_append_entries_req(peer& p) {
             req->set_certificate(clone_cert_);
             // timer->add_record("cc.attach");
             // t_->add_sess(timer);
+            dump_commit_cert(role_, commit_cert_);
         }
     }
     p.set_last_sent_idx(last_log_idx + 1);
@@ -548,10 +525,27 @@ void mal_raft_server::handle_append_entries_resp(resp_msg& resp) {
 
             ptr<log_entry> entry = log_store_->entry_at(resp.get_sig_index());
             if (_malicious && _attack_types.find(SplitBrain) != _attack_types.end()) {
-                // maliciously modify the payload
-                auto mal_payload = buffer::clone(entry->get_buf());
-                incr_payload(*mal_payload);
-                entry = cs_new<log_entry>(entry->get_term(), mal_payload);
+                int group_idx = -1;
+                SplitBrainConfig* split_brain_config =
+                    dynamic_cast<SplitBrainConfig*>(_attack_configs[SplitBrain].get());
+                auto groups = split_brain_config->get_groups();
+                for (size_t i = 0; i < groups.size(); ++i) {
+                    if (groups[i].find(resp.get_src()) != groups[i].end()) {
+                        group_idx = i;
+                        break;
+                    }
+                }
+                if (group_idx == -1) {
+                    p_er("Peer #%d is not in any group. Split Brain Attack configuration "
+                         "error.",
+                         resp.get_src());
+                }
+                if (group_idx != 0) {
+                    // maliciously modify the payload
+                    auto mal_payload = buffer::clone(entry->get_buf());
+                    incr_payload(*mal_payload);
+                    entry = cs_new<log_entry>(entry->get_term(), mal_payload);
+                }
             }
             if (!p->verify_signature(entry->serialize_sig(), resp.get_signature())) {
                 p_er("peer #%d's signature on entry %d is invalid: %s",
