@@ -319,7 +319,6 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
     starting_idx = log_store_->start_index();
     cur_nxt_idx = precommit_index_ + 1;
     commit_idx = quick_commit_index_;
-    auto last_committed_log_sig_local = last_committed_log_sig_;
     term = state_->get_term();
     p_in("Current next index of peer #%d: %llu (%llu)",
          p.get_id(),
@@ -517,24 +516,30 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
         }
     }
 
-    ulong last_committed_app_log_idx = commit_idx;
-    while (log_store_->entry_at(last_committed_app_log_idx)->get_val_type()
-            != log_val_type::app_log && last_committed_app_log_idx > 0) {
-        last_committed_app_log_idx--;
-    }
-
     // FMARK: RN: new leader sig
-    if (flag_use_leader_sig()) {
-        // FMARK: RN: shared the leader signatures of the last committed log entry instead of the last shared log entry
-        if (last_committed_log_sig_local != nullptr && log_store_->term_at(last_committed_app_log_idx) == term) {
-            // insert the leader signature for the last app_log entry into v
-            ptr<log_entry> leader_sig_le =
-                cs_new<log_entry>(0, last_committed_log_sig_local, log_val_type::leader_sig);
-            v.push_back(leader_sig_le);
-            p_in("leader signature on log %zu sent to peer %d", commit_idx, p.get_id());
-        } else {
+    if (log_entries && flag_use_leader_sig()) {
+        // FMARK: RN: shared the leader signatures of the last shared log entry
+        auto entry_to_sign = log_entries->rbegin();
+        p_in("log_entries size %zu", log_entries->size());
+        while (entry_to_sign != log_entries->rend()) {
+            if ((*entry_to_sign)->get_val_type() == log_val_type::app_log) {
+                // insert the leader signature for the last app_log entry into v
+                auto entry_serialized = (*entry_to_sign)->serialize_sig();
+                auto sig = this->get_signature(*entry_serialized);
+                ptr<log_entry> leader_sig_le =
+                    cs_new<log_entry>(0, sig, log_val_type::leader_sig);
+                v.push_back(leader_sig_le);
+                p_in("leader signature on log %zu sent to peer %d", adjusted_end_idx - (log_entries->rend() - entry_to_sign), p.get_id());
+                dump_leader_signatures(adjusted_end_idx - (log_entries->rend() - entry_to_sign), last_log_term, sig);
+                break;
+            }
+            // Process the entry and then move to the previous one
+            ++entry_to_sign;
+        }
+        if (v.empty() || v.back()->get_val_type() != log_val_type::leader_sig) {
             p_in("leader signature not sent to peer %d", p.get_id());
         }
+
     }
     
     if (log_entries) {
@@ -555,6 +560,7 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
             req->set_certificate(clone_cert_);
             // timer->add_record("cc.attach");
             // t_->add_sess(timer);
+            dump_commit_cert(role_, commit_cert_);
         }
     }
     p.set_last_sent_idx(last_log_idx + 1);
@@ -706,30 +712,27 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
     }
 
     ptr<buffer> leader_sig = nullptr;
-    ptr<log_entry> last_committed_app_log = nullptr;
+    ptr<log_entry> last_app_log = nullptr;
+    ulong last_app_log_idx = 0;
     if (req.log_entries().size() > 0
         && req.log_entries().at(0)->get_val_type() == log_val_type::leader_sig) {
         leader_sig = buffer::clone(*req.log_entries().at(0)->get_buf_ptr());
         p_in("leader signature received from peer %d", req.get_src());
         req.log_entries().erase(req.log_entries().begin());
-        // find the last app_log entry in log_entries
-        if (req.get_commit_idx() >= log_store_->next_slot()) {
-            // find the target log entry in the request
-            if (req.get_last_log_idx() < req.get_commit_idx() && req.get_last_log_idx() + req.log_entries().size() >= req.get_commit_idx()) {
-                last_committed_app_log = req.log_entries()[req.get_commit_idx() - req.get_last_log_idx() - 1];
-                p_in("last committed app_log entry found at %zu, next slot: %zu", req.get_commit_idx(), log_store_->next_slot());
-            } else {
-                p_wn("last committed app_log entry not received yet, ignore the leader signature");
+
+        auto entry_to_sign = req.log_entries().rbegin();
+        while (entry_to_sign != req.log_entries().rend()) {
+            if (entry_to_sign->get()->get_val_type() == log_val_type::app_log) {
+                // insert the leader signature for the last app_log entry into v
+                last_app_log = *entry_to_sign;
+                last_app_log_idx = req.get_last_log_idx() + req.log_entries().size() - (req.log_entries().rbegin() - entry_to_sign);
+                break;
             }
-        } else {
-            for (auto it = req.get_commit_idx(); it >=0 ; it--) {
-                ptr<log_entry> entry = log_store_->entry_at(it);
-                if (entry->get_val_type() == log_val_type::app_log) {
-                    last_committed_app_log = entry;
-                    p_in("last committed app_log entry found at %zu, next slot: %zu", it, log_store_->next_slot());
-                    break;
-                }
-            }
+            // Process the entry and then move to the previous one
+            ++entry_to_sign;
+        }
+        if (!last_app_log) {
+            p_wn("leader signature is not attached to any app log entry");
         }
     }
 
@@ -767,10 +770,10 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
     }
 
     if (flag_use_leader_sig() && leader_sig != nullptr) {
-        if (last_committed_app_log == nullptr) {
-            p_wn("Node fall behind, leader signature is not verified");
+        if (last_app_log == nullptr) {
+            p_wn("No app log entry found in the request, but leader signature is attached");
         } else {
-            if ((conflict = check_leader_sig(last_committed_app_log, leader_sig, req.get_src())) == false) {
+            if ((conflict = check_leader_sig(last_app_log, leader_sig, req.get_src())) == false) {
                 p_wn("deny illegal signature of log entry: item %zu",
                     req.get_term());
                 resp->set_result_code(cmd_result_code::BAD_LEADER_SIG);
@@ -779,8 +782,7 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                 p_db("req log idx %zu -- %zu passed leader sig checks",
                     log_idx + 1,
                     log_idx + log_size);
-                last_committed_log_sig_ = leader_sig;
-                dump_leader_signatures(req.get_commit_idx(), req.get_term());
+                dump_leader_signatures(last_app_log_idx, req.get_term(), leader_sig);
             }
         }
     } else {
@@ -809,6 +811,8 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                         p_db("[CC] validated CC of term %zu and index %zu",
                              cc->get_term(),
                              cc->get_index());
+                        // save cc
+                        dump_commit_cert(role_, cc);
                     } else {
                         p_wn("[CC] CC of term %zu and index %zu has bad signature from "
                              "#%d",

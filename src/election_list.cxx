@@ -62,4 +62,11 @@ std::string raft_server::get_leader_sig_file_name(const std::string& data_dir) {
 
     return ((boost::filesystem::path)data_dir / filename.str()).string();
 }
+
+std::string raft_server::get_commit_cert_file_name(const std::string& data_dir) {
+    std::stringstream filename;
+    filename << "cc_" << init_timestamp_ << "_p" << get_id() << ".dat";
+
+    return ((boost::filesystem::path)data_dir / filename.str()).string();
+}
 } // namespace nuraft
