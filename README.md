@@ -8,22 +8,25 @@ Forensics
 ---------
 ### Log Replication
 
-- *Hash Pointers*: A hash pointer cache (hash_cache_) is maintained in each node to store the hash pointers of log entries between the last committed entry and the last appended entry. Any append_entries request whose last entry is within the cache will include the hash pointer in the first entry of the request. Followers will verify the hash pointer before appending the entries to their logs. If verification fails, the follower will set the result code to cmd_result_code::BAD_CHAIN.
+- **Hash Pointers**: 
+  A hash pointer cache (`hash_cache_`) is maintained in each node to store the hash pointers of log entries between the last committed entry and the last appended entry. Any `append_entries` request whose last entry is within the cache will include the hash pointer in the first entry of the request. Followers will verify the hash pointer before appending the entries to their logs. If verification fails, the follower will set the result code to `cmd_result_code::BAD_CHAIN`.
 
-- *Leader Stamp*: The leader_sig_ field in the log_entry class is used to lock the leader into the log entries it is sharing. The leader generates the stamp, which is included in the second entry (if the first entry is used for sharing hash pointers) of the append_entries request.
+- **Leader Stamp**: 
+The `leader_sig_` field in the `log_entry` class is used to lock the leader into the log entries it is sharing. The leader generates the stamp, which is included in the second entry (if the first entry is used for sharing hash pointers) of the `append_entries` request.
 
-- *Commitment Certificate*: The latest committed log entry's Commitment Certificate (CC) is stored in commit_cert_, while working_certs_ stores CCs that are still waiting for follower acknowledgment. The leader waits for a majority of followers to reply with their signatures on the log entry before committing. Once the majority is achieved, the leader replaces the commit_cert_ with the next CC in working_certs_ and makes the log entry committable.
+- **Commitment Certificate**: 
+`commit_cert_` stores the *Commitment Certificate* (CC) of the latest committed log entry, while `working_certs_` stores CCs with pending signatures by followers. Once the number of signatures reaches a quorum for a CC in `working_certs_`, the leader sets the `commit_cert_` to the latest CC in `working_certs_` and makes the log entry committable.
 
 
 ### Leader Election
 
-Leader election lists contain the vote request message and vote granters' signatures on the request for each term. The election lists are stored in a `std::unordered_map<ulong, ptr<leader_certificate>>` object, where the key is the term index and the value is a leader certificate. The `leader_certificate` is declared in `src/leader_certificate.hxx`. Any updates to the election lists are written to `[forensics_dir]/el_[timestamp]_p[node_id].dat` immediately.
+Leader election lists contain the vote request message and vote granters' signatures on the request for each term. The election lists are stored in a hash map `std::unordered_map<ulong, ptr<leader_certificate>>` keyed by the term and valued by the *Leader Certificate* (LC). The `leader_certificate` is declared in `src/leader_certificate.hxx`. Any updates to the election lists are written to `[forensics_dir]/el_[timestamp]_p[node_id].dat` immediately.
 
 The process of node becoming leader is:
 
 1. The leader sends a vote request message to all followers.
 2. Followers reply with their signatures on the request (instead of just saying OK).
-3. When the leader collects a majority of signatures, it ensemble the signatures into a leader certificate and shares it with all followers. This node becomes the leader for the term.
+3. When the leader collects a majority of signatures, it ensembles the signatures into an LC and shares it with all followers. This node becomes the leader for the term.
 
 
 ### Output File Parser
@@ -53,12 +56,12 @@ $ ./tests/forensics_test/nodes_down_test.sh
 #### Test details:
 
 ```
-0s launched
-10s follower freeze
-30s follower comes back
-40s leader freeze
-60s leader comes back
-70s stop and check disk file validity 
+ 0s Launch
+10s Follower freezes
+30s Follower resurrects
+40s Leader freezes
+60s Leader resurrects
+70s Terminate; check state validity stored in the hard drive
 ```
 
 #### Implementation details:
