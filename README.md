@@ -8,11 +8,11 @@ Forensics
 ---------
 ### Log Replication
 
-- Hash Pointers: A hash pointer cache (hash_cache_) is maintained in each node to store the hash pointers of log entries between the last committed entry and the last appended entry. Any append_entries request whose last entry is within the cache will include the hash pointer in the first entry of the request. Followers will verify the hash pointer before appending the entries to their logs. If verification fails, the follower will set the result code to cmd_result_code::BAD_CHAIN.
+- *Hash Pointers*: A hash pointer cache (hash_cache_) is maintained in each node to store the hash pointers of log entries between the last committed entry and the last appended entry. Any append_entries request whose last entry is within the cache will include the hash pointer in the first entry of the request. Followers will verify the hash pointer before appending the entries to their logs. If verification fails, the follower will set the result code to cmd_result_code::BAD_CHAIN.
 
-- Leader Signature: The leader_sig_ field in the log_entry class is used to lock the leader into the log entries it is sharing. The leader generates the signature, which is included in the second entry (if the first entry is used for sharing hash pointers) of the append_entries request.
+- *Leader Stamp*: The leader_sig_ field in the log_entry class is used to lock the leader into the log entries it is sharing. The leader generates the stamp, which is included in the second entry (if the first entry is used for sharing hash pointers) of the append_entries request.
 
-- Commitment Certificate: The latest committed log entry's Commitment Certificate (CC) is stored in commit_cert_, while working_certs_ stores CCs that are still waiting for follower acknowledgment. The leader waits for a majority of followers to reply with their signatures on the log entry before committing. Once the majority is achieved, the leader replaces the commit_cert_ with the next CC in working_certs_ and makes the log entry committable.
+- *Commitment Certificate*: The latest committed log entry's Commitment Certificate (CC) is stored in commit_cert_, while working_certs_ stores CCs that are still waiting for follower acknowledgment. The leader waits for a majority of followers to reply with their signatures on the log entry before committing. Once the majority is achieved, the leader replaces the commit_cert_ with the next CC in working_certs_ and makes the log entry committable.
 
 
 ### Leader Election
