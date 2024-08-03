@@ -65,7 +65,8 @@ peer::peer(ptr<srv_config>& config,
     , rsv_msg_(nullptr)
     , rsv_msg_handler_(nullptr)
     , l_(logger)
-    , public_key(nullptr) {
+    , public_key(nullptr)
+    , lc_needed_(std::numeric_limits<ulong>::max()) {
     reset_ls_timer();
     reset_resp_timer();
     reset_active_timer();

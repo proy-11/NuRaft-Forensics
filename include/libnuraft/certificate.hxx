@@ -42,6 +42,8 @@ public:
 
     inline ulong get_term() { return term_; }
 
+    inline void set_term(ulong term) { term_ = term; }
+
     inline ulong get_index() { return index_; }
 
     inline std::unordered_map<int32, ptr<buffer>> get_sigs() { return signatures_; }

@@ -40,7 +40,7 @@ public:
              int32 dst,
              ulong next_idx = 0L,
              bool accepted = false,
-             bool lc_needed = false)
+             ulong lc_needed = std::numeric_limits<ulong>::max())
         : msg_base(term, type, src, dst)
         , next_idx_(next_idx)
         , next_batch_size_hint_in_bytes_(0)
@@ -73,9 +73,9 @@ public:
         accepted_ = true;
     }
 
-    bool get_lc_needed() const { return lc_needed_; }
+    ulong get_lc_needed() const { return lc_needed_; }
 
-    void need_lc() { lc_needed_ = true; }
+    void need_lc(ulong term) { lc_needed_ = term; }
 
     void set_ctx(ptr<buffer> src) { ctx_ = src; }
 
@@ -132,7 +132,7 @@ private:
     // FMARK: sig
     ulong sigid_;
     ptr<buffer> signature_;
-    bool lc_needed_;
+    ulong lc_needed_;
 };
 
 } // namespace nuraft

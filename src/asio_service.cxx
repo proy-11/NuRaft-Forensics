@@ -94,12 +94,12 @@ using ssl_context = asio::ssl::context;
 //     ulong        term                (8),
 //     ulong        next_idx            (8),
 //     bool         accepted            (1),
-//     bool         lc_needed           (1),
+//     ulong        lc_needed           (8),
 //     int32        ctx data dize       (4),
 //     ulong        flags + CRC32       (8),
 //     -------------------------------------
 //                  total               (39)
-#define RPC_RESP_HEADER_SIZE (4 * 3 + 8 * 3 + 1 * 4)
+#define RPC_RESP_HEADER_SIZE (4 * 3 + 8 * 4 + 1 * 3)
 
 #define DATA_SIZE_LEN (4)
 #define CRC_FLAGS_LEN (8)
@@ -644,7 +644,7 @@ private:
             bs.put_u64(resp->get_term());
             bs.put_u64(resp->get_next_idx());
             bs.put_u8(resp->get_accepted());
-            bs.put_u8(resp->get_lc_needed());
+            bs.put_u64(resp->get_lc_needed());
             bs.put_i32(carried_data_size);
 
             // Calculate CRC32 on header only.
@@ -1427,7 +1427,7 @@ private:
         ulong term = bs.get_u64();
         ulong nxt_idx = bs.get_u64();
         byte accepted_val = bs.get_u8();
-        byte lc_needed_val = bs.get_u8();
+        ulong lc_needed_val = bs.get_u64();
         int32 carried_data_size = bs.get_i32();
         ptr<resp_msg> rsp(cs_new<resp_msg>(term,
                                            (msg_type)msg_type_val,
@@ -1435,7 +1435,7 @@ private:
                                            dst,
                                            nxt_idx,
                                            accepted_val == 1,
-                                           lc_needed_val == 1));
+                                           lc_needed_val));
 
         // FMARK: skip reading signature
         if (!(flags & INCLUDE_SIG) && !(flags & INCLUDE_META)
