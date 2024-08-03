@@ -229,6 +229,7 @@ void raft_server::request_vote(bool force_vote) {
     votes_responded_ += 1;
     // FMARK: reset leader certificate for this new election
     new_leader_certificate();
+    leader_cert_->set_term(state_->get_term());
 
     p_in("[VOTE INIT] my id %d, my role %s, term %ld, log idx %ld, "
          "log term %ld, priority (target %d / mine %d)\n",
@@ -242,7 +243,6 @@ void raft_server::request_vote(bool force_vote) {
 
     // is this the only server?
     if (votes_granted_ > get_quorum_for_election()) {
-        // TODO: No LC saved for this situation.
         election_completed_ = true;
         become_leader();
         return;
@@ -440,14 +440,14 @@ void raft_server::send_leader_certificate(ptr<peer>& pp, ptr<leader_certificate>
         cs_new<log_entry>(0, tmp_lc->serialize(), log_val_type::custom);
     req->log_entries().push_back(lc_msg_le);
     // FMARK: do not set the peer busy. Send LC casually.
-    pp->send_req(pp, req, resp_handler_);
-    // if (pp->make_busy()) {
-    //     pp->send_req(pp, req, resp_handler_);
-    // } else {
-    //     p_wn("failed to send leader certificate: peer %d (%s) is busy",
-    //          pp->get_id(),
-    //          pp->get_endpoint().c_str());
-    // }
+    // pp->send_req(pp, req, resp_handler_);
+    if (pp->make_busy()) {
+        pp->send_req(pp, req, resp_handler_);
+    } else {
+        p_wn("failed to send leader certificate: peer %d (%s) is busy",
+             pp->get_id(),
+             pp->get_endpoint().c_str());
+    }
 }
 
 /**
@@ -467,7 +467,7 @@ void raft_server::broadcast_leader_certificate() {
     save_verified_term(term_, get_id());
 
     if (flag_save_election_list()) {
-        if (save_and_clean_election_list(1))
+        if (save_leader_cert(tmp_lc))
             p_in("Election list saved, memory cleaned");
     }
 
@@ -484,10 +484,10 @@ void raft_server::broadcast_leader_certificate() {
 
 bool raft_server::verify_and_save_leader_certificate(req_msg& req,
                                                      ptr<buffer> lc_buffer) {
-    ulong term_ = req.get_term();
     ptr<leader_certificate> lc = leader_certificate::deserialize(*lc_buffer);
     // ulong lc_term = req_msg::deserialize(*lc->get_request())->get_term();
-
+    
+    ulong term_ = lc->get_term();
     if (lc->get_request() == nullptr) {
         p_wn("Empty leader certificate request, can still be valid if no election was "
              "held for this term");
@@ -503,7 +503,7 @@ bool raft_server::verify_and_save_leader_certificate(req_msg& req,
              lc_req->get_last_log_idx(),
              lc_req->get_commit_idx());
 
-        if (lc_term < state_->get_term()) {
+        if (lc_term < state_->get_term() && term_verified(lc_term, -1)) {
             p_er("Invalid leader certificate request, term mismatch. LC from elected "
                  "server has term %d. My term %ld.",
                  lc_term,
@@ -542,9 +542,17 @@ bool raft_server::verify_and_save_leader_certificate(req_msg& req,
 
     save_verified_term(term_, req.get_src());
 
+    for (auto idx = last_missing_lc_term_idx_; idx <= term_; idx++) {
+        if (verified_terms_.find(idx) == verified_terms_.end()) {
+            p_in("Leader certificate for term %ld is missing, will request it in next append_entry request", idx);
+            break;
+        }
+        last_missing_lc_term_idx_++;
+    }
+
     if (flag_save_election_list()) {
         p_tr("Saving the election list to file");
-        if (save_and_clean_election_list(1))
+        if (save_leader_cert(lc))
             p_in("Election list saved, memory cleaned");
     }
 
@@ -752,14 +760,15 @@ bool raft_server::term_verified(ulong term, int32 server_id) {
 }
 
 void raft_server::save_verified_term(ulong term, int32 server_id) {
-    if (term < state_->get_term()) {
-        p_wn("term %ld is already expired, ignore it", term);
+    if (term < state_->get_term() && term_verified(term, -1)) {
+        p_wn("term %ld is already verified and expired, ignore it", term);
         return;
     }
     if (verified_terms_.find(term) != verified_terms_.end()) {
-        p_wn("term %ld is already verified by another server %d, replacing it",
+        p_wn("term %ld is already verified by another server %d, replacing it with server %d",
              term,
-             verified_terms_[term]);
+             verified_terms_[term],
+             server_id);
     }
     verified_terms_[term] = server_id;
 }

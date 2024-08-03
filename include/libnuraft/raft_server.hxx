@@ -843,7 +843,7 @@ protected:
 
     void handle_leader_certificate_resp(resp_msg& resp);
 
-    bool save_and_clean_election_list(ulong threshold);
+    bool save_leader_cert(ptr<leader_certificate> lc);
 
     std::string get_election_list_file_name(const std::string& data_dir);
     std::string get_leader_sig_file_name(const std::string& data_dir);
@@ -888,6 +888,12 @@ protected:
      *
      */
     ptr<certificate> commit_cert_;
+
+    /**
+     * @brief FMARK: all_commit_certs
+     *
+     */
+    std::map<ulong, ptr<certificate>> all_commit_certs_;
 
     /**
      * @brief FMARK: working cc
@@ -1410,6 +1416,9 @@ protected:
 
     // FMARK: RN: prevent repeated commit cert dumps
     ulong last_commit_cert_idx_dump_;
+
+    // FMARK: RN: last missing lc term idx
+    ulong last_missing_lc_term_idx_;
 };
 
 } // namespace nuraft

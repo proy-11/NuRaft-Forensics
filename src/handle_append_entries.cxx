@@ -541,6 +541,20 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
         }
 
     }
+
+    // FMARK: retransmit old lc and cc
+    for (auto term_to_share_ = p.get_lc_needed(); term_to_share_ <= term; term_to_share_++) {
+        if (election_list_.find(term_to_share_) != election_list_.end()) {
+            ptr<log_entry> lc_le = cs_new<log_entry>(0, election_list_[term_to_share_]->serialize(), log_val_type::old_lc);
+            v.push_back(lc_le);
+            p_in("lc of term %zu re-sent to peer %d", term_to_share_, p.get_id());
+        }
+        if (all_commit_certs_.find(term_to_share_) != all_commit_certs_.end()) {
+            ptr<log_entry> cc_le = cs_new<log_entry>(0, all_commit_certs_[term_to_share_]->serialize(), log_val_type::old_cc);
+            v.push_back(cc_le);
+            p_in("cc of term %zu re-sent to peer %d", term_to_share_, p.get_id());
+        }
+    }
     
     if (log_entries) {
         v.insert(v.end(), log_entries->begin(), log_entries->end());
@@ -561,6 +575,7 @@ ptr<req_msg> raft_server::create_append_entries_req(peer& p) {
             // timer->add_record("cc.attach");
             // t_->add_sess(timer);
             dump_commit_cert(role_, commit_cert_);
+            all_commit_certs_[clone_cert_->get_term()] = clone_cert_;
         }
     }
     p.set_last_sent_idx(last_log_idx + 1);
@@ -689,17 +704,6 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         return resp;
     }
 
-    // FMARK: check whether the leader certificate (for this leader and for this term) is
-    // received and verified
-    if (term_verified(req.get_term(), req.get_src())) {
-        p_tr("leader certificate of term %zu is verified", req.get_term());
-    } else {
-        p_wn("leader certificate of term %zu is not verified", req.get_term());
-        resp->need_lc();
-        resp->set_next_batch_size_hint_in_bytes(
-            state_machine_->get_next_batch_size_hint_in_bytes());
-        return resp;
-    }
 
     ptr<buffer> hash_ptr = nullptr;
     if (req.log_entries().size() > 0
@@ -734,6 +738,68 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
         if (!last_app_log) {
             p_wn("leader signature is not attached to any app log entry");
         }
+    }
+
+    if (req.log_entries().size() > 0) {
+        // check if any previous lc/cc is attached
+        auto type_ = req.log_entries().at(0)->get_val_type(); 
+        while (type_ == log_val_type::old_lc || type_ == log_val_type::old_cc) {
+
+            if (type_ == log_val_type::old_lc) {
+                try {
+                    auto buf = req.log_entries().at(0)->get_buf_ptr();
+                    buf->pos(0);
+                    auto lc = leader_certificate::deserialize(*buf);
+                    buf->pos(0);
+                    p_db("[LC] received LC of term %zu",
+                        lc->get_term());
+                    // save lc
+                    verify_and_save_leader_certificate(req, buf);
+                    last_missing_lc_term_idx_ = lc->get_term() + 1;
+                } catch (std::exception& ex) {
+                    p_er("failed to deserialize leader certificate"
+                        "due to error: %s",
+                        ex.what());
+                }
+            } else if (type_ == log_val_type::old_cc) {
+                try {
+                    auto buf = req.log_entries().at(0)->get_buf_ptr();
+                    buf->pos(0);
+                    auto cc = certificate::deserialize(*buf);
+                    buf->pos(0);
+                    p_db("[CC] received CC of term %zu and index %zu",
+                        cc->get_term(),
+                        cc->get_index());
+                    // save cc
+                    dump_commit_cert(role_, cc);
+                    all_commit_certs_[cc->get_term()] = cc;
+                } catch (std::exception& ex) {
+                    p_er("failed to deserialize cc"
+                        "due to error: %s",
+                        ex.what());
+                }
+            }
+
+            req.log_entries().erase(req.log_entries().begin());
+            if (req.log_entries().size() == 0) {
+                break;
+            }
+            type_ = req.log_entries().at(0)->get_val_type();
+        }
+    }
+
+
+    // FMARK: check whether the leader certificate (for this leader and for this term) is
+    // received and verified
+    resp->need_lc(last_missing_lc_term_idx_);
+    if (term_verified(req.get_term(), req.get_src())) {
+        p_tr("leader certificate of term %zu is verified", req.get_term());
+    } else {
+        p_wn("leader certificate of term %zu is not verified", req.get_term());
+        resp->need_lc(std::min(req.get_term(), last_missing_lc_term_idx_));
+        resp->set_next_batch_size_hint_in_bytes(
+            state_machine_->get_next_batch_size_hint_in_bytes());
+        return resp;
     }
 
     // FMARK: check chain nature and leader sig
@@ -813,6 +879,7 @@ ptr<resp_msg> raft_server::handle_append_entries(req_msg& req) {
                              cc->get_index());
                         // save cc
                         dump_commit_cert(role_, cc);
+                        all_commit_certs_[cc->get_term()] = cc;
                     } else {
                         p_wn("[CC] CC of term %zu and index %zu has bad signature from "
                              "#%d",
@@ -1135,6 +1202,11 @@ void raft_server::handle_append_entries_resp(resp_msg& resp) {
         reset_srv_to_leave();
         return;
     }
+
+    // FMARK: process lc_needed
+    auto lc_needed_term = resp.get_lc_needed();
+    p_in("Peer %d leader certificates since term %zu are needed", it->second->get_id(), lc_needed_term);
+    it->second->set_lc_needed(lc_needed_term);
 
     // If there are pending logs to be synced or commit index need to be advanced,
     // continue to send appendEntries to this peer

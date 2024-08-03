@@ -31,6 +31,8 @@ enum log_val_type {
     snp_sync_req = 5,
     hash_ptr = 11, // FMARK: for sharing hash pointer
     leader_sig = 12, // FMARK: for leader signature
+    old_lc = 21,
+    old_cc = 22,
     custom = 999,
 };
 

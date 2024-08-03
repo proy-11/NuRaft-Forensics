@@ -104,7 +104,9 @@ raft_server::raft_server(context* ctx, const init_options& opt)
                                               std::placeholders::_1,
                                               std::placeholders::_2))
     , last_snapshot_(ctx->state_machine_->last_snapshot())
-    , last_commit_cert_idx_dump_(0) {
+    , last_commit_cert_idx_dump_(0)
+    , last_missing_lc_term_idx_(1) // FMARK: RN: this is set to one to ignore the lc from the 0th term
+    {
 
     // FMARK: record initial timestamp
     init_timestamp_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -514,12 +516,6 @@ void raft_server::shutdown() {
         ctx_->scheduler_.reset();
     }
 
-    if (flag_save_election_list()) {
-        // FMARK: save election list to file
-        p_in("saving unsaved election list to file");
-        save_and_clean_election_list(1);
-    }
-
     p_in("reset all pointers.");
 
     // Server to join/leave.
@@ -749,12 +745,13 @@ ptr<resp_msg> raft_server::process_req(req_msg& req) {
 
     if (resp) {
         p_db("Response back a %s message to %d with Accepted=%d, "
-             "Term=%llu, NextIndex=%llu",
+             "Term=%llu, NextIndex=%llu, LastMissingLCTerm=%llu",
              msg_type_to_string(resp->get_type()).c_str(),
              resp->get_dst(),
              resp->get_accepted() ? 1 : 0,
              resp->get_term(),
-             resp->get_next_idx());
+             resp->get_next_idx(),
+             resp->get_lc_needed());
     }
 
     return resp;

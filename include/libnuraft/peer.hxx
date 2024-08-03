@@ -230,6 +230,16 @@ public:
      */
     bool verify_signature(ptr<buffer> msg, ptr<buffer> sig);
 
+    /**
+     * FMARK: Set lc_needed_
+     */
+    void set_lc_needed(ulong idx) { lc_needed_ = idx; }
+
+    /**
+     * FMARK: Get lc_needed_
+     */
+    ulong get_lc_needed() const { return lc_needed_; }
+
 private:
     void handle_rpc_result(ptr<peer> myself,
                            ptr<rpc_client> my_rpc_client,
@@ -441,6 +451,9 @@ private:
      */
     // ptr<buffer> public_key;
     ptr<pubkey_intf> public_key;
+
+    // FMARK: lc_needed
+    ulong lc_needed_;
 };
 
 } // namespace nuraft
