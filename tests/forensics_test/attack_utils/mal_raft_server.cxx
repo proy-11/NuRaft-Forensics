@@ -326,6 +326,20 @@ ptr<req_msg> mal_raft_server::create_append_entries_req(peer& p) {
         }
     }
 
+    // FMARK: retransmit old lc and cc
+    for (auto term_to_share_ = p.get_lc_needed(); term_to_share_ <= term; term_to_share_++) {
+        if (election_list_.find(term_to_share_) != election_list_.end()) {
+            ptr<log_entry> lc_le = cs_new<log_entry>(0, election_list_[term_to_share_]->serialize(), log_val_type::old_lc);
+            v.push_back(lc_le);
+            p_in("lc of term %zu re-sent to peer %d", term_to_share_, p.get_id());
+        }
+        if (all_commit_certs_.find(term_to_share_) != all_commit_certs_.end()) {
+            ptr<log_entry> cc_le = cs_new<log_entry>(0, all_commit_certs_[term_to_share_]->serialize(), log_val_type::old_cc);
+            v.push_back(cc_le);
+            p_in("cc of term %zu re-sent to peer %d", term_to_share_, p.get_id());
+        }
+    }
+
     if (log_entries) {
         v.insert(v.end(), log_entries->begin(), log_entries->end());
         // FMARK: TODO: correctness
@@ -358,6 +372,7 @@ ptr<req_msg> mal_raft_server::create_append_entries_req(peer& p) {
             // timer->add_record("cc.attach");
             // t_->add_sess(timer);
             dump_commit_cert(role_, commit_cert_);
+            all_commit_certs_[clone_cert_->get_term()] = clone_cert_;
         }
     }
     p.set_last_sent_idx(last_log_idx + 1);
@@ -479,6 +494,11 @@ void mal_raft_server::handle_append_entries_resp(resp_msg& resp) {
         reset_srv_to_leave();
         return;
     }
+
+    // FMARK: process lc_needed
+    auto lc_needed_term = resp.get_lc_needed();
+    p_in("Peer %d leader certificates since term %zu are needed", it->second->get_id(), lc_needed_term);
+    it->second->set_lc_needed(lc_needed_term);
 
     // If there are pending logs to be synced or commit index need to be advanced,
     // continue to send appendEntries to this peer
